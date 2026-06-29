@@ -108,26 +108,55 @@ async function fetchSheetTabRaw(sheetName, headerRow = 1) {
 
   const table = json.table;
   const dataRowsRaw = table.rows || [];
+  const colsLabelRaw = (table.cols || []).map(c => c.label);
 
-  // PENTING: table.cols (label kolom bawaan gviz) sering kosong ("") untuk
-  // sheet dengan baris pertama berupa merged cell, tanggal, atau campuran
-  // tipe data — ini terjadi pada beberapa sheet di spreadsheet ini (Stock GD
-  // MKS, KPI Monitoring). Karena itu table.cols TIDAK dipakai sebagai sumber
-  // header. Sebagai gantinya, dataRowsRaw dianggap merepresentasikan baris
-  // sheet asli mulai dari baris 1 secara berurutan, dan header diambil dari
-  // baris ke-N (headerRow) sesuai posisi visualnya di Google Sheets.
-  const allSheetRowsArr = [];
-  dataRowsRaw.forEach(r => {
+  // PENTING — dua mode berbeda ditemukan pada spreadsheet ini:
+  //
+  // MODE A (table.cols valid): untuk sheet dengan header bersih di baris 1
+  // (Grand Data 2026, AR 2026, PO Gudang, Rev SUM, Sales SUM dst), Google
+  // gviz mengisi table.cols dengan benar dan table.rows HANYA berisi baris
+  // data (header baris 1 TIDAK termasuk dalam table.rows).
+  //
+  // MODE B (table.cols kosong): untuk sheet dengan baris pertama berisi
+  // merged cell / tanggal / campuran tipe (Stock GD MKS, KPI Monitoring),
+  // gviz gagal mendeteksi label kolom sehingga table.cols semua "". Dalam
+  // kasus ini, table.rows JUSTRU menyertakan baris header sebagai baris
+  // data biasa (bergeser satu), sehingga header harus diambil dari
+  // table.rows pada posisi (headerRow - 1).
+  //
+  // Deteksi mode dilakukan otomatis: jika ada minimal satu label di
+  // table.cols yang tidak kosong, gunakan MODE A; jika semua kosong, MODE B.
+  const colsAreValid = colsLabelRaw.some(label => label && label.trim() !== '');
+
+  const dataRowsParsed = dataRowsRaw.map(r => {
     const arr = [];
     if (r && r.c) r.c.forEach((cell, i) => { arr[i] = parseGvizCell(cell); });
-    allSheetRowsArr.push(arr);
+    return arr;
   });
 
-  const headerIdx = headerRow - 1;
-  const headerArrRaw = allSheetRowsArr[headerIdx] || [];
-  const headerArr = headerArrRaw.map(h => (h === null || h === undefined) ? '' : String(h).trim());
+  let headerArr, dataRows;
 
-  const dataRows = allSheetRowsArr.slice(headerIdx + 1)
+  if (colsAreValid) {
+    // MODE A: table.cols adalah header baris ke-1. Jika headerRow > 1,
+    // baris header sebenarnya ada di dalam dataRowsParsed pada index (headerRow - 2).
+    if (headerRow <= 1) {
+      headerArr = colsLabelRaw.map(h => (h === null || h === undefined) ? '' : String(h).trim());
+      dataRows = dataRowsParsed;
+    } else {
+      const headerIdx = headerRow - 2; // -1 untuk 0-based, -1 lagi karena baris 1 sudah "dipakai" oleh table.cols
+      const headerArrRaw = dataRowsParsed[headerIdx] || [];
+      headerArr = headerArrRaw.map(h => (h === null || h === undefined) ? '' : String(h).trim());
+      dataRows = dataRowsParsed.slice(headerIdx + 1);
+    }
+  } else {
+    // MODE B: table.rows merepresentasikan seluruh baris sheet mulai baris 1.
+    const headerIdx = headerRow - 1;
+    const headerArrRaw = dataRowsParsed[headerIdx] || [];
+    headerArr = headerArrRaw.map(h => (h === null || h === undefined) ? '' : String(h).trim());
+    dataRows = dataRowsParsed.slice(headerIdx + 1);
+  }
+
+  const rows = dataRows
     .filter(row => row && row.some(v => v !== null && v !== undefined && v !== ''))
     .map(row => {
       const obj = {};
@@ -136,7 +165,7 @@ async function fetchSheetTabRaw(sheetName, headerRow = 1) {
       return obj;
     });
 
-  return { sheetName, header: headerArr, rows: dataRows };
+  return { sheetName, header: headerArr, rows };
 }
 
 /**
