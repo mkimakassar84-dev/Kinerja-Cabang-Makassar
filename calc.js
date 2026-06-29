@@ -544,16 +544,29 @@ function buildSalesByCompany(transactions) {
   return { companies, totalSales };
 }
 
+// PENTING: Sheet "Rev SUM" memiliki kolom dengan NAMA yang sama persis
+// berulang beberapa kali secara horizontal (Payment Date/No Faktur/
+// Customer/Pelunasan/Company muncul lagi di kolom G-K sebagai blok kedua,
+// lalu ada blok rekap "MKI"/"Total Revenue" dan "CFN" di kolom berikutnya).
+// Karena nama header duplikat, pemetaan berbasis nama akan saling menimpa
+// nilai. Maka tabel transaksi Rev SUM HARUS diakses melalui index posisi
+// kolom yang sebenarnya (blok pertama, A-E / index 0-4), bukan nama header.
+function normalizeRevSum(revRows) {
+  return revRows.map(r => {
+    const row = r.__row || [];
+    return {
+      paymentDate: toDate(row[0]),
+      noFaktur: toStr(row[1]),
+      customer: toStr(row[2]).toUpperCase(),
+      pelunasan: toNumber(row[3]),
+      company: toStr(row[4]).toUpperCase(),
+    };
+  }).filter(r => r.paymentDate);
+}
+
 function buildRevenueByCompany(revRows) {
-  const rev2026 = revRows
-    .map(r => ({
-      paymentDate: toDate(r['Payment Date']),
-      noFaktur: toStr(r['No Faktur']),
-      customer: toStr(r['Customer']).toUpperCase(),
-      pelunasan: toNumber(r['Pelunasan']),
-      company: toStr(r['Company']).toUpperCase(),
-    }))
-    .filter(r => r.paymentDate && r.paymentDate.getFullYear() === CURRENT_YEAR);
+  const revAll = normalizeRevSum(revRows);
+  const rev2026 = revAll.filter(r => r.paymentDate.getFullYear() === CURRENT_YEAR);
 
   const totalRevenue = sum(rev2026, r => r.pelunasan);
 
@@ -572,9 +585,8 @@ function buildRevenueByCompany(revRows) {
 }
 
 function buildRevenueTrend(revRows) {
-  const rev2026 = revRows
-    .map(r => ({ paymentDate: toDate(r['Payment Date']), pelunasan: toNumber(r['Pelunasan']), noFaktur: toStr(r['No Faktur']), customer: toStr(r['Customer']).toUpperCase() }))
-    .filter(r => r.paymentDate && r.paymentDate.getFullYear() === CURRENT_YEAR);
+  const revAll = normalizeRevSum(revRows);
+  const rev2026 = revAll.filter(r => r.paymentDate.getFullYear() === CURRENT_YEAR);
 
   const monthly = {};
   for (let m = 0; m < 12; m++) {
@@ -608,18 +620,26 @@ function buildRevenueTrend(revRows) {
    POIN 8 — PIUTANG (AR) 2026, RASIO AR thd SALES, BY COMPANY
    ========================================================================== */
 function buildAR(arRows, totalSales2026) {
-  const items = arRows.map(r => ({
-    tanggal: toDate(r['Tanggal']),
-    noFaktur: toStr(r['No Faktur']),
-    customer: toStr(r['Nama Customer']).toUpperCase(),
-    nilaiFaktur: toNumber(r['Nilai Faktur']),
-    sisaSaldo: toNumber(r['Sisa Saldo Piutang']),
-    paidAmount: toNumber(r['Paid Amount']),
-    aging: toStr(r['Aging']),
-    kategori: toStr(r['Kategori']),
-    status: toStr(r['Status']),
-    company: toStr(r['Company']).toUpperCase(),
-  })).filter(a => a.noFaktur);
+  // PENTING: Sheet "AR 2026" juga memiliki header duplikat secara horizontal
+  // (Tanggal/No Faktur/Nama Customer/dst muncul lagi di blok kolom berikutnya
+  // untuk keperluan rekap internal sheet). Diakses via index posisi (blok
+  // pertama) supaya konsisten dan tidak rapuh terhadap perubahan blok lain,
+  // sesuai pola yang sama dengan perbaikan pada Rev SUM.
+  const items = arRows.map(r => {
+    const row = r.__row || [];
+    return {
+      tanggal: toDate(row[0]),
+      noFaktur: toStr(row[1]),
+      customer: toStr(row[2]).toUpperCase(),
+      nilaiFaktur: toNumber(row[3]),
+      sisaSaldo: toNumber(row[4]),
+      paidAmount: toNumber(row[5]),
+      aging: toStr(row[6]),
+      kategori: toStr(row[7]),
+      status: toStr(row[8]),
+      company: toStr(row[9]).toUpperCase(),
+    };
+  }).filter(a => a.noFaktur);
 
   const totalNilaiFaktur = sum(items, i => i.nilaiFaktur);
   const totalSisaSaldo = sum(items, i => i.sisaSaldo);
