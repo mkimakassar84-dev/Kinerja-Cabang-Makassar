@@ -878,6 +878,8 @@ function renderStockSection(m) {
           `).join('')}
         </div>
       </div>
+      <p class="panel-note panel-note-hint">Klik salah satu batang grafik untuk melihat daftar PO yang dipesan pada bulan tersebut.</p>
+      <div id="poGudangMonthDetail" class="po-month-detail hidden"></div>
     </div>
   `;
   document.getElementById('s6').innerHTML = html;
@@ -907,8 +909,55 @@ function renderPoGudangChart(po) {
   makeChart('chartPoGudang', {
     type: 'bar',
     data: { labels: po.monthly.map(x => x.label), datasets: [{ label: 'Qty PO', data: po.monthly.map(x => x.qty), backgroundColor: PALETTE.slate, borderRadius: 4 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } } },
+    options: {
+      responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+      onClick: (evt, elements) => {
+        if (!elements || elements.length === 0) return;
+        const idx = elements[0].index;
+        renderPoMonthDetail(po.monthly[idx]);
+      },
+      onHover: (evt, elements) => {
+        evt.native.target.style.cursor = elements && elements.length > 0 ? 'pointer' : 'default';
+      },
+    },
   });
+}
+
+function renderPoMonthDetail(monthData) {
+  const panel = document.getElementById('poGudangMonthDetail');
+  if (!monthData || !monthData.items || monthData.items.length === 0) {
+    panel.classList.remove('hidden');
+    panel.innerHTML = `<p class="empty-row">Tidak ada PO pada bulan ini.</p>`;
+    return;
+  }
+  const rows = monthData.items
+    .sort((a, b) => (a.orderDate && b.orderDate) ? a.orderDate - b.orderDate : 0)
+    .map(p => `
+      <tr>
+        <td>${fmtDateShort(p.orderDate)}</td>
+        <td>${escapeHtml(p.noPO)}</td>
+        <td>${escapeHtml(p.company)}</td>
+        <td>${escapeHtml(p.kodeBarang)}</td>
+        <td>${fmtNum(p.qty)}</td>
+        <td>${fmtNum(p.qtyDiterimaReal)}</td>
+        <td>${escapeHtml(p.noSuratJalan) || '&ndash;'}</td>
+        <td>${zonePillHtml(p.statusBarang === 'diterima' ? 'hijau' : p.statusBarang === 'retur' ? 'merah' : 'kuning')} ${escapeHtml(p.statusBarang === 'diterima' ? 'Diterima' : p.statusBarang === 'retur' ? 'Retur' : 'Ditunggu')}</td>
+      </tr>
+    `).join('');
+  panel.classList.remove('hidden');
+  panel.innerHTML = `
+    <div class="po-month-detail-head">
+      <h4>Daftar PO &mdash; ${monthData.label} 2026</h4>
+      <span class="po-month-detail-count">${fmtNum(monthData.items.length)} PO, total ${fmtNum(monthData.qty)} unit dipesan</span>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table data-table-compact">
+        <thead><tr><th>Tanggal</th><th>No PO</th><th>Company</th><th>Kode Barang</th><th>Qty Dipesan</th><th>Qty Diterima</th><th>No Surat Jalan</th><th>Status</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
 }
 
 /* ==========================================================================
