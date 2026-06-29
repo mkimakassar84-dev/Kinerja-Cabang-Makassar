@@ -134,7 +134,12 @@ function normalizeGrandData(rows) {
     statusEkspedisi: toStr(r['Status (Ekspedisi)']) || toStr(r['Status (Ekspedisi)  ']),
     lokasi: toStr(r['Lokasi']).toUpperCase(),
     tglTerkirim: toDate(r['Tanggal Terkirim']),
-  })).filter(t => t.orderDate && t.amount >= 0);
+    // Baris retur (No Invoice berprefix "R-") tercatat dengan Amount/Quantity
+    // negatif di sheet. Baris ini TETAP DIIKUTSERTAKAN dalam perhitungan
+    // (bukan dibuang) karena retur memang harus mengurangi total sales —
+    // inilah cara nilai dashboard bisa cocok dengan total di Sales SUM.
+    isRetur: toStr(r['No Invoice']).toUpperCase().startsWith('R-') || toNumber(r['Amount']) < 0,
+  })).filter(t => t.orderDate);
 }
 
 function filterYear(transactions, year) {
