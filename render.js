@@ -894,10 +894,10 @@ function renderStockChart(st) {
 }
 
 function renderStockTable(st) {
-  const items = st.items.filter(i => i.stockTotal > 0).sort((a, b) => b.stockTotal - a.stockTotal);
+  const items = st.items.filter(i => i.stockTotal > 0).sort((a, b) => a.kode.localeCompare(b.kode));
   document.getElementById('tblStock').innerHTML = `
     <thead><tr><th>Kode Barang</th><th>Deskripsi</th><th>Stock MKI</th><th>Stock CFN</th><th>Total</th></tr></thead>
-    <tbody>${items.slice(0, 50).map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.stockMKI)}</td><td>${fmtNum(i.stockCFN)}</td><td><strong>${fmtNum(i.stockTotal)}</strong></td></tr>`).join('')}</tbody>
+    <tbody>${items.map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.stockMKI)}</td><td>${fmtNum(i.stockCFN)}</td><td><strong>${fmtNum(i.stockTotal)}</strong></td></tr>`).join('')}</tbody>
   `;
 }
 
