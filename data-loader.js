@@ -1,47 +1,59 @@
-/* ============================================================
-   DATA LOADER — Mengambil data dari Google Sheets (gviz/tq API)
-   ============================================================
-   Cara kerja:
-   - Google Sheets menyediakan endpoint publik /gviz/tq yang
-     mengembalikan data tiap tab/sheet dalam format JSON
-     (dibungkus dengan google.visualization.Query.setResponse(...))
-   - Endpoint ini bisa dibaca tanpa API key, selama sheet di-set
-     "Anyone with link can view".
-   - Fetch ini terjadi di browser ORANG YANG MEMBUKA dashboard,
-     sehingga selalu mengambil data TERBARU setiap kali dibuka
-     atau di-refresh — tidak ada proses "build ulang" yang perlu
-     dilakukan manual.
+/* ==========================================================================
+   DATA LOADER
+   Mengambil data dari Google Sheets menggunakan endpoint publik gviz/tq.
+   Endpoint ini bisa diakses tanpa API key selama sheet di-set "Anyone with
+   the link can view". Setiap kali halaman dimuat, data ditarik langsung
+   dari Google Sheets sehingga dashboard otomatis ter-update mengikuti
+   input baru di spreadsheet, tanpa perlu deploy ulang.
 
-   CATATAN PENTING tentang struktur sheet sumber (hasil inspeksi):
-   Beberapa tab punya BLOK GANDA berdampingan dalam satu tab, dengan
-   nama kolom yang identik di kedua blok (misal "Tanggal", "No Faktur"
-   muncul dua kali pada index kolom berbeda). Karena itu, SEMUA tab
-   dibaca berbasis POSISI/INDEX kolom (array), bukan nama header —
-   lebih robust dan tidak tertukar walau ada nama kolom duplikat.
+   Struktur tab yang dibaca (hasil inspeksi langsung terhadap spreadsheet):
 
-   - Grand Data 2026: header di baris ke-1 (index 0), blok tunggal.
-   - AR 2026: header di baris ke-1. Blok kiri index 0-9 dipakai
-     (data piutang mentah). Blok kanan (index 11+) diabaikan.
-   - Stock GD MKS: header SEBENARNYA ada di baris ke-2 (index 1) —
-     baris pertama hanya label grup/tanggal cetak.
-   - PO Gudang: header di baris ke-1. Blok kiri index 0-10 dipakai.
-     Blok kanan (index 12+) berisi data lain, diabaikan.
-   - Delivery: header di baris ke-1, blok tunggal.
+   1. Grand Data 2026 (header baris 1)
+      A Order Date | B No Invoice | C Payment | D Customer | E Kode Barang
+      F Quantity | G Amount | H Status (Same Day/Cut Off) | I Company
+      J Koli | K Stage | L Status Ekspedisi | M Lokasi (Kab/Kota) | N Tanggal Terkirim
 
-   Jika struktur sheet berubah (kolom ditambah/dipindah/tab di-rename),
-   konstanta SHEET_TABS dan index di calc.js perlu disesuaikan ulang.
-   ============================================================ */
+   2. Rev SUM (header baris 1, kolom A-E)
+      A Payment Date | B No Faktur | C Customer | D Pelunasan | E Company
+
+   3. Sales SUM (header baris 1, kolom AS-BB — ringkasan bulanan)
+      AS Label Bulan | AT Target Sales/Revenue Bulanan
+      AU Label Rev2025 | AV Nominal Rev2025
+      AW Label Rev2026 | AX Nominal Rev2026
+      AY Label Sales2025 | AZ Nominal Sales2025
+      BA Label Sales2026 | BB Nominal Sales2026
+
+   4. KPI MONITORING (header baris 1, kolom M-Z — rekap wilayah)
+      M Kabupaten/Kota | N..Y Jan..Des (invoice unik per bulan) | Z Total
+
+   5. Stock GD MKS (header baris 1)
+      A Jenis Barang | B Kode Barang | C Deskripsi
+      D MKI Turnover | E CFN Turnover | F MKI&CFN Turnover
+      G Stock MKI | H Stock CFN | I Stock MKI&CFN  (acuan stock hari ini)
+      (Kolom K, L diabaikan sesuai instruksi)
+
+   6. PO Gudang (header baris 1, kolom A-K)
+      A No | B Order Date | C No PO | D Company | E Kode Barang | F Quantity
+      G No Surat Jalan | H Status Ekspedisi | I Stage | J Qty Diterima GD MKS
+      K Tanggal Masuk GD MKS
+
+   7. AR 2026 (header baris 1, kolom posisi relatif L-S di sheet asli,
+      namun saat dibaca via gviz tab ini hanya berisi kolom-kolom tsb)
+      A Tanggal | B No Faktur | C Nama Customer | D Nilai Faktur
+      E Sisa Saldo Piutang | F Paid Amount | G Aging | H Kategori
+      I Status | J Company
+   ========================================================================== */
 
 const SHEET_ID = '1_uou6JDGV-Tm80oALMrduuj9ZIVWM1r9ppuQsYq7_qo';
 
-// Nama tab persis seperti di Google Sheets, dan baris header (1-based,
-// sesuai apa yang terlihat saat membuka sheet) untuk masing-masing.
 const SHEET_TABS = {
-  grandData: { name: 'Grand Data 2026', headerRow: 1 },
-  ar: { name: 'AR 2026', headerRow: 1 },
-  stock: { name: 'Stock GD MKS', headerRow: 2 },
-  delivery: { name: 'Delivery', headerRow: 1 },
-  poGudang: { name: 'PO Gudang', headerRow: 1 },
+  grandData:  { name: 'Grand Data 2026', headerRow: 1 },
+  revSum:     { name: 'Rev SUM',         headerRow: 1 },
+  salesSum:   { name: 'Sales SUM',       headerRow: 1 },
+  kpiMonitor: { name: 'KPI MONITORING',  headerRow: 1 },
+  stock:      { name: 'Stock GD MKS',    headerRow: 1 },
+  poGudang:   { name: 'PO Gudang',       headerRow: 1 },
+  ar:         { name: 'AR 2026',         headerRow: 1 },
 };
 
 function gvizUrl(sheetName) {
@@ -50,118 +62,96 @@ function gvizUrl(sheetName) {
 }
 
 /**
- * Parse satu cell dari format gviz. Untuk tanggal, value berupa
- * string "Date(2026,0,2)" (bulan 0-indexed) yang perlu dikonversi.
+ * Parse satu cell dari format respons gviz Google Visualization API.
+ * Untuk tanggal, gviz mengirim string seperti "Date(2026,0,2)" (bulan 0-based).
  */
 function parseGvizCell(cell) {
-  if (!cell || cell.v === null || cell.v === undefined) return null;
-  const v = cell.v;
-  if (typeof v === 'string' && v.startsWith('Date(')) {
-    const nums = v.slice(5, -1).split(',').map(Number);
-    const d = new Date(nums[0], nums[1], nums[2] || 1, nums[3] || 0, nums[4] || 0, nums[5] || 0);
-    return d;
+  if (!cell) return null;
+  if (cell.v === null || cell.v === undefined) return null;
+  if (typeof cell.v === 'string' && cell.v.startsWith('Date(')) {
+    const parts = cell.v.replace('Date(', '').replace(')', '').split(',').map(Number);
+    return new Date(parts[0], parts[1], parts[2] || 1);
   }
-  return v;
+  return cell.v;
 }
 
 /**
- * Fetch satu tab dan kembalikan { header: string[], rows: any[][] }.
- * Tiap baris adalah ARRAY berbasis posisi kolom (bukan object),
- * supaya aman walau ada nama kolom duplikat dalam satu tab.
- *
- * @param {string} sheetName - nama tab persis di Google Sheets
- * @param {number} headerRow - baris ke berapa (1-based) yang jadi header
+ * Mengambil satu tab sheet dan mengembalikan array of object,
+ * key sesuai nama header pada headerRow.
  */
 async function fetchSheetTabRaw(sheetName, headerRow = 1) {
   const url = gvizUrl(sheetName);
   let res;
   try {
     res = await fetch(url, { cache: 'no-store' });
-  } catch (err) {
+  } catch (e) {
     throw new Error(`Gagal menghubungi Google Sheets untuk tab "${sheetName}". Periksa koneksi internet, atau pastikan sheet sudah di-share "Anyone with link can view".`);
   }
   if (!res.ok) {
-    throw new Error(`Tab "${sheetName}" tidak ditemukan atau tidak bisa diakses (HTTP ${res.status}). Periksa nama tab persis sama dengan di Google Sheets.`);
+    throw new Error(`Tab "${sheetName}" tidak ditemukan atau tidak bisa diakses (HTTP ${res.status}).`);
   }
   const text = await res.text();
-
   const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);?\s*$/);
   if (!match) {
-    throw new Error(`Format respons tidak dikenali untuk tab "${sheetName}". Sheet mungkin belum dibagikan secara publik ("Anyone with link can view").`);
+    throw new Error(`Format respons tidak dikenali untuk tab "${sheetName}". Sheet mungkin belum dibagikan secara publik.`);
   }
   let json;
   try {
     json = JSON.parse(match[1]);
-  } catch (err) {
+  } catch (e) {
     throw new Error(`Gagal mem-parse data tab "${sheetName}".`);
   }
   if (json.status === 'error') {
-    const msg = (json.errors && json.errors[0] && json.errors[0].detailed_message) || 'Error tidak diketahui';
+    const msg = (json.errors && json.errors[0] && json.errors[0].detailed_message) || 'unknown error';
     throw new Error(`Google Sheets menolak permintaan untuk tab "${sheetName}": ${msg}`);
   }
 
   const table = json.table;
-  const numCols = table.cols.length;
+  const dataRowsRaw = table.rows || [];
+  const colsAsRow = (table.cols || []).map(c => c.label);
 
-  // Baris pertama sheet asli direpresentasikan sebagai table.cols (header
-  // versi gviz). Baris ke-2 dst ada di table.rows. Kita gabungkan supaya
-  // bisa mengindeks "baris ke-N sheet asli" secara konsisten.
-  const colsAsRow = table.cols.map(c => (c.label !== undefined && c.label !== '') ? c.label : null);
-  const dataRowsRaw = (table.rows || []).map(r => {
-    const arr = new Array(numCols).fill(null);
+  const allSheetRowsArr = [colsAsRow];
+  dataRowsRaw.forEach(r => {
+    const arr = [];
     if (r && r.c) r.c.forEach((cell, i) => { arr[i] = parseGvizCell(cell); });
-    return arr;
+    allSheetRowsArr.push(arr);
   });
-  const allSheetRows = [colsAsRow, ...dataRowsRaw];
 
-  const headerIdx = Math.max(0, headerRow - 1);
-  const headerArrRaw = allSheetRows[headerIdx] || [];
-  const header = headerArrRaw.map((v, i) => {
-    const s = (v == null) ? '' : String(v).trim();
-    return s || `col${i}`;
-  });
-  const dataRows = allSheetRows.slice(headerIdx + 1)
-    .filter(arr => arr.some(v => v !== null && v !== ''));
+  const headerIdx = headerRow - 1;
+  const headerArrRaw = allSheetRowsArr[headerIdx] || [];
+  const headerArr = headerArrRaw.map(h => (h === null || h === undefined) ? '' : String(h).trim());
 
-  return { header, rows: dataRows };
+  const dataRows = allSheetRowsArr.slice(headerIdx + 1)
+    .filter(row => row && row.some(v => v !== null && v !== undefined && v !== ''))
+    .map(row => {
+      const obj = {};
+      headerArr.forEach((h, i) => { if (h) obj[h] = row[i] === undefined ? null : row[i]; });
+      obj.__row = row; // simpan array mentah juga untuk akses by-index (kolom tanpa header jelas)
+      return obj;
+    });
+
+  return { sheetName, header: headerArr, rows: dataRows };
 }
 
 /**
- * Buang baris yang sebenarnya echo dari header (sisa copy-paste manual
- * di tengah data — ditemukan di Grand Data 2026).
- */
-function isHeaderEchoRow(rowArr, headerArr) {
-  let matches = 0;
-  for (let i = 0; i < headerArr.length; i++) {
-    const cell = rowArr[i];
-    if (cell !== null && cell !== undefined && String(cell).trim() === headerArr[i]) matches++;
-  }
-  return matches >= 3;
-}
-
-/**
- * Loader utama: ambil semua tab yang dibutuhkan dashboard secara paralel.
- * Partial success diizinkan — satu tab gagal tidak menjatuhkan seluruh dashboard.
- * Mengembalikan { data: { [key]: {header, rows} }, errors: [...] }
+ * Memuat semua tab yang didefinisikan di SHEET_TABS secara paralel.
+ * Mengembalikan { data: {...}, errors: [...] }
  */
 async function loadAllSheetData() {
   const entries = Object.entries(SHEET_TABS);
-  const results = await Promise.allSettled(
+  const settled = await Promise.allSettled(
     entries.map(([key, cfg]) => fetchSheetTabRaw(cfg.name, cfg.headerRow))
   );
 
   const data = {};
   const errors = [];
-
-  results.forEach((result, idx) => {
+  settled.forEach((result, idx) => {
     const [key, cfg] = entries[idx];
     if (result.status === 'fulfilled') {
-      let { header, rows } = result.value;
-      rows = rows.filter(r => !isHeaderEchoRow(r, header));
-      data[key] = { header, rows };
+      data[key] = result.value;
     } else {
       errors.push({ sheetName: cfg.name, message: result.reason ? result.reason.message : 'Gagal memuat' });
-      data[key] = { header: [], rows: [] };
+      data[key] = { sheetName: cfg.name, header: [], rows: [] };
     }
   });
 

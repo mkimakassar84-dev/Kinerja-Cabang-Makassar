@@ -1,475 +1,1355 @@
-/* ============================================================
-   RENDER — Membangun HTML tiap section dari metrik yang sudah
-   dihitung, dan menginisialisasi semua chart Chart.js
-   ============================================================ */
+/* ==========================================================================
+   RENDER — Membangun DOM untuk setiap section dashboard dari objek metrics.
+   Chart dibuat dengan Chart.js. Setiap section punya kontrol interaktif
+   (toggle bulan/kuartal/semester, filter produk/perusahaan) yang re-render
+   chart secara dinamis tanpa reload data.
+   ========================================================================== */
 
-const PALETTE = {
-  slate: '#5B7B8C', slateSoft: 'rgba(91,123,140,0.15)',
-  sage: '#7E9A78', sageSoft: 'rgba(126,154,120,0.15)',
-  amber: '#C2944F', amberSoft: 'rgba(194,148,79,0.15)',
-  terra: '#B16456', terraSoft: 'rgba(177,100,86,0.15)',
-  gold: '#A98A4A', ink: '#2B2D2E', inkSoft: '#5C5F61', line: '#DEDAD0',
-};
+const CHART_REGISTRY = {}; // simpan instance Chart.js per canvasId agar bisa di-destroy sebelum re-render
 
-const charts = {};
 function makeChart(canvasId, config) {
-  const el = document.getElementById(canvasId);
-  if (!el) return;
-  if (charts[canvasId]) charts[canvasId].destroy();
-  const ctx = el.getContext('2d');
-  charts[canvasId] = new Chart(ctx, config);
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  if (CHART_REGISTRY[canvasId]) {
+    CHART_REGISTRY[canvasId].destroy();
+  }
+  const chart = new Chart(canvas.getContext('2d'), config);
+  CHART_REGISTRY[canvasId] = chart;
+  return chart;
 }
 
 function escapeHtml(str) {
-  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const div = document.createElement('div');
+  div.textContent = str === null || str === undefined ? '' : String(str);
+  return div.innerHTML;
 }
 
 function zonePillHtml(zone) {
-  const label = zone === 'hijau' ? 'Kontributor Utama' : zone === 'kuning' ? 'Menengah' : 'Perlu Perhatian';
-  return `<span class="zone-pill ${zone}"><span class="zone-dot ${zone}"></span>${label}</span>`;
+  const map = { hijau: ['Hijau', 'zone-hijau'], kuning: ['Kuning', 'zone-kuning'], merah: ['Merah', 'zone-merah'] };
+  const [label, cls] = map[zone] || ['-', ''];
+  return `<span class="zone-pill ${cls}">${label}</span>`;
 }
 
-/* ============================================================
-   SECTION 1 — Tren Penjualan (Sales)
-   ============================================================ */
+function deltaHtml(pct) {
+  const cls = pct >= 0 ? 'delta-up' : 'delta-down';
+  const sign = pct >= 0 ? '+' : '';
+  const arrow = pct >= 0 ? '&#8593;' : '&#8595;';
+  return `<span class="delta ${cls}">${arrow} ${sign}${fmtPct(pct)}</span>`;
+}
+
+// Chart.js default font & color agar konsisten dengan tema dashboard
+function applyChartDefaults() {
+  Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+  Chart.defaults.font.size = 12;
+  Chart.defaults.color = '#5c574f';
+  Chart.defaults.plugins.legend.labels.usePointStyle = true;
+  Chart.defaults.plugins.legend.labels.boxWidth = 8;
+}
+
+// Plugin custom untuk menampilkan label nominal Rupiah di atas bar chart
+const rpDataLabels = {
+  id: 'rpDataLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart;
+    chart.data.datasets.forEach((dataset, dsIndex) => {
+      if (!dataset.showLabel) return;
+      const meta = chart.getDatasetMeta(dsIndex);
+      meta.data.forEach((bar, idx) => {
+        const value = dataset.data[idx];
+        if (!value) return;
+        ctx.save();
+        ctx.font = '600 10px IBM Plex Mono, monospace';
+        ctx.fillStyle = '#5c574f';
+        ctx.textAlign = 'center';
+        const label = dataset.labelFormat === 'rupiah' ? fmtRupiahShort(value) : fmtNum(value);
+        ctx.fillText(label, bar.x, bar.y - 6);
+        ctx.restore();
+      });
+    });
+  }
+};
+if (typeof Chart !== 'undefined') Chart.register(rpDataLabels);
+
+// Versi singkat khusus untuk label di atas chart (supaya tidak menumpuk),
+// catatan: tabel & ringkasan tetap pakai fmtRupiah penuh sesuai permintaan.
+function fmtRupiahShort(n) {
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, '') + ' M';
+  if (abs >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + ' Jt';
+  return fmtNum(n);
+}
+
+/* ==========================================================================
+   SECTION 01 — TREN SALES
+   ========================================================================== */
+let salesViewMode = 'bulanan'; // bulanan | kuartal | semester
+
 function renderSalesSection(m) {
-  const t = m.salesTrend;
-  const totalAmount = sum(t, x => x.totalAmount);
-  const totalQty = sum(t, x => x.totalQty);
-  const totalTx = sum(t, x => x.totalTransaksi);
-  const last = t[t.length - 1];
-  const prev = t[t.length - 2];
-  const momChange = prev && prev.totalAmount > 0 ? ((last.totalAmount - prev.totalAmount) / prev.totalAmount) * 100 : null;
+  const s = m.salesTrend;
+  const ic = m.invoiceCustomerSummary;
+  const yoy = m.yoyComparison;
+  const byco = m.salesByCompany;
 
-  return `
-  <section class="section" id="s1">
+  const html = `
     <div class="section-head">
-      <div class="eyebrow">Bagian 01</div>
-      <h2>Analisis Tren Penjualan (Sales)</h2>
-      <p class="lede">Akumulasi nilai dan volume penjualan dari seluruh transaksi tercatat pada tab Grand Data 2026, diperbarui otomatis setiap kali sheet berubah.</p>
+      <div class="eyebrow">01 &mdash; Penjualan</div>
+      <h2>Tren Penjualan (Sales) Tahun 2026</h2>
+      <p class="lede">Analisis pergerakan nilai penjualan dari sheet Grand Data 2026, mencakup ringkasan invoice dan customer unik, komparasi terhadap tahun 2025, serta pembagian kontribusi antar perusahaan.</p>
     </div>
-    <div class="ledger">
-      <div class="ledger-item"><div class="lk">Total Nilai Sales</div><div class="lv">${fmtRupiah(totalAmount)}</div></div>
-      <div class="ledger-item"><div class="lk">Total Quantity</div><div class="lv">${fmtNum(totalQty)} unit</div></div>
-      <div class="ledger-item"><div class="lk">Total Transaksi</div><div class="lv">${fmtNum(totalTx)}</div></div>
-      <div class="ledger-item"><div class="lk">Bulan Terakhir vs Sebelumnya</div><div class="lv">${momChange === null ? '—' : (momChange >= 0 ? '+' : '') + momChange.toFixed(1) + '%'} ${momChange === null ? '' : `<span class="tag ${momChange >= 0 ? 'up' : 'down'}">${momChange >= 0 ? 'Naik' : 'Turun'}</span>`}</div></div>
-    </div>
-    <div class="chart-box">
-      <div class="chart-head">
-        <div><h4>Tren Nilai Sales per Bulan</h4><div class="card-sub">Total amount transaksi, dikelompokkan per bulan order date</div></div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Sales 2026 (s.d. hari ini)</div>
+        <div class="kpi-value">${fmtRupiah(ic.totalSales)}</div>
+        <div class="kpi-sub">${fmtNum(ic.totalQty)} unit terjual</div>
       </div>
-      <div class="chart-canvas-wrap" style="height:320px;"><canvas id="chart-sales-trend"></canvas></div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Invoice Unik 2026</div>
+        <div class="kpi-value">${fmtNum(ic.totalInvoiceUnik)}</div>
+        <div class="kpi-sub">Per ${fmtDate(ic.asOf)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Customer Unik 2026</div>
+        <div class="kpi-value">${fmtNum(ic.totalCustomerUnik)}</div>
+        <div class="kpi-sub">Pelanggan aktif bertransaksi</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Pertumbuhan Sales vs 2025</div>
+        <div class="kpi-value">${deltaHtml(yoy.growthSales)}</div>
+        <div class="kpi-sub">${fmtRupiah(yoy.totalSales2025)} &rarr; ${fmtRupiah(yoy.totalSales2026)}</div>
+      </div>
     </div>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Bulan</th><th class="num-col">Total Sales</th><th class="num-col">Quantity</th><th class="num-col">Jumlah Transaksi</th></tr></thead>
-        <tbody>
-          ${t.map(x => `<tr><td>${x.label}</td><td class="num-col">${fmtRupiah(x.totalAmount)}</td><td class="num-col">${fmtNum(x.totalQty)}</td><td class="num-col">${fmtNum(x.totalTransaksi)}</td></tr>`).join('')}
-          <tr class="total-row"><td>Total</td><td class="num-col">${fmtRupiah(totalAmount)}</td><td class="num-col">${fmtNum(totalQty)}</td><td class="num-col">${fmtNum(totalTx)}</td></tr>
-        </tbody>
-      </table>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Tren Penjualan per Periode</h3>
+        <div class="toggle-group" id="salesViewToggle">
+          <button class="toggle-btn active" data-mode="bulanan">Per Bulan</button>
+          <button class="toggle-btn" data-mode="kuartal">Per Kuartal</button>
+          <button class="toggle-btn" data-mode="semester">Per Semester</button>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chartSalesTrend"></canvas></div>
     </div>
-  </section>`;
+
+    <div class="panel">
+      <h3>Komparasi Sales 2025 vs 2026 &amp; Target Tahunan</h3>
+      <p class="panel-note">Sumber: sheet Sales SUM. Target Sales 2026: <strong>${fmtRupiah(yoy.totalTarget)}</strong> &mdash; tercapai <strong>${fmtPct(yoy.achievementSales)}</strong> dari target.</p>
+      <div class="chart-wrap"><canvas id="chartYoySales"></canvas></div>
+      <table class="data-table" id="tblYoySales"></table>
+    </div>
+
+    <div class="panel">
+      <h3>Sales by Company &mdash; MKI vs CFN</h3>
+      <div class="two-col">
+        <div class="chart-wrap chart-wrap-sm"><canvas id="chartSalesByCompany"></canvas></div>
+        <div class="company-cards">
+          ${byco.companies.map(c => `
+            <div class="company-card company-${c.company.toLowerCase()}">
+              <div class="company-card-head">
+                <span class="company-badge company-badge-${c.company.toLowerCase()}">${c.company}</span>
+                <span class="company-pct">${fmtPct(c.pct)}</span>
+              </div>
+              <div class="company-card-value">${fmtRupiah(c.sales)}</div>
+              <div class="company-card-row"><span>Quantity</span><strong>${fmtNum(c.qty)} unit</strong></div>
+              <div class="company-card-row"><span>Invoice Unik</span><strong>${fmtNum(c.invoiceUnik)}</strong></div>
+              <div class="company-card-row"><span>Customer Unik</span><strong>${fmtNum(c.customerUnik)}</strong></div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <h4 class="sub-heading">Produk Terlaris per Perusahaan</h4>
+      <div class="two-col">
+        ${byco.companies.map(c => `
+          <div>
+            <div class="mini-table-title">${c.company}</div>
+            <table class="data-table data-table-compact">
+              <thead><tr><th>Kode Barang</th><th>Sales</th><th>Qty</th></tr></thead>
+              <tbody>
+                ${c.topProducts.slice(0, 5).map(p => `<tr><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  document.getElementById('s1').innerHTML = html;
+
+  renderSalesTrendChart(s, salesViewMode);
+  renderYoySalesChart(yoy);
+  renderYoySalesTable(yoy);
+  renderSalesByCompanyChart(byco);
+
+  document.querySelectorAll('#salesViewToggle .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#salesViewToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      salesViewMode = btn.dataset.mode;
+      renderSalesTrendChart(s, salesViewMode);
+    });
+  });
 }
 
-function chartSalesTrend(m) {
-  const t = m.salesTrend;
-  makeChart('chart-sales-trend', {
+function renderSalesTrendChart(s, mode) {
+  let labels, data;
+  if (mode === 'bulanan') { labels = s.monthly.map(x => MONTH_NAMES_SHORT_ID[x.monthIdx]); data = s.monthly.map(x => x.value); }
+  else if (mode === 'kuartal') { labels = s.quarters.map(x => x.label); data = s.quarters.map(x => x.value); }
+  else { labels = s.semesters.map(x => x.label); data = s.semesters.map(x => x.value); }
+
+  makeChart('chartSalesTrend', {
     type: 'line',
+    data: { labels, datasets: [{
+      label: 'Sales', data,
+      borderColor: PALETTE.terra, backgroundColor: 'rgba(193,122,90,0.12)',
+      fill: true, tension: 0.35, pointRadius: 4, pointBackgroundColor: PALETTE.terra, borderWidth: 2.5,
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } } },
+      scales: { y: { ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+}
+
+function renderYoySalesChart(yoy) {
+  makeChart('chartYoySales', {
+    type: 'bar',
     data: {
-      labels: t.map(x => x.label),
+      labels: yoy.months.map(m => MONTH_NAMES_SHORT_ID[m.monthIdx]),
+      datasets: [
+        { label: 'Sales 2025', data: yoy.months.map(m => m.sales2025), backgroundColor: PALETTE.slateLight, borderRadius: 4 },
+        { label: 'Sales 2026', data: yoy.months.map(m => m.sales2026), backgroundColor: PALETTE.terra, borderRadius: 4 },
+        { label: 'Target', data: yoy.months.map(m => m.targetSalesRevenue), type: 'line', borderColor: PALETTE.amber, borderDash: [6,4], borderWidth: 2, pointRadius: 0, fill: false },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtRupiah(ctx.parsed.y)}` } } },
+      scales: { y: { ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+}
+
+function renderYoySalesTable(yoy) {
+  const rows = yoy.months.map(m => `
+    <tr>
+      <td>${m.label}</td>
+      <td>${fmtRupiah(m.sales2025)}</td>
+      <td>${fmtRupiah(m.sales2026)}</td>
+      <td>${deltaHtml(growthPct(m.sales2026, m.sales2025))}</td>
+      <td>${fmtRupiah(m.targetSalesRevenue)}</td>
+    </tr>
+  `).join('');
+  document.getElementById('tblYoySales').innerHTML = `
+    <thead><tr><th>Bulan</th><th>Sales 2025</th><th>Sales 2026</th><th>Pertumbuhan</th><th>Target</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr>
+      <td>Total</td><td>${fmtRupiah(yoy.totalSales2025)}</td><td>${fmtRupiah(yoy.totalSales2026)}</td>
+      <td>${deltaHtml(yoy.growthSales)}</td><td>${fmtRupiah(yoy.totalTarget)}</td>
+    </tr></tfoot>
+  `;
+}
+
+function renderSalesByCompanyChart(byco) {
+  makeChart('chartSalesByCompany', {
+    type: 'doughnut',
+    data: {
+      labels: byco.companies.map(c => c.company),
+      datasets: [{ data: byco.companies.map(c => c.sales), backgroundColor: [PALETTE.terra, PALETTE.sage], borderWidth: 0 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtRupiah(ctx.parsed)} (${fmtPct(byco.companies[ctx.dataIndex].pct)})` } } },
+    },
+  });
+}
+
+/* ==========================================================================
+   SECTION 02 — TREN REVENUE
+   ========================================================================== */
+let revViewMode = 'bulanan';
+
+function renderRevenueSection(m) {
+  const r = m.revTrend;
+  const yoy = m.yoyComparison;
+  const byco = m.revenueByCompany;
+
+  const html = `
+    <div class="section-head">
+      <div class="eyebrow">02 &mdash; Pendapatan</div>
+      <h2>Tren Pendapatan (Revenue) Tahun 2026</h2>
+      <p class="lede">Revenue dihitung dari pelunasan yang benar-benar diterima (sheet Rev SUM), berbeda dengan Sales yang mencatat nilai transaksi saat invoice terbit.</p>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Revenue 2026 (s.d. hari ini)</div>
+        <div class="kpi-value">${fmtRupiah(r.total)}</div>
+        <div class="kpi-sub">Pelunasan diterima</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Invoice Unik Terbayar</div>
+        <div class="kpi-value">${fmtNum(r.invoiceUnik)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Customer Unik Membayar</div>
+        <div class="kpi-value">${fmtNum(r.customerUnik)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Pertumbuhan Revenue vs 2025</div>
+        <div class="kpi-value">${deltaHtml(yoy.growthRev)}</div>
+        <div class="kpi-sub">${fmtRupiah(yoy.totalRev2025)} &rarr; ${fmtRupiah(yoy.totalRev2026)}</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Tren Pendapatan per Periode</h3>
+        <div class="toggle-group" id="revViewToggle">
+          <button class="toggle-btn active" data-mode="bulanan">Per Bulan</button>
+          <button class="toggle-btn" data-mode="kuartal">Per Kuartal</button>
+          <button class="toggle-btn" data-mode="semester">Per Semester</button>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chartRevTrend"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h3>Komparasi Revenue 2025 vs 2026 &amp; Target Tahunan</h3>
+      <p class="panel-note">Sumber: sheet Sales SUM. Target Revenue 2026: <strong>${fmtRupiah(yoy.totalTarget)}</strong> &mdash; tercapai <strong>${fmtPct(yoy.achievementRev)}</strong> dari target.</p>
+      <div class="chart-wrap"><canvas id="chartYoyRev"></canvas></div>
+      <table class="data-table" id="tblYoyRev"></table>
+    </div>
+
+    <div class="panel">
+      <h3>Revenue by Company &mdash; MKI vs CFN</h3>
+      <div class="two-col">
+        <div class="chart-wrap chart-wrap-sm"><canvas id="chartRevByCompany"></canvas></div>
+        <div class="company-cards">
+          ${byco.companies.map(c => `
+            <div class="company-card company-${c.company.toLowerCase()}">
+              <div class="company-card-head">
+                <span class="company-badge company-badge-${c.company.toLowerCase()}">${c.company}</span>
+                <span class="company-pct">${fmtPct(c.pct)}</span>
+              </div>
+              <div class="company-card-value">${fmtRupiah(c.revenue)}</div>
+              <div class="company-card-row"><span>Invoice Unik Terbayar</span><strong>${fmtNum(c.invoiceUnik)}</strong></div>
+              <div class="company-card-row"><span>Customer Unik</span><strong>${fmtNum(c.customerUnik)}</strong></div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('s2').innerHTML = html;
+
+  renderRevTrendChart(r, revViewMode);
+  renderYoyRevChart(yoy);
+  renderYoyRevTable(yoy);
+  renderRevByCompanyChart(byco);
+
+  document.querySelectorAll('#revViewToggle .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#revViewToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      revViewMode = btn.dataset.mode;
+      renderRevTrendChart(r, revViewMode);
+    });
+  });
+}
+
+function renderRevTrendChart(r, mode) {
+  let labels, data;
+  if (mode === 'bulanan') { labels = r.monthly.map(x => MONTH_NAMES_SHORT_ID[x.monthIdx]); data = r.monthly.map(x => x.value); }
+  else if (mode === 'kuartal') { labels = r.quarters.map(x => x.label); data = r.quarters.map(x => x.value); }
+  else { labels = r.semesters.map(x => x.label); data = r.semesters.map(x => x.value); }
+
+  makeChart('chartRevTrend', {
+    type: 'line',
+    data: { labels, datasets: [{
+      label: 'Revenue', data,
+      borderColor: PALETTE.sage, backgroundColor: 'rgba(138,154,130,0.14)',
+      fill: true, tension: 0.35, pointRadius: 4, pointBackgroundColor: PALETTE.sage, borderWidth: 2.5,
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } } },
+      scales: { y: { ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+}
+
+function renderYoyRevChart(yoy) {
+  makeChart('chartYoyRev', {
+    type: 'bar',
+    data: {
+      labels: yoy.months.map(m => MONTH_NAMES_SHORT_ID[m.monthIdx]),
+      datasets: [
+        { label: 'Revenue 2025', data: yoy.months.map(m => m.rev2025), backgroundColor: PALETTE.slateLight, borderRadius: 4 },
+        { label: 'Revenue 2026', data: yoy.months.map(m => m.rev2026), backgroundColor: PALETTE.sage, borderRadius: 4 },
+        { label: 'Target', data: yoy.months.map(m => m.targetSalesRevenue), type: 'line', borderColor: PALETTE.amber, borderDash: [6,4], borderWidth: 2, pointRadius: 0, fill: false },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtRupiah(ctx.parsed.y)}` } } },
+      scales: { y: { ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+}
+
+function renderYoyRevTable(yoy) {
+  const rows = yoy.months.map(m => `
+    <tr>
+      <td>${m.label}</td>
+      <td>${fmtRupiah(m.rev2025)}</td>
+      <td>${fmtRupiah(m.rev2026)}</td>
+      <td>${deltaHtml(growthPct(m.rev2026, m.rev2025))}</td>
+      <td>${fmtRupiah(m.targetSalesRevenue)}</td>
+    </tr>
+  `).join('');
+  document.getElementById('tblYoyRev').innerHTML = `
+    <thead><tr><th>Bulan</th><th>Revenue 2025</th><th>Revenue 2026</th><th>Pertumbuhan</th><th>Target</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr>
+      <td>Total</td><td>${fmtRupiah(yoy.totalRev2025)}</td><td>${fmtRupiah(yoy.totalRev2026)}</td>
+      <td>${deltaHtml(yoy.growthRev)}</td><td>${fmtRupiah(yoy.totalTarget)}</td>
+    </tr></tfoot>
+  `;
+}
+
+function renderRevByCompanyChart(byco) {
+  makeChart('chartRevByCompany', {
+    type: 'doughnut',
+    data: {
+      labels: byco.companies.map(c => c.company),
+      datasets: [{ data: byco.companies.map(c => c.revenue), backgroundColor: [PALETTE.sage, PALETTE.terra], borderWidth: 0 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtRupiah(ctx.parsed)} (${fmtPct(byco.companies[ctx.dataIndex].pct)})` } } },
+    },
+  });
+}
+
+/* ==========================================================================
+   SECTION 03 — RASIO SALES TO REVENUE
+   ========================================================================== */
+let ratioViewMode = 'bulanan';
+
+function renderRatioSection(m) {
+  const ratio = m.salesToRevenueRatio;
+
+  const html = `
+    <div class="section-head">
+      <div class="eyebrow">03 &mdash; Rasio</div>
+      <h2>Rasio Sales terhadap Revenue 2026</h2>
+      <p class="lede">Mengukur seberapa besar nilai penjualan yang sudah benar-benar terkonversi menjadi pendapatan (lunas dibayar). Sales bersumber dari Grand Data 2026, Revenue dari Rev SUM.</p>
+    </div>
+
+    <div class="kpi-grid kpi-grid-3">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Sales 2026</div>
+        <div class="kpi-value">${fmtRupiah(ratio.totalSales)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Revenue 2026</div>
+        <div class="kpi-value">${fmtRupiah(ratio.totalRevenue)}</div>
+      </div>
+      <div class="kpi-card kpi-card-accent">
+        <div class="kpi-label">Rasio Revenue / Sales</div>
+        <div class="kpi-value">${fmtPct(ratio.totalRatio)}</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Rasio Sales to Revenue per Periode</h3>
+        <div class="toggle-group" id="ratioViewToggle">
+          <button class="toggle-btn active" data-mode="bulanan">Per Bulan</button>
+          <button class="toggle-btn" data-mode="kuartal">Per Kuartal</button>
+          <button class="toggle-btn" data-mode="semester">Per Semester</button>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chartRatio"></canvas></div>
+      <table class="data-table" id="tblRatio"></table>
+    </div>
+  `;
+  document.getElementById('s3').innerHTML = html;
+
+  renderRatioChart(ratio, ratioViewMode);
+  renderRatioTable(ratio, ratioViewMode);
+
+  document.querySelectorAll('#ratioViewToggle .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#ratioViewToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      ratioViewMode = btn.dataset.mode;
+      renderRatioChart(ratio, ratioViewMode);
+      renderRatioTable(ratio, ratioViewMode);
+    });
+  });
+}
+
+function getRatioData(ratio, mode) {
+  if (mode === 'bulanan') return ratio.monthly.map(x => ({ label: MONTH_NAMES_SHORT_ID[x.monthIdx], ...x }));
+  if (mode === 'kuartal') return ratio.quarters;
+  return ratio.semesters;
+}
+
+function renderRatioChart(ratio, mode) {
+  const data = getRatioData(ratio, mode);
+  makeChart('chartRatio', {
+    data: {
+      labels: data.map(x => x.label),
+      datasets: [
+        { type: 'bar', label: 'Sales', data: data.map(x => x.sales), backgroundColor: PALETTE.terraLight, borderRadius: 4, yAxisID: 'y' },
+        { type: 'bar', label: 'Revenue', data: data.map(x => x.revenue), backgroundColor: PALETTE.sageLight, borderRadius: 4, yAxisID: 'y' },
+        { type: 'line', label: 'Rasio (%)', data: data.map(x => x.ratio), borderColor: PALETTE.amber, borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: PALETTE.amber, yAxisID: 'y1', tension: 0.3 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { tooltip: { callbacks: { label: ctx => ctx.dataset.yAxisID === 'y1' ? `Rasio: ${fmtPct(ctx.parsed.y)}` : `${ctx.dataset.label}: ${fmtRupiah(ctx.parsed.y)}` } } },
+      scales: {
+        y: { position: 'left', ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } },
+        y1: { position: 'right', ticks: { callback: v => v + '%' }, grid: { display: false }, min: 0 },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+function renderRatioTable(ratio, mode) {
+  const data = getRatioData(ratio, mode);
+  const rows = data.map(x => `<tr><td>${x.label}</td><td>${fmtRupiah(x.sales)}</td><td>${fmtRupiah(x.revenue)}</td><td>${fmtPct(x.ratio)}</td></tr>`).join('');
+  document.getElementById('tblRatio').innerHTML = `
+    <thead><tr><th>Periode</th><th>Sales</th><th>Revenue</th><th>Rasio</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td>Total</td><td>${fmtRupiah(ratio.totalSales)}</td><td>${fmtRupiah(ratio.totalRevenue)}</td><td>${fmtPct(ratio.totalRatio)}</td></tr></tfoot>
+  `;
+}
+
+/* ==========================================================================
+   SECTION 04 — PERFORMA & ZONA WILAYAH KABUPATEN/KOTA
+   ========================================================================== */
+let zonaCoverageMode = 'bulanan';
+let zonaFilter = 'semua'; // semua | hijau | kuning | merah
+
+function renderZonaSection(m) {
+  const z = m.zonaWilayah;
+
+  const html = `
+    <div class="section-head">
+      <div class="eyebrow">04 &mdash; Wilayah</div>
+      <h2>Performa &amp; Zona Wilayah Kabupaten/Kota</h2>
+      <p class="lede">Pembagian zona berdasarkan total invoice unik tahun 2026 (sheet KPI Monitoring). Zona <strong>Merah</strong>: 0&ndash;20 invoice, <strong>Kuning</strong>: 20&ndash;50 invoice, <strong>Hijau</strong>: lebih dari 50 invoice.</p>
+    </div>
+
+    <div class="kpi-grid kpi-grid-4">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Wilayah Tercatat</div>
+        <div class="kpi-value">${fmtNum(z.totalWilayah)}</div>
+      </div>
+      <div class="kpi-card kpi-card-zone-hijau">
+        <div class="kpi-label">Zona Hijau (&gt;50 invoice)</div>
+        <div class="kpi-value">${fmtNum(z.zoneCounts.hijau)}</div>
+      </div>
+      <div class="kpi-card kpi-card-zone-kuning">
+        <div class="kpi-label">Zona Kuning (20&ndash;50 invoice)</div>
+        <div class="kpi-value">${fmtNum(z.zoneCounts.kuning)}</div>
+      </div>
+      <div class="kpi-card kpi-card-zone-merah">
+        <div class="kpi-label">Zona Merah (0&ndash;20 invoice)</div>
+        <div class="kpi-value">${fmtNum(z.zoneCounts.merah)}</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Coverage Area by Invoice</h3>
+      <div class="panel-head">
+        <p class="panel-note">Jumlah wilayah yang memiliki transaksi (invoice &gt; 0) pada periode tersebut.</p>
+        <div class="toggle-group" id="zonaCoverageToggle">
+          <button class="toggle-btn active" data-mode="bulanan">Per Bulan</button>
+          <button class="toggle-btn" data-mode="kuartal">Per Kuartal</button>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chartCoverage"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Distribusi Zona Wilayah</h3>
+      </div>
+      <div class="two-col">
+        <div class="chart-wrap chart-wrap-sm"><canvas id="chartZonaDist"></canvas></div>
+        <div class="chart-wrap chart-wrap-sm"><canvas id="chartTop10Wilayah"></canvas></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Detail Performa per Wilayah</h3>
+        <div class="toggle-group" id="zonaFilterToggle">
+          <button class="toggle-btn active" data-zone="semua">Semua</button>
+          <button class="toggle-btn" data-zone="hijau">Hijau</button>
+          <button class="toggle-btn" data-zone="kuning">Kuning</button>
+          <button class="toggle-btn" data-zone="merah">Merah</button>
+        </div>
+      </div>
+      <table class="data-table" id="tblWilayah"></table>
+    </div>
+
+    <div class="panel">
+      <h3>Wilayah Tanpa Pembelanjaan sejak Januari 2026</h3>
+      <p class="panel-note">${z.wilayahTanpaPembelanjaan.length} wilayah belum tercatat transaksi sama sekali sepanjang tahun 2026.</p>
+      <div class="chip-list">
+        ${z.wilayahTanpaPembelanjaan.length > 0
+          ? z.wilayahTanpaPembelanjaan.map(w => `<span class="chip chip-muted">${escapeHtml(w.nama)}</span>`).join('')
+          : '<span class="chip-empty">Seluruh wilayah tercatat memiliki transaksi pada tahun 2026.</span>'}
+      </div>
+    </div>
+  `;
+  document.getElementById('s4').innerHTML = html;
+
+  renderCoverageChart(z, zonaCoverageMode);
+  renderZonaDistChart(z);
+  renderTop10WilayahChart(z);
+  renderWilayahTable(z, zonaFilter);
+
+  document.querySelectorAll('#zonaCoverageToggle .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#zonaCoverageToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      zonaCoverageMode = btn.dataset.mode;
+      renderCoverageChart(z, zonaCoverageMode);
+    });
+  });
+
+  document.querySelectorAll('#zonaFilterToggle .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#zonaFilterToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      zonaFilter = btn.dataset.zone;
+      renderWilayahTable(z, zonaFilter);
+    });
+  });
+}
+
+function renderCoverageChart(z, mode) {
+  const data = mode === 'bulanan' ? z.coveragePerBulan.map(x => ({ label: MONTH_NAMES_SHORT_ID[x.monthIdx], ...x })) : z.coveragePerKuartal;
+  makeChart('chartCoverage', {
+    type: 'bar',
+    data: { labels: data.map(x => x.label), datasets: [{ label: 'Jumlah Wilayah Aktif', data: data.map(x => x.coverage), backgroundColor: PALETTE.sage, borderRadius: 4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+}
+
+function renderZonaDistChart(z) {
+  makeChart('chartZonaDist', {
+    type: 'doughnut',
+    data: {
+      labels: ['Hijau (>50)', 'Kuning (20-50)', 'Merah (0-20)'],
+      datasets: [{ data: [z.zoneCounts.hijau, z.zoneCounts.kuning, z.zoneCounts.merah], backgroundColor: [PALETTE.green, PALETTE.yellow, PALETTE.red], borderWidth: 0 }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' } } },
+  });
+}
+
+function renderTop10WilayahChart(z) {
+  const top10 = z.wilayahData.slice(0, 10);
+  makeChart('chartTop10Wilayah', {
+    type: 'bar',
+    data: {
+      labels: top10.map(w => w.nama),
+      datasets: [{ label: 'Total Invoice 2026', data: top10.map(w => w.total), backgroundColor: top10.map(w => w.zone === 'hijau' ? PALETTE.green : w.zone === 'kuning' ? PALETTE.yellow : PALETTE.red), borderRadius: 4 }],
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, grid: { color: '#eae3d6' } }, y: { grid: { display: false } } },
+    },
+  });
+}
+
+function renderWilayahTable(z, filter) {
+  const data = filter === 'semua' ? z.wilayahData : z.wilayahData.filter(w => w.zone === filter);
+  const salesMap = new Map(z.salesByWilayah.map(s => [s.lokasi, s]));
+  const rows = data.map(w => {
+    const salesInfo = salesMap.get(w.nama);
+    return `<tr>
+      <td>${escapeHtml(w.nama)}</td>
+      <td>${fmtNum(w.total)}</td>
+      <td>${zonePillHtml(w.zone)}</td>
+      <td>${salesInfo ? fmtRupiah(salesInfo.sales) : fmtRupiah(0)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('tblWilayah').innerHTML = `
+    <thead><tr><th>Kabupaten/Kota</th><th>Total Invoice 2026</th><th>Zona</th><th>Total Sales</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="4" class="empty-row">Tidak ada data untuk filter ini.</td></tr>'}</tbody>
+  `;
+}
+
+/* ==========================================================================
+   SECTION 05 — KODE BARANG TERLARIS
+   ========================================================================== */
+let topProductMetric = 'sales'; // sales | qty
+let topProductCompanyFilter = 'semua'; // semua | MKI | CFN
+
+function renderTopProductsSection(m) {
+  const tp = m.topProducts;
+
+  const html = `
+    <div class="section-head">
+      <div class="eyebrow">05 &mdash; Produk</div>
+      <h2>Kode Barang Terlaris 2026</h2>
+      <p class="lede">Peringkat kode barang berdasarkan nilai penjualan dan quantity terjual sepanjang tahun 2026, dari sheet Grand Data 2026, lengkap dengan pembagian per perusahaan.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Peringkat Kode Barang Terlaris</h3>
+        <div class="toggle-group-wrap">
+          <div class="toggle-group" id="topProductMetricToggle">
+            <button class="toggle-btn active" data-metric="sales">By Sales</button>
+            <button class="toggle-btn" data-metric="qty">By Quantity</button>
+          </div>
+          <div class="toggle-group" id="topProductCompanyToggle">
+            <button class="toggle-btn active" data-co="semua">Semua</button>
+            <button class="toggle-btn" data-co="MKI">MKI</button>
+            <button class="toggle-btn" data-co="CFN">CFN</button>
+          </div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chartTopProducts"></canvas></div>
+      <table class="data-table" id="tblTopProducts"></table>
+    </div>
+  `;
+  document.getElementById('s5').innerHTML = html;
+
+  renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
+
+  document.querySelectorAll('#topProductMetricToggle .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#topProductMetricToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      topProductMetric = btn.dataset.metric;
+      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
+    });
+  });
+  document.querySelectorAll('#topProductCompanyToggle .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#topProductCompanyToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      topProductCompanyFilter = btn.dataset.co;
+      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
+    });
+  });
+}
+
+function getTopProductData(tp, metric, coFilter) {
+  let source;
+  if (coFilter === 'semua') source = metric === 'sales' ? tp.topBySales : tp.topByQty;
+  else source = metric === 'sales' ? tp.byCompany[coFilter].topBySales : tp.byCompany[coFilter].topByQty;
+  return source.slice(0, 10);
+}
+
+function renderTopProductsChart(tp, metric, coFilter) {
+  const data = getTopProductData(tp, metric, coFilter);
+  makeChart('chartTopProducts', {
+    type: 'bar',
+    data: {
+      labels: data.map(p => p.kode),
       datasets: [{
-        label: 'Total Sales', data: t.map(x => x.totalAmount),
-        borderColor: PALETTE.slate, backgroundColor: PALETTE.slateSoft, fill: true, tension: 0.3, pointRadius: 3,
+        label: metric === 'sales' ? 'Sales' : 'Quantity',
+        data: data.map(p => metric === 'sales' ? p.sales : p.qty),
+        backgroundColor: PALETTE.amber, borderRadius: 4,
       }],
     },
     options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } } },
-      scales: { y: { ticks: { callback: v => fmtRupiah(v, { compact: true }) } } },
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => metric === 'sales' ? fmtRupiah(ctx.parsed.x) : `${fmtNum(ctx.parsed.x)} unit` } } },
+      scales: { x: { beginAtZero: true, ticks: { callback: v => metric === 'sales' ? fmtRupiahShort(v) : fmtNum(v) }, grid: { color: '#eae3d6' } }, y: { grid: { display: false } } },
+    },
+  });
+
+  document.getElementById('tblTopProducts').innerHTML = `
+    <thead><tr><th>Peringkat</th><th>Kode Barang</th><th>Sales</th><th>Quantity</th></tr></thead>
+    <tbody>${data.map((p, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td></tr>`).join('')}</tbody>
+  `;
+}
+
+/* ==========================================================================
+   SECTION 06 — STOCK GUDANG & PO GUDANG
+   ========================================================================== */
+function renderStockSection(m) {
+  const st = m.stock;
+  const po = m.poGudang;
+
+  const html = `
+    <div class="section-head">
+      <div class="eyebrow">06 &mdash; Gudang</div>
+      <h2>Stock Barang &amp; PO Gudang</h2>
+      <p class="lede">Stock tersedia hari ini dari sheet Stock GD MKS (kolom Total Stock by Company), serta analisis PO Gudang yang datanya mulai tersedia sejak Maret 2026.</p>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Stock Gudang Hari Ini</div>
+        <div class="kpi-value">${fmtNum(st.totalStockAll)} unit</div>
+        <div class="kpi-sub">${fmtNum(st.itemCount)} jenis barang</div>
+      </div>
+      <div class="kpi-card company-mki">
+        <div class="kpi-label">Stock MKI</div>
+        <div class="kpi-value">${fmtNum(st.totalStockMKI)} unit</div>
+      </div>
+      <div class="kpi-card company-cfn">
+        <div class="kpi-label">Stock CFN</div>
+        <div class="kpi-value">${fmtNum(st.totalStockCFN)} unit</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Barang Stock Tidak Bergerak</div>
+        <div class="kpi-value">${fmtNum(st.stockTidakTerjual.length)}</div>
+        <div class="kpi-sub">Ada stock, belum pernah terjual 2026</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Distribusi Stock by Company</h3>
+      <div class="chart-wrap chart-wrap-sm"><canvas id="chartStock"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h3>Barang Tersedia di Gudang (Stock &gt; 0)</h3>
+      <table class="data-table" id="tblStock"></table>
+    </div>
+
+    <div class="panel">
+      <h3>Barang Ada Stock Namun Tidak Bergerak / Terjual Dibawah 5 Unit (2026)</h3>
+      <div class="two-col">
+        <div>
+          <div class="mini-table-title">Stock Ada, Belum Pernah Terjual (${st.stockTidakTerjual.length})</div>
+          <table class="data-table data-table-compact">
+            <thead><tr><th>Kode</th><th>Deskripsi</th><th>Stock</th></tr></thead>
+            <tbody>${st.stockTidakTerjual.slice(0, 30).map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.stockTotal)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty-row">Tidak ada.</td></tr>'}</tbody>
+          </table>
+        </div>
+        <div>
+          <div class="mini-table-title">Terjual Dibawah 5 Unit (${st.stockTerjualDibawah5.length})</div>
+          <table class="data-table data-table-compact">
+            <thead><tr><th>Kode</th><th>Deskripsi</th><th>Terjual</th></tr></thead>
+            <tbody>${st.stockTerjualDibawah5.slice(0, 30).map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.qtyTerjual)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty-row">Tidak ada.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Analisis PO Gudang</h3>
+      <p class="panel-note">Data PO Gudang baru tersedia mulai Maret 2026. Total ${fmtNum(po.totalPO)} PO, ${fmtNum(po.totalQtyPO)} unit dipesan, ${fmtNum(po.totalQtyDiterima)} unit sudah diterima di gudang.</p>
+      <div class="two-col">
+        <div class="chart-wrap chart-wrap-sm"><canvas id="chartPoGudang"></canvas></div>
+        <div class="company-cards">
+          ${Object.entries(po.byCompany).map(([co, d]) => `
+            <div class="company-card company-${co.toLowerCase()}">
+              <div class="company-card-head"><span class="company-badge company-badge-${co.toLowerCase()}">${co}</span></div>
+              <div class="company-card-row"><span>Jumlah PO</span><strong>${fmtNum(d.count)}</strong></div>
+              <div class="company-card-row"><span>Qty Dipesan</span><strong>${fmtNum(d.qty)} unit</strong></div>
+              <div class="company-card-row"><span>Qty Diterima</span><strong>${fmtNum(d.qtyDiterima)} unit</strong></div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('s6').innerHTML = html;
+
+  renderStockChart(st);
+  renderStockTable(st);
+  renderPoGudangChart(po);
+}
+
+function renderStockChart(st) {
+  makeChart('chartStock', {
+    type: 'doughnut',
+    data: { labels: ['MKI', 'CFN'], datasets: [{ data: [st.totalStockMKI, st.totalStockCFN], backgroundColor: [PALETTE.terra, PALETTE.sage], borderWidth: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtNum(ctx.parsed)} unit` } } } },
+  });
+}
+
+function renderStockTable(st) {
+  const items = st.items.filter(i => i.stockTotal > 0).sort((a, b) => b.stockTotal - a.stockTotal);
+  document.getElementById('tblStock').innerHTML = `
+    <thead><tr><th>Kode Barang</th><th>Deskripsi</th><th>Stock MKI</th><th>Stock CFN</th><th>Total</th></tr></thead>
+    <tbody>${items.slice(0, 50).map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.stockMKI)}</td><td>${fmtNum(i.stockCFN)}</td><td><strong>${fmtNum(i.stockTotal)}</strong></td></tr>`).join('')}</tbody>
+  `;
+}
+
+function renderPoGudangChart(po) {
+  makeChart('chartPoGudang', {
+    type: 'bar',
+    data: { labels: po.monthly.map(x => x.label), datasets: [{ label: 'Qty PO', data: po.monthly.map(x => x.qty), backgroundColor: PALETTE.slate, borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } } },
+  });
+}
+
+/* ==========================================================================
+   SECTION 07 — DELIVERY & EKSPEDISI
+   ========================================================================== */
+function renderDeliverySection(m) {
+  const d = m.delivery;
+
+  const html = `
+    <div class="section-head">
+      <div class="eyebrow">07 &mdash; Pengiriman</div>
+      <h2>Delivery Same Day &amp; Cut Off, serta Ekspedisi</h2>
+      <p class="lede">Seluruh data pengiriman bersumber dari sheet Grand Data 2026: status pengiriman (Same Day/Cut Off) dan jalur ekspedisi yang digunakan.</p>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Transaksi 2026</div>
+        <div class="kpi-value">${fmtNum(d.total)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Same Day</div>
+        <div class="kpi-value">${fmtPct(d.deliveryStatus.sameDay.pct)}</div>
+        <div class="kpi-sub">${fmtNum(d.deliveryStatus.sameDay.count)} transaksi</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Cut Off</div>
+        <div class="kpi-value">${fmtPct(d.deliveryStatus.cutOff.pct)}</div>
+        <div class="kpi-sub">${fmtNum(d.deliveryStatus.cutOff.count)} transaksi</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Koli Terkirim</div>
+        <div class="kpi-value">${fmtNum(d.totalKoli)}</div>
+        <div class="kpi-sub">${fmtNum(d.totalQty)} unit barang</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Status Pengiriman: Same Day vs Cut Off</h3>
+      <div class="two-col">
+        <div class="chart-wrap chart-wrap-sm"><canvas id="chartDeliveryStatus"></canvas></div>
+        <table class="data-table">
+          <thead><tr><th>Status</th><th>Persentase</th><th>Quantity</th><th>Koli</th></tr></thead>
+          <tbody>
+            <tr><td>Same Day</td><td>${fmtPct(d.deliveryStatus.sameDay.pct)}</td><td>${fmtNum(d.deliveryStatus.sameDay.qty)}</td><td>${fmtNum(d.deliveryStatus.sameDay.koli)}</td></tr>
+            <tr><td>Cut Off</td><td>${fmtPct(d.deliveryStatus.cutOff.pct)}</td><td>${fmtNum(d.deliveryStatus.cutOff.qty)}</td><td>${fmtNum(d.deliveryStatus.cutOff.koli)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Penggunaan Jalur Ekspedisi</h3>
+      <p class="panel-note">Hand Carry: <strong>${fmtPct(d.handCarry.pct)}</strong> (${fmtNum(d.handCarry.count)} transaksi) &mdash; Ekspedisi Pihak Ketiga: <strong>${fmtPct(d.ekspedisiLuar.pct)}</strong> (${fmtNum(d.ekspedisiLuar.count)} transaksi)</p>
+      <div class="chart-wrap"><canvas id="chartEkspedisi"></canvas></div>
+      <table class="data-table" id="tblEkspedisi"></table>
+    </div>
+  `;
+  document.getElementById('s7').innerHTML = html;
+
+  renderDeliveryStatusChart(d);
+  renderEkspedisiChart(d);
+  renderEkspedisiTable(d);
+}
+
+function renderDeliveryStatusChart(d) {
+  makeChart('chartDeliveryStatus', {
+    type: 'doughnut',
+    data: { labels: ['Same Day', 'Cut Off'], datasets: [{ data: [d.deliveryStatus.sameDay.count, d.deliveryStatus.cutOff.count], backgroundColor: [PALETTE.sage, PALETTE.terra], borderWidth: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' } } },
+  });
+}
+
+function renderEkspedisiChart(d) {
+  const top = d.byEkspedisi.slice(0, 10);
+  makeChart('chartEkspedisi', {
+    type: 'bar',
+    data: { labels: top.map(e => e.nama), datasets: [{ label: 'Jumlah Transaksi', data: top.map(e => e.count), backgroundColor: PALETTE.slate, borderRadius: 4 }] },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, grid: { color: '#eae3d6' } }, y: { grid: { display: false } } },
     },
   });
 }
 
-/* ============================================================
-   SECTION 2 — Tren Pendapatan (Revenue)
-   ============================================================ */
-function renderRevenueSection(m) {
-  const t = m.revenueTrend;
-  const totalAmount = sum(t, x => x.totalAmount);
-  return `
-  <section class="section" id="s2">
-    <div class="section-head">
-      <div class="eyebrow">Bagian 02</div>
-      <h2>Analisis Tren Pendapatan (Revenue)</h2>
-      <p class="lede">Pendapatan didekati dari transaksi dengan stage "Complete" pada Grand Data 2026 sebagai proxy realisasi. Jika definisi revenue cabang berbeda (mis. mengikuti tanggal pelunasan di tab Rev SUM), beri tahu agar perhitungan disesuaikan.</p>
-    </div>
-    <div class="note">
-      <strong>Catatan Metodologi</strong>
-      Nilai revenue di bagian ini dihitung otomatis dari transaksi yang sudah berstatus selesai pengantarannya (Stage = Complete), bukan dari tanggal pelunasan piutang. Untuk piutang yang belum lunas, lihat Bagian 08.
-    </div>
-    <div class="ledger">
-      <div class="ledger-item"><div class="lk">Total Revenue (Realisasi)</div><div class="lv">${fmtRupiah(totalAmount)}</div></div>
-      <div class="ledger-item"><div class="lk">Jumlah Bulan Tercatat</div><div class="lv">${t.length}</div></div>
-    </div>
-    <div class="chart-box">
-      <div class="chart-head"><div><h4>Tren Revenue per Bulan</h4></div></div>
-      <div class="chart-canvas-wrap" style="height:320px;"><canvas id="chart-rev-trend"></canvas></div>
-    </div>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Bulan</th><th class="num-col">Total Revenue</th><th class="num-col">Jumlah Transaksi</th></tr></thead>
-        <tbody>${t.map(x => `<tr><td>${x.label}</td><td class="num-col">${fmtRupiah(x.totalAmount)}</td><td class="num-col">${fmtNum(x.totalTransaksi)}</td></tr>`).join('')}</tbody>
-      </table>
-    </div>
-  </section>`;
+function renderEkspedisiTable(d) {
+  document.getElementById('tblEkspedisi').innerHTML = `
+    <thead><tr><th>Jalur Ekspedisi</th><th>Jumlah</th><th>Persentase</th><th>Quantity</th><th>Koli</th></tr></thead>
+    <tbody>${d.byEkspedisi.map(e => `<tr><td>${escapeHtml(e.nama)}</td><td>${fmtNum(e.count)}</td><td>${fmtPct(e.pct)}</td><td>${fmtNum(e.qty)}</td><td>${fmtNum(e.koli)}</td></tr>`).join('')}</tbody>
+  `;
 }
 
-function chartRevTrend(m) {
-  const t = m.revenueTrend;
-  makeChart('chart-rev-trend', {
+/* ==========================================================================
+   SECTION 08 — PIUTANG (AR) 2026
+   ========================================================================== */
+function renderARSection(m) {
+  const ar = m.ar;
+
+  const html = `
+    <div class="section-head">
+      <div class="eyebrow">08 &mdash; Piutang</div>
+      <h2>Piutang (AR) &amp; Sisa Saldo Piutang 2026</h2>
+      <p class="lede">Sumber data: sheet AR 2026. Rasio AR mengukur seberapa besar nilai sales yang masih belum tertagih.</p>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Nilai Faktur 2026</div>
+        <div class="kpi-value">${fmtRupiah(ar.totalNilaiFaktur)}</div>
+      </div>
+      <div class="kpi-card kpi-card-accent">
+        <div class="kpi-label">Sisa Saldo Piutang</div>
+        <div class="kpi-value">${fmtRupiah(ar.totalSisaSaldo)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Sudah Dibayar</div>
+        <div class="kpi-value">${fmtRupiah(ar.totalPaid)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Rasio AR terhadap Sales</div>
+        <div class="kpi-value">${fmtPct(ar.ratioARtoSales)}</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Piutang dengan Aging diatas 60 Hari</h3>
+      <p class="panel-note">Total <strong>${fmtNum(ar.piutangDiatas60Hari.length)}</strong> faktur dengan sisa saldo piutang diatas 60 hari, senilai <strong>${fmtRupiah(ar.totalPiutangDiatas60Hari)}</strong>.</p>
+      <div class="chart-wrap"><canvas id="chartAging"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h3>Piutang by Company &mdash; MKI vs CFN</h3>
+      <div class="two-col">
+        <div class="chart-wrap chart-wrap-sm"><canvas id="chartARByCompany"></canvas></div>
+        <div class="company-cards">
+          ${Object.entries(ar.byCompany).map(([co, d]) => `
+            <div class="company-card company-${co.toLowerCase()}">
+              <div class="company-card-head"><span class="company-badge company-badge-${co.toLowerCase()}">${co}</span></div>
+              <div class="company-card-row"><span>Nilai Faktur</span><strong>${fmtRupiah(d.nilaiFaktur)}</strong></div>
+              <div class="company-card-row"><span>Sisa Saldo Piutang</span><strong>${fmtRupiah(d.sisaSaldo)}</strong></div>
+              <div class="company-card-row"><span>Sudah Dibayar</span><strong>${fmtRupiah(d.paidAmount)}</strong></div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Daftar Piutang Belum Lunas (diurutkan dari Aging tertinggi)</h3>
+      <table class="data-table" id="tblAR"></table>
+    </div>
+  `;
+  document.getElementById('s8').innerHTML = html;
+
+  renderAgingChart(ar);
+  renderARByCompanyChart(ar);
+  renderARTable(ar);
+}
+
+function renderAgingChart(ar) {
+  const sorted = [...ar.agingBuckets].sort((a, b) => b.sisaSaldo - a.sisaSaldo);
+  makeChart('chartAging', {
     type: 'bar',
-    data: { labels: t.map(x => x.label), datasets: [{ label: 'Revenue', data: t.map(x => x.totalAmount), backgroundColor: PALETTE.sage }] },
+    data: { labels: sorted.map(b => b.kategori), datasets: [{ label: 'Sisa Saldo Piutang', data: sorted.map(b => b.sisaSaldo), backgroundColor: PALETTE.red, borderRadius: 4 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } } },
-      scales: { y: { ticks: { callback: v => fmtRupiah(v, { compact: true }) } } },
+      scales: { y: { ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
     },
   });
 }
 
-/* ============================================================
-   SECTION 3 — Rasio Sales thd Revenue
-   ============================================================ */
-function renderRatioSection(m) {
-  const t = m.ratio;
-  return `
-  <section class="section" id="s3">
-    <div class="section-head">
-      <div class="eyebrow">Bagian 03</div>
-      <h2>Rasio Sales terhadap Revenue</h2>
-      <p class="lede">Persentase nilai sales yang telah terealisasi sebagai revenue per bulan.</p>
-    </div>
-    <div class="chart-box">
-      <div class="chart-head"><div><h4>Rasio Bulanan</h4></div></div>
-      <div class="chart-canvas-wrap" style="height:300px;"><canvas id="chart-ratio"></canvas></div>
-    </div>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Bulan</th><th class="num-col">Sales</th><th class="num-col">Revenue</th><th class="num-col">Rasio</th></tr></thead>
-        <tbody>${t.map(x => `<tr><td>${x.label}</td><td class="num-col">${fmtRupiah(x.totalAmount)}</td><td class="num-col">${fmtRupiah(x.revenue)}</td><td class="num-col">${fmtPct(x.ratio)}</td></tr>`).join('')}</tbody>
-      </table>
-    </div>
-  </section>`;
-}
-
-function chartRatio(m) {
-  const t = m.ratio;
-  makeChart('chart-ratio', {
-    type: 'line',
-    data: { labels: t.map(x => x.label), datasets: [{ label: 'Rasio (%)', data: t.map(x => x.ratio), borderColor: PALETTE.amber, backgroundColor: PALETTE.amberSoft, fill: true, tension: 0.3 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtPct(ctx.parsed.y) } } }, scales: { y: { ticks: { callback: v => v + '%' } } } },
-  });
-}
-
-/* ============================================================
-   SECTION 4 — Performa & Zona Wilayah
-   ============================================================ */
-function renderZonaSection(m) {
-  const z = m.zonaWilayah;
-  const top15 = z.slice(0, 15);
-  return `
-  <section class="section" id="s4">
-    <div class="section-head">
-      <div class="eyebrow">Bagian 04</div>
-      <h2>Performa &amp; Zona Wilayah</h2>
-      <p class="lede">Pembagian wilayah berdasarkan kontribusi kumulatif terhadap total sales (prinsip Pareto): <strong>Hijau</strong> = berkontribusi pada 70% pertama, <strong>Kuning</strong> = 70–90%, <strong>Merah</strong> = sisanya / perlu perhatian khusus.</p>
-    </div>
-    <div class="legend-row">
-      <div class="li"><span class="sw" style="background:var(--sage)"></span>Kontributor Utama</div>
-      <div class="li"><span class="sw" style="background:var(--amber)"></span>Menengah</div>
-      <div class="li"><span class="sw" style="background:var(--terra)"></span>Perlu Perhatian</div>
-    </div>
-    <div class="chart-box">
-      <div class="chart-head"><div><h4>Top 15 Wilayah by Sales</h4></div></div>
-      <div class="chart-canvas-wrap" style="height:380px;"><canvas id="chart-zona"></canvas></div>
-    </div>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Wilayah</th><th class="num-col">Total Sales</th><th class="num-col">Qty</th><th class="num-col">Transaksi</th><th class="num-col">Share</th><th>Zona</th></tr></thead>
-        <tbody>${z.map(x => `<tr class="row-zone-${x.zone}"><td>${escapeHtml(x.lokasi)}</td><td class="num-col">${fmtRupiah(x.totalAmount)}</td><td class="num-col">${fmtNum(x.totalQty)}</td><td class="num-col">${fmtNum(x.totalTransaksi)}</td><td class="num-col">${fmtPct(x.share)}</td><td>${zonePillHtml(x.zone)}</td></tr>`).join('')}</tbody>
-      </table>
-    </div>
-  </section>`;
-}
-
-function chartZona(m) {
-  const top = m.zonaWilayah.slice(0, 15);
-  const colorOf = z => z === 'hijau' ? PALETTE.sage : z === 'kuning' ? PALETTE.amber : PALETTE.terra;
-  makeChart('chart-zona', {
-    type: 'bar',
-    data: { labels: top.map(x => x.lokasi), datasets: [{ label: 'Total Sales', data: top.map(x => x.totalAmount), backgroundColor: top.map(x => colorOf(x.zone)) }] },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.x) } } }, scales: { x: { ticks: { callback: v => fmtRupiah(v, { compact: true }) } } } },
-  });
-}
-
-/* ============================================================
-   SECTION 5 — Kode Barang Terlaris
-   ============================================================ */
-function renderTopProductsSection(m) {
-  const { byAmount, byQty } = m.topProducts;
-  return `
-  <section class="section" id="s5">
-    <div class="section-head">
-      <div class="eyebrow">Bagian 05</div>
-      <h2>Kode Barang Terlaris</h2>
-      <p class="lede">15 kode barang dengan nilai dan volume penjualan tertinggi sepanjang periode data.</p>
-    </div>
-    <div class="grid-2">
-      <div>
-        <h3 class="subhead">Top 15 by Nilai (Amount)</h3>
-        <div class="chart-box">
-          <div class="chart-canvas-wrap" style="height:340px;"><canvas id="chart-top-products-amount"></canvas></div>
-        </div>
-      </div>
-      <div>
-        <h3 class="subhead">Top 15 by Quantity</h3>
-        <div class="chart-box">
-          <div class="chart-canvas-wrap" style="height:340px;"><canvas id="chart-top-products-qty"></canvas></div>
-        </div>
-      </div>
-    </div>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Kode Barang</th><th class="num-col">Total Amount</th><th class="num-col">Total Qty</th><th class="num-col">Jumlah Transaksi</th></tr></thead>
-        <tbody>${byAmount.map(x => `<tr><td class="num-col" style="text-align:left">${escapeHtml(x.kodeBarang)}</td><td class="num-col">${fmtRupiah(x.totalAmount)}</td><td class="num-col">${fmtNum(x.totalQty)}</td><td class="num-col">${fmtNum(x.totalTransaksi)}</td></tr>`).join('')}</tbody>
-      </table>
-    </div>
-  </section>`;
-}
-
-function chartTopProducts(m) {
-  const { byAmount, byQty } = m.topProducts;
-  makeChart('chart-top-products-amount', {
-    type: 'bar',
-    data: { labels: byAmount.map(x => x.kodeBarang), datasets: [{ label: 'Amount', data: byAmount.map(x => x.totalAmount), backgroundColor: PALETTE.slate }] },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.x) } } }, scales: { x: { ticks: { callback: v => fmtRupiah(v, { compact: true }) } } } },
-  });
-  makeChart('chart-top-products-qty', {
-    type: 'bar',
-    data: { labels: byQty.map(x => x.kodeBarang), datasets: [{ label: 'Qty', data: byQty.map(x => x.totalQty), backgroundColor: PALETTE.gold }] },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
-  });
-}
-
-/* ============================================================
-   SECTION 6 — Stock & PO Gudang
-   ============================================================ */
-function renderStockSection(m) {
-  const stock = m.stock;
-  const po = m.poGudang;
-  const totalMki = sum(stock, s => s.mkiStock);
-  const totalCfn = sum(stock, s => s.cfnStock);
-  const poOnProgress = po.filter(p => p.stage.toLowerCase() !== 'complete');
-  const byJenis = groupBy(stock, s => s.jenis || 'Lainnya');
-  const jenisRows = Array.from(byJenis.entries()).map(([jenis, items]) => ({ jenis, mki: sum(items, i => i.mkiStock), cfn: sum(items, i => i.cfnStock) }));
-
-  return `
-  <section class="section" id="s6">
-    <div class="section-head">
-      <div class="eyebrow">Bagian 06</div>
-      <h2>Laporan Stock Gudang dan Pembelian Gudang (PO Gudang)</h2>
-      <p class="lede">Posisi stok terkini per jenis barang dan status purchase order gudang.</p>
-    </div>
-    <div class="ledger">
-      <div class="ledger-item"><div class="lk">Total Stock MKI</div><div class="lv">${fmtNum(totalMki)} unit</div></div>
-      <div class="ledger-item"><div class="lk">Total Stock CFN</div><div class="lv">${fmtNum(totalCfn)} unit</div></div>
-      <div class="ledger-item"><div class="lk">Total PO Tercatat</div><div class="lv">${fmtNum(po.length)}</div></div>
-      <div class="ledger-item"><div class="lk">PO Belum Complete</div><div class="lv">${fmtNum(poOnProgress.length)}</div></div>
-    </div>
-    <div class="chart-box">
-      <div class="chart-head"><div><h4>Stock per Jenis Barang</h4></div></div>
-      <div class="chart-canvas-wrap" style="height:320px;"><canvas id="chart-stock-jenis"></canvas></div>
-    </div>
-    <h3 class="subhead">Detail Purchase Order Gudang (20 PO Terbaru)</h3>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Order Date</th><th>No PO</th><th>Company</th><th>Kode Barang</th><th class="num-col">Qty</th><th>Stage</th></tr></thead>
-        <tbody>${po.slice(-20).reverse().map(x => `<tr><td>${x.orderDate ? x.orderDate.toLocaleDateString('id-ID') : '—'}</td><td>${escapeHtml(x.noPo)}</td><td>${escapeHtml(x.company)}</td><td>${escapeHtml(x.kodeBarang)}</td><td class="num-col">${fmtNum(x.quantity)}</td><td>${escapeHtml(x.stage)}</td></tr>`).join('')}</tbody>
-      </table>
-    </div>
-  </section>`;
-}
-
-function chartStock(m) {
-  const byJenis = groupBy(m.stock, s => s.jenis || 'Lainnya');
-  const rows = Array.from(byJenis.entries()).map(([jenis, items]) => ({ jenis, mki: sum(items, i => i.mkiStock), cfn: sum(items, i => i.cfnStock) }));
-  makeChart('chart-stock-jenis', {
-    type: 'bar',
-    data: { labels: rows.map(r => r.jenis), datasets: [
-      { label: 'MKI', data: rows.map(r => r.mki), backgroundColor: PALETTE.slate },
-      { label: 'CFN', data: rows.map(r => r.cfn), backgroundColor: PALETTE.amber },
-    ] },
-    options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: false } } },
-  });
-}
-
-/* ============================================================
-   SECTION 7 — Delivery & Ekspedisi
-   ============================================================ */
-function renderDeliverySection(m) {
-  const d = m.delivery;
-  return `
-  <section class="section" id="s7">
-    <div class="section-head">
-      <div class="eyebrow">Bagian 07</div>
-      <h2>Laporan Delivery dan Ekspedisi</h2>
-      <p class="lede">Rekap pengiriman berdasarkan jenis ekspedisi yang digunakan.</p>
-    </div>
-    <div class="ledger">
-      <div class="ledger-item"><div class="lk">Total Surat Jalan</div><div class="lv">${fmtNum(new Set(d.rows.map(r => r.noSJ)).size)}</div></div>
-      <div class="ledger-item"><div class="lk">Hand Carry</div><div class="lv">${fmtNum(d.handCarryCount)}</div></div>
-      <div class="ledger-item"><div class="lk">Non Hand Carry (via Ekspedisi)</div><div class="lv">${fmtNum(d.nonHandCarryCount)}</div></div>
-    </div>
-    <div class="chart-box">
-      <div class="chart-head"><div><h4>Distribusi Ekspedisi</h4></div></div>
-      <div class="chart-canvas-wrap" style="height:320px;"><canvas id="chart-ekspedisi-pie"></canvas></div>
-    </div>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Ekspedisi</th><th class="num-col">Jumlah Pengiriman</th><th class="num-col">Total Qty</th></tr></thead>
-        <tbody>${d.ekspedisiBreakdown.map(x => `<tr><td>${escapeHtml(x.nama)}</td><td class="num-col">${fmtNum(x.totalKirim)}</td><td class="num-col">${fmtNum(x.totalQty)}</td></tr>`).join('')}</tbody>
-      </table>
-    </div>
-  </section>`;
-}
-
-function chartDelivery(m) {
-  const d = m.delivery.ekspedisiBreakdown.slice(0, 10);
-  const colors = [PALETTE.slate, PALETTE.sage, PALETTE.amber, PALETTE.terra, PALETTE.gold, '#8FA6B0', '#A3B89C', '#D4B27E', '#C58579', '#BFA876'];
-  makeChart('chart-ekspedisi-pie', {
+function renderARByCompanyChart(ar) {
+  const cos = Object.keys(ar.byCompany);
+  makeChart('chartARByCompany', {
     type: 'doughnut',
-    data: { labels: d.map(x => x.nama), datasets: [{ data: d.map(x => x.totalKirim), backgroundColor: colors }] },
-    options: { responsive: true, maintainAspectRatio: false },
+    data: { labels: cos, datasets: [{ data: cos.map(c => ar.byCompany[c].sisaSaldo), backgroundColor: [PALETTE.terra, PALETTE.sage], borderWidth: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtRupiah(ctx.parsed)}` } } } },
   });
 }
 
-/* ============================================================
-   SECTION 8 — Piutang (AR)
-   ============================================================ */
-function renderARSection(m) {
-  const ar = m.ar;
-  return `
-  <section class="section" id="s8">
-    <div class="section-head">
-      <div class="eyebrow">Bagian 08</div>
-      <h2>Laporan Piutang (AR) dan Sisa Saldo Piutang</h2>
-      <p class="lede">Aging piutang dihitung otomatis dari tanggal faktur hingga tanggal akses dashboard (bukan dibaca dari kolom formula di sheet, karena kolom tersebut error saat sinkronisasi). Kategori "Diatas 60 Hari" menandai piutang yang perlu ditindaklanjuti segera.</p>
-    </div>
-    <div class="ledger">
-      <div class="ledger-item"><div class="lk">Total Piutang Outstanding</div><div class="lv">${fmtRupiah(ar.totalOutstanding)}</div></div>
-      <div class="ledger-item"><div class="lk">Jumlah Faktur Belum Lunas</div><div class="lv">${fmtNum(ar.outstanding.length)}</div></div>
-      <div class="ledger-item"><div class="lk">Piutang Diatas 60 Hari</div><div class="lv">${fmtRupiah((ar.agingBreakdown.find(a => a.kategori === 'Diatas 60 Hari') || {}).total || 0)}</div></div>
-    </div>
-    <div class="chart-box">
-      <div class="chart-head"><div><h4>Komposisi Aging Piutang</h4></div></div>
-      <div class="chart-canvas-wrap" style="height:300px;"><canvas id="chart-ar-aging"></canvas></div>
-    </div>
-    <h3 class="subhead">Top 15 Customer dengan Piutang Terbesar</h3>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Customer</th><th class="num-col">Total Piutang</th><th class="num-col">Jumlah Faktur</th></tr></thead>
-        <tbody>${ar.topDebtors.map(x => `<tr><td>${escapeHtml(x.customer)}</td><td class="num-col">${fmtRupiah(x.total)}</td><td class="num-col">${fmtNum(x.jumlahFaktur)}</td></tr>`).join('')}</tbody>
-      </table>
-    </div>
-  </section>`;
+function renderARTable(ar) {
+  const belumLunas = ar.items.filter(i => i.sisaSaldo > 0).sort((a, b) => b.sisaSaldo - a.sisaSaldo);
+  document.getElementById('tblAR').innerHTML = `
+    <thead><tr><th>No Faktur</th><th>Customer</th><th>Company</th><th>Nilai Faktur</th><th>Sisa Saldo</th><th>Aging</th><th>Kategori</th></tr></thead>
+    <tbody>${belumLunas.slice(0, 50).map(i => `<tr><td>${escapeHtml(i.noFaktur)}</td><td>${escapeHtml(i.customer)}</td><td>${escapeHtml(i.company)}</td><td>${fmtRupiah(i.nilaiFaktur)}</td><td>${fmtRupiah(i.sisaSaldo)}</td><td>${escapeHtml(i.aging)}</td><td>${escapeHtml(i.kategori)}</td></tr>`).join('')}</tbody>
+  `;
 }
 
-function chartAR(m) {
-  const a = m.ar.agingBreakdown;
-  makeChart('chart-ar-aging', {
-    type: 'bar',
-    data: { labels: a.map(x => x.kategori), datasets: [{ label: 'Total Piutang', data: a.map(x => x.total), backgroundColor: [PALETTE.sage, PALETTE.amber, PALETTE.terra] }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } } }, scales: { y: { ticks: { callback: v => fmtRupiah(v, { compact: true }) } } } },
-  });
-}
+/* ==========================================================================
+   SECTION 09 — FREKUENSI CUSTOMER
+   ========================================================================== */
+let custFreqMetric = 'frequency'; // frequency | sales
 
-/* ============================================================
-   SECTION 9 — Frekuensi Customer
-   ============================================================ */
 function renderCustFreqSection(m) {
-  const c = m.custFreq;
-  return `
-  <section class="section" id="s9">
-    <div class="section-head">
-      <div class="eyebrow">Bagian 09</div>
-      <h2>Laporan Frekuensi Pembelanjaan Customer</h2>
-      <p class="lede">Kategori: Loyal (≥10 transaksi), Reguler (3–9 transaksi), Baru (&lt;3 transaksi), Dorman (tidak order &gt;90 hari).</p>
-    </div>
-    <div class="chart-box">
-      <div class="chart-head"><div><h4>Distribusi Kategori Customer</h4></div></div>
-      <div class="chart-canvas-wrap" style="height:300px;"><canvas id="chart-freq-dist"></canvas></div>
-    </div>
-    <h3 class="subhead">Top 15 Customer by Total Belanja</h3>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Customer</th><th class="num-col">Total Belanja</th><th class="num-col">Jumlah Transaksi</th><th>Order Terakhir</th><th class="num-col">Gap (Hari)</th><th>Kategori</th></tr></thead>
-        <tbody>${c.rows.slice(0, 15).map(x => `<tr><td>${escapeHtml(x.customer)}</td><td class="num-col">${fmtRupiah(x.totalBelanja)}</td><td class="num-col">${fmtNum(x.jumlahTransaksi)}</td><td>${x.lastOrder ? x.lastOrder.toLocaleDateString('id-ID') : '—'}</td><td class="num-col">${x.gapDays ?? '—'}</td><td>${escapeHtml(x.kategori)}</td></tr>`).join('')}</tbody>
-      </table>
-    </div>
-  </section>`;
-}
+  const cf = m.customerFrequency;
 
-function chartCustFreq(m) {
-  const d = m.custFreq.distribution;
-  makeChart('chart-freq-dist', {
-    type: 'doughnut',
-    data: { labels: d.map(x => x.kategori), datasets: [{ data: d.map(x => x.jumlahCustomer), backgroundColor: [PALETTE.sage, PALETTE.slate, PALETTE.amber, PALETTE.terra] }] },
-    options: { responsive: true, maintainAspectRatio: false },
+  const html = `
+    <div class="section-head">
+      <div class="eyebrow">09 &mdash; Customer</div>
+      <h2>Frekuensi Pembelanjaan Customer</h2>
+      <p class="lede">Analisis frekuensi transaksi (jumlah invoice unik) dan nominal pembelanjaan per customer sepanjang tahun 2026, termasuk identifikasi customer yang sudah tidak aktif.</p>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Customer Unik 2026</div>
+        <div class="kpi-value">${fmtNum(cf.totalCustomer)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Rata-rata Frekuensi Transaksi</div>
+        <div class="kpi-value">${cf.avgFrequency.toFixed(1)}x</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Rata-rata Sales per Customer</div>
+        <div class="kpi-value">${fmtRupiah(cf.avgSalesPerCustomer)}</div>
+      </div>
+      <div class="kpi-card kpi-card-accent">
+        <div class="kpi-label">Customer Tidak Aktif &ge;2 Bulan</div>
+        <div class="kpi-value">${fmtNum(cf.churnedCustomers.length)}</div>
+        <div class="kpi-sub">Sejak pembelian terakhir</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Top 10 Customer Paling Sering Berbelanja</h3>
+        <div class="toggle-group" id="custFreqMetricToggle">
+          <button class="toggle-btn active" data-metric="frequency">By Frekuensi</button>
+          <button class="toggle-btn" data-metric="sales">By Total Sales</button>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chartTop10Customer"></canvas></div>
+      <table class="data-table" id="tblTop10Customer"></table>
+    </div>
+
+    <div class="panel">
+      <h3>Customer Tidak Berbelanja Lagi (&ge;60 Hari sejak Transaksi Terakhir)</h3>
+      <p class="panel-note">Total ${fmtNum(cf.churnedCustomers.length)} customer berpotensi tidak aktif. Diurutkan dari yang paling lama tidak bertransaksi.</p>
+      <table class="data-table" id="tblChurned"></table>
+    </div>
+  `;
+  document.getElementById('s9').innerHTML = html;
+
+  renderTop10CustomerChart(cf, custFreqMetric);
+  renderChurnedTable(cf);
+
+  document.querySelectorAll('#custFreqMetricToggle .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#custFreqMetricToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      custFreqMetric = btn.dataset.metric;
+      renderTop10CustomerChart(cf, custFreqMetric);
+    });
   });
 }
 
-/* ============================================================
-   ORKESTRATOR — render semua section + chart
-   ============================================================ */
+function renderTop10CustomerChart(cf, metric) {
+  const data = metric === 'frequency' ? cf.top10ByFrequency : cf.top10BySales;
+  makeChart('chartTop10Customer', {
+    type: 'bar',
+    data: {
+      labels: data.map(c => c.customer),
+      datasets: [{
+        label: metric === 'frequency' ? 'Invoice Unik' : 'Total Sales',
+        data: data.map(c => metric === 'frequency' ? c.invoiceUnik : c.totalSales),
+        backgroundColor: PALETTE.terra, borderRadius: 4,
+      }],
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => metric === 'frequency' ? `${fmtNum(ctx.parsed.x)} invoice` : fmtRupiah(ctx.parsed.x) } } },
+      scales: { x: { beginAtZero: true, ticks: { callback: v => metric === 'sales' ? fmtRupiahShort(v) : fmtNum(v) }, grid: { color: '#eae3d6' } }, y: { grid: { display: false } } },
+    },
+  });
+
+  document.getElementById('tblTop10Customer').innerHTML = `
+    <thead><tr><th>Peringkat</th><th>Customer</th><th>Frekuensi (Invoice Unik)</th><th>Total Sales</th></tr></thead>
+    <tbody>${data.map((c, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(c.customer)}</td><td>${fmtNum(c.invoiceUnik)}</td><td>${fmtRupiah(c.totalSales)}</td></tr>`).join('')}</tbody>
+  `;
+}
+
+function renderChurnedTable(cf) {
+  document.getElementById('tblChurned').innerHTML = `
+    <thead><tr><th>Customer</th><th>Transaksi Terakhir</th><th>Hari Tidak Aktif</th><th>Total Sales 2026</th></tr></thead>
+    <tbody>${cf.churnedCustomers.slice(0, 50).map(c => `<tr><td>${escapeHtml(c.customer)}</td><td>${fmtDateShort(c.lastPurchase)}</td><td>${fmtNum(c.daysSinceLastPurchase)} hari</td><td>${fmtRupiah(c.totalSales)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty-row">Tidak ada customer yang tidak aktif.</td></tr>'}</tbody>
+  `;
+}
+
+/* ==========================================================================
+   SECTION 10 — TREN KABEL FIBER OPTIC 1-CORE
+   ========================================================================== */
+let fo1coreKodeFilter = 'semua';
+
+function renderFiberOpticSection(m) {
+  const fo = m.fiberOptic1Core;
+
+  const html = `
+    <div class="section-head">
+      <div class="eyebrow">10 &mdash; Fiber Optic</div>
+      <h2>Tren Kabel Fiber Optic 1-Core</h2>
+      <p class="lede">Khusus 5 kode barang: KSFO028, KSFO108, KSFO083, KSFO113, dan KSFO128, dari sheet Grand Data 2026.</p>
+    </div>
+
+    <div class="kpi-grid kpi-grid-3">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Sales FO 1-Core 2026</div>
+        <div class="kpi-value">${fmtRupiah(fo.totalSales)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Quantity Terjual</div>
+        <div class="kpi-value">${fmtNum(fo.totalQty)} unit</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Kontribusi by Company</div>
+        <div class="kpi-value-split">
+          <span>MKI: ${fmtRupiah(fo.byCompany.MKI.sales)}</span>
+          <span>CFN: ${fmtRupiah(fo.byCompany.CFN.sales)}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Tren Bulanan Total Kelima Kode Barang</h3>
+      <div class="chart-wrap"><canvas id="chartFOTrend"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Detail per Kode Barang</h3>
+        <div class="toggle-group" id="fo1coreToggle">
+          <button class="toggle-btn active" data-kode="semua">Semua Kode</button>
+          ${FO_1CORE_CODES.map(k => `<button class="toggle-btn" data-kode="${k}">${k}</button>`).join('')}
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chartFOByKode"></canvas></div>
+      <table class="data-table" id="tblFOByKode"></table>
+    </div>
+
+    <div class="panel">
+      <h3>Pembagian by Company</h3>
+      <div class="chart-wrap chart-wrap-sm"><canvas id="chartFOByCompany"></canvas></div>
+    </div>
+  `;
+  document.getElementById('s10').innerHTML = html;
+
+  renderFOTrendChart(fo);
+  renderFOByKodeChart(fo, fo1coreKodeFilter);
+  renderFOByCompanyChart(fo);
+  renderFOSummaryTable(fo);
+
+  document.querySelectorAll('#fo1coreToggle .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#fo1coreToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      fo1coreKodeFilter = btn.dataset.kode;
+      renderFOByKodeChart(fo, fo1coreKodeFilter);
+    });
+  });
+}
+
+function renderFOTrendChart(fo) {
+  makeChart('chartFOTrend', {
+    type: 'line',
+    data: {
+      labels: fo.monthly.map(x => MONTH_NAMES_SHORT_ID[x.monthIdx]),
+      datasets: [{ label: 'Sales FO 1-Core', data: fo.monthly.map(x => x.sales), borderColor: PALETTE.amber, backgroundColor: 'rgba(207,155,63,0.14)', fill: true, tension: 0.35, pointRadius: 4, pointBackgroundColor: PALETTE.amber, borderWidth: 2.5 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } } },
+      scales: { y: { ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+}
+
+function renderFOByKodeChart(fo, kodeFilter) {
+  let datasets;
+  if (kodeFilter === 'semua') {
+    datasets = fo.byKode.map((k, idx) => ({
+      label: k.kode, data: k.monthly.map(m => m.sales),
+      borderColor: [PALETTE.terra, PALETTE.sage, PALETTE.amber, PALETTE.slate, PALETTE.red][idx % 5],
+      backgroundColor: 'transparent', tension: 0.3, pointRadius: 3, borderWidth: 2,
+    }));
+  } else {
+    const k = fo.byKode.find(x => x.kode === kodeFilter);
+    datasets = [{ label: k.kode, data: k.monthly.map(m => m.sales), borderColor: PALETTE.terra, backgroundColor: 'rgba(193,122,90,0.12)', fill: true, tension: 0.35, pointRadius: 4, borderWidth: 2.5 }];
+  }
+
+  makeChart('chartFOByKode', {
+    type: 'line',
+    data: { labels: MONTH_NAMES_SHORT_ID, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtRupiah(ctx.parsed.y)}` } } },
+      scales: { y: { ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+}
+
+function renderFOByCompanyChart(fo) {
+  makeChart('chartFOByCompany', {
+    type: 'doughnut',
+    data: { labels: ['MKI', 'CFN'], datasets: [{ data: [fo.byCompany.MKI.sales, fo.byCompany.CFN.sales], backgroundColor: [PALETTE.terra, PALETTE.sage], borderWidth: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtRupiah(ctx.parsed)}` } } } },
+  });
+}
+
+function renderFOSummaryTable(fo) {
+  document.getElementById('tblFOByKode').innerHTML = `
+    <thead><tr><th>Kode Barang</th><th>Total Sales</th><th>Total Quantity</th></tr></thead>
+    <tbody>${fo.byKode.map(k => `<tr><td>${escapeHtml(k.kode)}</td><td>${fmtRupiah(k.sales)}</td><td>${fmtNum(k.qty)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>Total</td><td>${fmtRupiah(fo.totalSales)}</td><td>${fmtNum(fo.totalQty)}</td></tr></tfoot>
+  `;
+}
+
+/* ==========================================================================
+   ORKESTRASI RENDER — Memanggil seluruh render section secara berurutan
+   ========================================================================== */
 function renderDashboard(metrics) {
-  const root = document.getElementById('app-root');
-  root.innerHTML = [
-    renderSalesSection(metrics),
-    renderRevenueSection(metrics),
-    renderRatioSection(metrics),
-    renderZonaSection(metrics),
-    renderTopProductsSection(metrics),
-    renderStockSection(metrics),
-    renderDeliverySection(metrics),
-    renderARSection(metrics),
-    renderCustFreqSection(metrics),
-  ].join('\n');
+  applyChartDefaults();
 
-  // Inisialisasi semua chart setelah DOM siap
-  chartSalesTrend(metrics);
-  chartRevTrend(metrics);
-  chartRatio(metrics);
-  chartZona(metrics);
-  chartTopProducts(metrics);
-  chartStock(metrics);
-  chartDelivery(metrics);
-  chartAR(metrics);
-  chartCustFreq(metrics);
+  document.getElementById('lastUpdated').textContent = metrics.generatedAt.toLocaleString('id-ID', {
+    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
 
-  document.getElementById('meta-period').textContent = metrics.meta.periodLabel;
-  document.getElementById('meta-rowcount').textContent = fmtNum(metrics.meta.totalRows);
+  renderSalesSection(metrics);
+  renderRevenueSection(metrics);
+  renderRatioSection(metrics);
+  renderZonaSection(metrics);
+  renderTopProductsSection(metrics);
+  renderStockSection(metrics);
+  renderDeliverySection(metrics);
+  renderARSection(metrics);
+  renderCustFreqSection(metrics);
+  renderFiberOpticSection(metrics);
+
+  document.getElementById('loadingOverlay').classList.add('hidden');
+  document.getElementById('mainContent').classList.add('visible');
 }
 
 function renderErrorPanel(errors) {
-  const root = document.getElementById('app-root');
-  root.innerHTML = `
-    <section class="section">
-      <div class="error-box">
-        <strong>Sebagian data gagal dimuat</strong>
-        <p>Dashboard tetap menampilkan data yang berhasil dimuat, namun bagian berikut tidak lengkap:</p>
-        <ul>${errors.map(e => `<li><strong>${escapeHtml(e.sheetName)}</strong>: ${escapeHtml(e.message)}</li>`).join('')}</ul>
-        <p style="margin-top:10px;">Pastikan nama tab di Google Sheets persis sama, dan sheet sudah dibagikan dengan akses "Anyone with link can view".</p>
-      </div>
-    </section>`;
+  const panel = document.getElementById('errorPanel');
+  if (!errors || errors.length === 0) {
+    panel.classList.add('hidden');
+    return;
+  }
+  panel.classList.remove('hidden');
+  panel.innerHTML = `
+    <div class="error-box">
+      <strong>Beberapa data gagal dimuat dari Google Sheets:</strong>
+      <ul>${errors.map(e => `<li>${escapeHtml(e.sheetName)}: ${escapeHtml(e.message)}</li>`).join('')}</ul>
+      <p>Dashboard tetap menampilkan data yang berhasil dimuat. Coba muat ulang halaman, atau periksa apakah sheet sudah dibagikan secara publik.</p>
+    </div>
+  `;
 }
