@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Kinerja Cabang Makassar — Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+:root{
+  --paper:#FAF9F6;
+  --paper-2:#F2F0EA;
+  --ink:#2B2D2E;
+  --ink-soft:#5C5F61;
+  --line:#DEDAD0;
+  --line-strong:#C7C2B5;
+  --slate:#5B7B8C;
+  --slate-soft:#E7EEF1;
+  --sage:#7E9A78;
+  --sage-soft:#E9EFE6;
+  --amber:#C2944F;
+  --amber-soft:#F5ECDC;
+  --terra:#B16456;
+  --terra-soft:#F3E5E1;
+  --gold:#A98A4A;
+  --shadow: 0 1px 2px rgba(43,45,46,0.06), 0 4px 14px rgba(43,45,46,0.05);
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0;
+  font-family:'IBM Plex Sans', sans-serif;
+  background:var(--paper);
+  color:var(--ink);
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.num{font-family:'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums;}
+h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; margin:0; color:var(--ink);}
+a{color:inherit;}
+p{margin:0 0 12px 0;}
+
+/* ===== LAYOUT ===== */
+.shell{display:flex; min-height:100vh;}
+.sidebar{
+  width:272px; flex-shrink:0;
+  background:var(--paper-2);
+  border-right:1px solid var(--line);
+  position:sticky; top:0; height:100vh;
+  overflow-y:auto;
+  padding:28px 0 28px 0;
+}
+.sidebar-brand{
+  padding:0 24px 20px 24px;
+  border-bottom:1px solid var(--line);
+  margin-bottom:18px;
+}
+.sidebar-brand .eyebrow{
+  font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--slate); margin-bottom:6px;
+}
+.sidebar-brand h1{font-size:18px; line-height:1.3;}
+.sidebar-brand .sub{font-size:12px; color:var(--ink-soft); margin-top:6px;}
+.nav-section{margin-bottom:4px;}
+.nav-link{
+  display:block; padding:8px 24px; font-size:13px; color:var(--ink-soft);
+  text-decoration:none; border-left:3px solid transparent; cursor:pointer;
+  transition: all .15s ease;
+}
+.nav-link .nn{font-family:'IBM Plex Mono',monospace; color:var(--line-strong); margin-right:8px; font-size:11px;}
+.nav-link:hover{background:rgba(91,123,140,0.07); color:var(--ink);}
+.nav-link.active{border-left-color:var(--slate); color:var(--ink); font-weight:600; background:rgba(91,123,140,0.09);}
+.nav-link.active .nn{color:var(--slate);}
+
+.main{flex:1; min-width:0; padding:0;}
+.cover{
+  padding:56px 64px 40px 64px;
+  border-bottom:1px solid var(--line);
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper) 100%);
+  position:relative;
+}
+.cover .eyebrow{font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--slate); margin-bottom:14px;}
+.cover h1{font-size:34px; line-height:1.18; max-width:760px; letter-spacing:-0.01em;}
+.cover .desc{font-size:15px; color:var(--ink-soft); max-width:660px; margin-top:16px;}
+.cover .meta-row{display:flex; gap:36px; margin-top:28px; flex-wrap:wrap; align-items:flex-end;}
+.cover .meta-item .ml{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:4px;}
+.cover .meta-item .mv{font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:500;}
+
+/* ===== LIVE STATUS BAR ===== */
+.live-bar{
+  display:flex; align-items:center; gap:14px; padding:10px 16px; margin-top:24px;
+  background:#fff; border:1px solid var(--line); border-radius:6px; box-shadow:var(--shadow);
+  max-width:fit-content; flex-wrap:wrap;
+}
+.live-dot{width:8px; height:8px; border-radius:50%; background:var(--sage); flex-shrink:0;}
+.live-dot.loading{background:var(--amber); animation:pulse 1s infinite;}
+.live-dot.error{background:var(--terra);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+.live-bar .lb-text{font-size:12.5px; color:var(--ink-soft);}
+.live-bar .lb-text strong{color:var(--ink); font-weight:600;}
+.lb-refresh{
+  font-family:'IBM Plex Sans',sans-serif; font-size:11.5px; font-weight:600; padding:5px 12px;
+  border:1px solid var(--line-strong); background:#fff; color:var(--slate); border-radius:14px;
+  cursor:pointer; transition:all .15s ease;
+}
+.lb-refresh:hover{border-color:var(--slate); background:var(--slate-soft);}
+.lb-refresh:disabled{opacity:.5; cursor:default;}
+
+.section{padding:48px 64px; border-bottom:1px solid var(--line);}
+.section:last-child{border-bottom:none;}
+.section-head{margin-bottom:28px;}
+.section-head .eyebrow{font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--slate); margin-bottom:10px;}
+.section-head h2{font-size:26px;}
+.section-head .lede{font-size:14.5px; color:var(--ink-soft); margin-top:10px; max-width:800px;}
+
+h3.subhead{font-size:18px; margin:34px 0 14px 0; padding-bottom:8px; border-bottom:1px solid var(--line);}
+h4.subhead2{font-size:15px; margin:24px 0 10px 0; color:var(--ink);}
+
+/* ===== KPI LEDGER STRIP ===== */
+.ledger{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr));
+  border-top:1px solid var(--line-strong); border-bottom:1px solid var(--line-strong);
+  margin:20px 0 8px 0;
+}
+.ledger-item{padding:16px 20px; border-right:1px solid var(--line);}
+.ledger-item:last-child{border-right:none;}
+.ledger-item .lk{font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-soft); margin-bottom:8px;}
+.ledger-item .lv{font-family:'IBM Plex Mono',monospace; font-size:20px; font-weight:600; letter-spacing:-0.01em;}
+.ledger-item .ld{font-size:12px; margin-top:6px; color:var(--ink-soft);}
+.tag{display:inline-block; font-size:11px; padding:2px 8px; border-radius:3px; font-weight:600;}
+.tag.up{background:var(--sage-soft); color:#4F6649;}
+.tag.down{background:var(--terra-soft); color:#8C4B3F;}
+.tag.flat{background:var(--slate-soft); color:#3E5A68;}
+
+/* ===== CARDS / GRID ===== */
+.grid-2{display:grid; grid-template-columns:1fr 1fr; gap:24px;}
+.grid-3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px;}
+.grid-4{display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:16px;}
+@media (max-width:980px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr;}}
+.card{
+  background:#fff; border:1px solid var(--line); border-radius:6px; padding:20px 22px;
+  box-shadow:var(--shadow);
+}
+.card h4{font-size:14px; margin-bottom:4px;}
+.card .card-sub{font-size:12px; color:var(--ink-soft); margin-bottom:14px;}
+
+/* ===== TABLES ===== */
+table{width:100%; border-collapse:collapse; font-size:13.5px; margin:14px 0 22px 0;}
+table.dense{font-size:12.5px;}
+thead th{
+  text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em;
+  color:var(--ink-soft); font-weight:600; padding:9px 12px; border-bottom:1.5px solid var(--line-strong);
+  background:var(--paper-2);
+}
+thead th.num-col, td.num-col{text-align:right;}
+tbody td{padding:8px 12px; border-bottom:1px solid var(--line); color:var(--ink);}
+.num-col{font-family:'IBM Plex Mono',monospace;}
+tbody tr:hover{background:rgba(91,123,140,0.05);}
+tbody tr.total-row{font-weight:700; background:var(--paper-2);}
+tbody tr.total-row td{border-top:1.5px solid var(--line-strong);}
+.row-zone-merah{border-left:3px solid var(--terra);}
+.row-zone-kuning{border-left:3px solid var(--amber);}
+.row-zone-hijau{border-left:3px solid var(--sage);}
+.table-scroll{max-height:480px; overflow-y:auto; border:1px solid var(--line); border-radius:6px;}
+.table-scroll table{margin:0;}
+.table-scroll thead th{position:sticky; top:0; z-index:1;}
+
+/* ===== ZONE PILLS ===== */
+.zone-pill{display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:11px;}
+.zone-pill.merah{background:var(--terra-soft); color:#8C4B3F;}
+.zone-pill.kuning{background:var(--amber-soft); color:#8A6A2C;}
+.zone-pill.hijau{background:var(--sage-soft); color:#4F6649;}
+.zone-dot{width:7px; height:7px; border-radius:50%; display:inline-block;}
+.zone-dot.merah{background:var(--terra);}
+.zone-dot.kuning{background:var(--amber);}
+.zone-dot.hijau{background:var(--sage);}
+
+/* ===== CHART CONTROLS ===== */
+.chart-box{
+  background:#fff; border:1px solid var(--line); border-radius:6px; padding:20px 22px 8px 22px;
+  box-shadow:var(--shadow); margin:18px 0 26px 0;
+}
+.chart-head{display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:14px;}
+.chart-head h4{font-size:14.5px;}
+.chart-head .card-sub{font-size:12px; color:var(--ink-soft); margin-top:3px;}
+.chart-controls{display:flex; gap:6px; flex-wrap:wrap;}
+.ctl-btn{
+  font-family:'IBM Plex Sans',sans-serif; font-size:11.5px; font-weight:600; padding:6px 12px;
+  border:1px solid var(--line-strong); background:#fff; color:var(--ink-soft); border-radius:14px;
+  cursor:pointer; transition:all .15s ease;
+}
+.ctl-btn:hover{border-color:var(--slate); color:var(--slate);}
+.ctl-btn.active{background:var(--slate); border-color:var(--slate); color:#fff;}
+.chart-canvas-wrap{position:relative; width:100%;}
+
+/* ===== CALLOUT / NOTE BOXES ===== */
+.note{
+  border-left:3px solid var(--slate); background:var(--slate-soft); padding:14px 18px;
+  border-radius:0 4px 4px 0; font-size:13.5px; margin:16px 0;
+}
+.note.warn{border-left-color:var(--amber); background:var(--amber-soft);}
+.note.danger{border-left-color:var(--terra); background:var(--terra-soft);}
+.note.good{border-left-color:var(--sage); background:var(--sage-soft);}
+.note > strong:first-child{display:block; margin-bottom:4px; font-size:12.5px; text-transform:uppercase; letter-spacing:.04em;}
+.note ul{margin:6px 0 0 0; padding-left:18px;}
+.note li{margin-bottom:4px;}
+
+.foot-pagenote{font-size:12px; color:var(--ink-soft); text-align:right; margin-top:-6px;}
+
+/* ===== LEGEND BADGES ===== */
+.legend-row{display:flex; gap:18px; flex-wrap:wrap; margin:10px 0 18px 0; font-size:12.5px; color:var(--ink-soft);}
+.legend-row .li{display:flex; align-items:center; gap:6px;}
+.legend-row .sw{width:11px; height:11px; border-radius:2px; display:inline-block;}
+
+/* ===== INPUT / SELECT CONTROLS ===== */
+select.ctl-select{
+  font-family:'IBM Plex Sans',sans-serif; font-size:12px; font-weight:600; padding:6px 10px;
+  border:1px solid var(--line-strong); background:#fff; color:var(--ink-soft); border-radius:6px;
+  cursor:pointer;
+}
+
+/* ===== SKELETON LOADER ===== */
+.skel{background:linear-gradient(90deg, var(--paper-2) 25%, var(--line) 37%, var(--paper-2) 63%); background-size:400% 100%; animation:skel-wave 1.4s ease infinite; border-radius:4px;}
+@keyframes skel-wave{0%{background-position:100% 0;}100%{background-position:0 0;}}
+.skel-text{height:14px; margin:6px 0;}
+.skel-block{height:200px;}
+
+/* ===== ERROR STATE ===== */
+.error-box{
+  border:1px solid var(--terra); background:var(--terra-soft); color:#8C4B3F; padding:16px 18px;
+  border-radius:6px; font-size:13.5px;
+}
+.error-box strong{display:block; margin-bottom:6px; font-family:'Source Serif 4',serif; font-size:14.5px;}
+
+/* ===== SCROLLBAR ===== */
+.sidebar::-webkit-scrollbar{width:6px;}
+.sidebar::-webkit-scrollbar-thumb{background:var(--line-strong); border-radius:3px;}
+.table-scroll::-webkit-scrollbar{width:6px;}
+.table-scroll::-webkit-scrollbar-thumb{background:var(--line-strong); border-radius:3px;}
+
+footer.report-footer{
+  padding:36px 64px; font-size:12px; color:var(--ink-soft); display:flex; justify-content:space-between;
+  border-top:1px solid var(--line); flex-wrap:wrap; gap:8px;
+}
+
+@media (max-width:900px){
+  .shell{flex-direction:column;}
+  .sidebar{position:relative; width:100%; height:auto;}
+  .section, .cover{padding:32px 22px;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="eyebrow">Sistem Integrasi Makassar</div>
+      <h1>Dashboard Kinerja Bisnis</h1>
+      <div class="sub">MKI &amp; CFN &middot; Live dari Google Sheets</div>
+    </div>
+    <div class="nav-section" id="navlinks">
+<a class="nav-link" data-section="s1" href="#s1"><span class="nn">01</span>Tren Penjualan (Sales)</a>
+<a class="nav-link" data-section="s2" href="#s2"><span class="nn">02</span>Tren Pendapatan (Revenue)</a>
+<a class="nav-link" data-section="s3" href="#s3"><span class="nn">03</span>Rasio Sales thd Revenue</a>
+<a class="nav-link" data-section="s4" href="#s4"><span class="nn">04</span>Performa & Zona Wilayah</a>
+<a class="nav-link" data-section="s5" href="#s5"><span class="nn">05</span>Kode Barang Terlaris</a>
+<a class="nav-link" data-section="s6" href="#s6"><span class="nn">06</span>Stock & PO Gudang</a>
+<a class="nav-link" data-section="s7" href="#s7"><span class="nn">07</span>Delivery & Ekspedisi</a>
+<a class="nav-link" data-section="s8" href="#s8"><span class="nn">08</span>Piutang (AR) 2026</a>
+<a class="nav-link" data-section="s9" href="#s9"><span class="nn">09</span>Frekuensi Customer</a>
+    </div>
+  </nav>
+
+  <main class="main">
+    <div class="cover">
+      <div class="eyebrow">Laporan Kinerja &middot; Cabang Makassar</div>
+      <h1>Dashboard Kinerja Bisnis Cabang Makassar 2026</h1>
+      <p class="desc">Data ditarik langsung dari Google Sheets operasional cabang. Setiap perubahan yang diinput di spreadsheet akan otomatis tercermin di sini setelah refresh — tidak perlu membuat ulang file laporan.</p>
+      <div class="meta-row">
+        <div class="meta-item"><div class="ml">Cabang</div><div class="mv">Makassar</div></div>
+        <div class="meta-item"><div class="ml">Entitas</div><div class="mv">MKI &amp; CFN</div></div>
+        <div class="meta-item"><div class="ml">Periode Data</div><div class="mv num" id="meta-period">—</div></div>
+        <div class="meta-item"><div class="ml">Total Baris Transaksi</div><div class="mv num" id="meta-rowcount">—</div></div>
+      </div>
+      <div class="live-bar" id="live-bar">
+        <span class="live-dot loading" id="live-dot"></span>
+        <span class="lb-text" id="live-text">Memuat data dari Google Sheets&hellip;</span>
+        <button class="lb-refresh" id="btn-refresh">Refresh sekarang</button>
+      </div>
+    </div>
+
+    <div id="app-root">
+      <!-- Sections dirender oleh JS setelah data dimuat -->
+    </div>
+
+    <footer class="report-footer">
+      <span>PT. Mitra Kabel Indonesia (Falcom Technology) &middot; Cabang Makassar</span>
+      <span id="foot-updated">Belum dimuat</span>
+    </footer>
+  </main>
+</div>
+
+<script src="./data-loader.js"></script>
+<script src="./calc.js"></script>
+<script src="./render.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
