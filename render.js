@@ -1013,18 +1013,14 @@ function renderARSection(m) {
       <p class="lede">Sumber data: sheet AR 2026. Rasio AR mengukur seberapa besar nilai sales yang masih belum tertagih.</p>
     </div>
 
-    <div class="kpi-grid">
+    <div class="kpi-grid kpi-grid-3">
       <div class="kpi-card">
         <div class="kpi-label">Total Nilai Faktur 2026</div>
         <div class="kpi-value">${fmtRupiah(ar.totalNilaiFaktur)}</div>
       </div>
       <div class="kpi-card kpi-card-accent">
-        <div class="kpi-label">Sisa Saldo Piutang</div>
+        <div class="kpi-label">Sisa Saldo Piutang <span class="kpi-label-note">(per tanggal berjalan)</span></div>
         <div class="kpi-value">${fmtRupiah(ar.totalSisaSaldo)}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Total Sudah Dibayar</div>
-        <div class="kpi-value">${fmtRupiah(ar.totalPaid)}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Rasio AR terhadap Sales</div>
