@@ -454,12 +454,13 @@ function buildPoGudang(poRows) {
     const noSuratJalan = toStr(r['NO Surat Jalan']);
     const statusEkspedisi = toStr(r['Status (Ekspedisi)']);
     const qty = toNumber(r['Quantity']);
-    // Kolom J ("Quantity DIterima (GD MKS)" — perhatikan huruf "I" besar
-    // persis seperti header asli di sheet) berisi ANGKA REAL barang yang
+    // Kolom J ("Quantity Diterima (GD MKS)") berisi ANGKA REAL barang yang
     // benar-benar masuk ke gudang Makassar — bisa berbeda dari Quantity
-    // yang dipesan (kelebihan/kekurangan kiriman). Dipakai apa adanya,
-    // tidak disamakan dengan kolom Quantity.
-    const qtyDiterimaReal = toNumber(r['Quantity DIterima (GD MKS)']);
+    // yang dipesan (kelebihan/kekurangan kiriman). Diakses via INDEX POSISI
+    // (index 9 = kolom J: A=0,B=1,...,J=9), bukan nama header, karena nama
+    // kolom ini terbukti tidak stabil dari gviz (kapitalisasi "Diterima"
+    // vs "DIterima" berubah-ubah antar pemanggilan terhadap sheet yang sama).
+    const qtyDiterimaReal = toNumber((r.__row || [])[9]);
 
     // Status barang (untuk pengelompokan & narasi) ditentukan dari Stage /
     // No Surat Jalan / Status Ekspedisi:
