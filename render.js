@@ -37,6 +37,13 @@ function deltaHtml(pct) {
   return `<span class="delta ${cls}">${arrow} ${sign}${fmtPct(pct)}</span>`;
 }
 
+function achievementPillHtml(actual, target) {
+  if (!target || target <= 0) return '<span class="achv-pill achv-na">&ndash;</span>';
+  const pct = (actual / target) * 100;
+  const cls = pct >= 100 ? 'achv-hit' : (pct >= 80 ? 'achv-near' : 'achv-miss');
+  return `<span class="achv-pill ${cls}">${fmtPct(pct)}</span>`;
+}
+
 // Chart.js default font & color agar konsisten dengan tema dashboard
 function applyChartDefaults() {
   Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
@@ -239,14 +246,16 @@ function renderYoySalesTable(yoy) {
       <td>${fmtRupiah(m.sales2026)}</td>
       <td>${deltaHtml(growthPct(m.sales2026, m.sales2025))}</td>
       <td>${fmtRupiah(m.targetSalesRevenue)}</td>
+      <td>${achievementPillHtml(m.sales2026, m.targetSalesRevenue)}</td>
     </tr>
   `).join('');
   document.getElementById('tblYoySales').innerHTML = `
-    <thead><tr><th>Bulan</th><th>Sales 2025</th><th>Sales 2026</th><th>Pertumbuhan</th><th>Target</th></tr></thead>
+    <thead><tr><th>Bulan</th><th>Sales 2025</th><th>Sales 2026</th><th>Pertumbuhan</th><th>Target</th><th>Capaian vs Target</th></tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr>
       <td>Total</td><td>${fmtRupiah(yoy.totalSales2025)}</td><td>${fmtRupiah(yoy.totalSales2026)}</td>
       <td>${deltaHtml(yoy.growthSales)}</td><td>${fmtRupiah(yoy.totalTarget)}</td>
+      <td>${achievementPillHtml(yoy.totalSales2026, yoy.totalTarget)}</td>
     </tr></tfoot>
   `;
 }
@@ -407,14 +416,16 @@ function renderYoyRevTable(yoy) {
       <td>${fmtRupiah(m.rev2026)}</td>
       <td>${deltaHtml(growthPct(m.rev2026, m.rev2025))}</td>
       <td>${fmtRupiah(m.targetSalesRevenue)}</td>
+      <td>${achievementPillHtml(m.rev2026, m.targetSalesRevenue)}</td>
     </tr>
   `).join('');
   document.getElementById('tblYoyRev').innerHTML = `
-    <thead><tr><th>Bulan</th><th>Revenue 2025</th><th>Revenue 2026</th><th>Pertumbuhan</th><th>Target</th></tr></thead>
+    <thead><tr><th>Bulan</th><th>Revenue 2025</th><th>Revenue 2026</th><th>Pertumbuhan</th><th>Target</th><th>Capaian vs Target</th></tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr>
       <td>Total</td><td>${fmtRupiah(yoy.totalRev2025)}</td><td>${fmtRupiah(yoy.totalRev2026)}</td>
       <td>${deltaHtml(yoy.growthRev)}</td><td>${fmtRupiah(yoy.totalTarget)}</td>
+      <td>${achievementPillHtml(yoy.totalRev2026, yoy.totalTarget)}</td>
     </tr></tfoot>
   `;
 }
