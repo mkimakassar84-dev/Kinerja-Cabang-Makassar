@@ -620,24 +620,27 @@ function buildRevenueTrend(revRows) {
    POIN 8 — PIUTANG (AR) 2026, RASIO AR thd SALES, BY COMPANY
    ========================================================================== */
 function buildAR(arRows, totalSales2026) {
-  // PENTING: Sheet "AR 2026" juga memiliki header duplikat secara horizontal
-  // (Tanggal/No Faktur/Nama Customer/dst muncul lagi di blok kolom berikutnya
-  // untuk keperluan rekap internal sheet). Diakses via index posisi (blok
-  // pertama) supaya konsisten dan tidak rapuh terhadap perubahan blok lain,
-  // sesuai pola yang sama dengan perbaikan pada Rev SUM.
+  // Sesuai instruksi: data piutang diambil dari sheet AR 2026 KOLOM L-S saja.
+  // Pada representasi gviz, kolom L-S berada di index 11-18 (0-based: A=0,
+  // jadi L=11). Blok ini TIDAK menyertakan kolom "Paid Amount" maupun
+  // "Status" secara eksplisit, sehingga:
+  // - paidAmount diturunkan dari (Nilai Faktur - Sisa Saldo Piutang)
+  // - status ditentukan dari Sisa Saldo Piutang (0 berarti Lunas)
   const items = arRows.map(r => {
     const row = r.__row || [];
+    const nilaiFaktur = toNumber(row[14]);
+    const sisaSaldo = toNumber(row[15]);
     return {
-      tanggal: toDate(row[0]),
-      noFaktur: toStr(row[1]),
-      customer: toStr(row[2]).toUpperCase(),
-      nilaiFaktur: toNumber(row[3]),
-      sisaSaldo: toNumber(row[4]),
-      paidAmount: toNumber(row[5]),
-      aging: toStr(row[6]),
-      kategori: toStr(row[7]),
-      status: toStr(row[8]),
-      company: toStr(row[9]).toUpperCase(),
+      tanggal: toDate(row[11]),
+      noFaktur: toStr(row[12]),
+      customer: toStr(row[13]).toUpperCase(),
+      nilaiFaktur,
+      sisaSaldo,
+      paidAmount: nilaiFaktur - sisaSaldo,
+      aging: toStr(row[16]),
+      kategori: toStr(row[17]),
+      status: sisaSaldo <= 0 ? 'Lunas' : 'Belum Lunas',
+      company: toStr(row[18]).toUpperCase(),
     };
   }).filter(a => a.noFaktur);
 
