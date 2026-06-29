@@ -454,10 +454,14 @@ function buildPoGudang(poRows) {
     const noSuratJalan = toStr(r['NO Surat Jalan']);
     const statusEkspedisi = toStr(r['Status (Ekspedisi)']);
     const qty = toNumber(r['Quantity']);
+    // Kolom J ("Quantity Diterima (GD MKS)") berisi ANGKA REAL barang yang
+    // benar-benar masuk ke gudang Makassar — bisa berbeda dari Quantity
+    // yang dipesan (kelebihan/kekurangan kiriman). Dipakai apa adanya,
+    // tidak disamakan dengan kolom Quantity.
+    const qtyDiterimaReal = toNumber(r['Quantity Diterima (GD MKS)']);
 
-    // Status barang ditentukan dari kombinasi Stage / No Surat Jalan / Status
-    // Ekspedisi, BUKAN dari kolom "Quantity Diterima (GD MKS)" yang di sheet
-    // sumber selalu kosong:
+    // Status barang (untuk pengelompokan & narasi) ditentukan dari Stage /
+    // No Surat Jalan / Status Ekspedisi:
     // - Stage "Complete"   -> barang sudah diterima di gudang Makassar
     // - Stage "Return"     -> barang TIDAK diterima (retur, stock pusat kosong)
     // - Stage/No Surat Jalan/Status Ekspedisi semua kosong -> masih ditunggu
@@ -475,6 +479,7 @@ function buildPoGudang(poRows) {
       company: toStr(r['COMPANY']).toUpperCase(),
       kodeBarang: toStr(r['Kode Barang']).toUpperCase(),
       qty,
+      qtyDiterimaReal,
       noSuratJalan,
       statusEkspedisi,
       stage,
@@ -488,9 +493,9 @@ function buildPoGudang(poRows) {
   const itemsDiterima = items.filter(i => i.statusBarang === 'diterima');
   const itemsRetur = items.filter(i => i.statusBarang === 'retur');
   const itemsDitunggu = items.filter(i => i.statusBarang === 'ditunggu');
-  const totalQtyDiterima = sum(itemsDiterima, i => i.qty); // indikator barang masuk ke gudang Makassar
-  const totalQtyRetur = sum(itemsRetur, i => i.qty);
-  const totalQtyDitunggu = sum(itemsDitunggu, i => i.qty);
+  const totalQtyDiterima = sum(itemsDiterima, i => i.qtyDiterimaReal); // angka real dari kolom J
+  const totalQtyRetur = sum(itemsRetur, i => i.qtyDiterimaReal);
+  const totalQtyDitunggu = sum(itemsDitunggu, i => i.qty); // belum ada qty diterima karena masih ditunggu
   const completeCount = itemsDiterima.length;
 
   const byCompany = {};
@@ -499,8 +504,8 @@ function buildPoGudang(poRows) {
     byCompany[co] = {
       count: itemsCo.length,
       qty: sum(itemsCo, i => i.qty),
-      qtyDiterima: sum(itemsCo.filter(i => i.statusBarang === 'diterima'), i => i.qty),
-      qtyRetur: sum(itemsCo.filter(i => i.statusBarang === 'retur'), i => i.qty),
+      qtyDiterima: sum(itemsCo.filter(i => i.statusBarang === 'diterima'), i => i.qtyDiterimaReal),
+      qtyRetur: sum(itemsCo.filter(i => i.statusBarang === 'retur'), i => i.qtyDiterimaReal),
       qtyDitunggu: sum(itemsCo.filter(i => i.statusBarang === 'ditunggu'), i => i.qty),
     };
   });
@@ -509,9 +514,10 @@ function buildPoGudang(poRows) {
   items.forEach(p => {
     const key = monthKey(p.orderDate);
     if (!key) return;
-    if (!monthly[key]) monthly[key] = { key, label: MONTH_NAMES_ID[p.orderDate.getMonth()], count: 0, qty: 0 };
+    if (!monthly[key]) monthly[key] = { key, label: MONTH_NAMES_ID[p.orderDate.getMonth()], count: 0, qty: 0, items: [] };
     monthly[key].count += 1;
     monthly[key].qty += p.qty;
+    monthly[key].items.push(p);
   });
 
   return {
