@@ -299,15 +299,23 @@ function zoneOf(totalInvoice) {
 }
 
 function buildZonaWilayah(kpiRows, transactions) {
-  // kpiRows sudah berheader M..Z: Kabupaten/Kota, Jan..Des, Total
-  const monthCols = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  // PENTING: Google gviz mendeteksi kolom N..Z (Jan..Des, Total) sebagai tipe
+  // "number" sehingga label header teks ("Jan", "Feb", dst) tidak pernah
+  // muncul sebagai nama kolom object — hanya kolom M (Kabupaten/Kota, tipe
+  // string) yang headernya terbaca normal. Karena itu seluruh kolom M..Z
+  // diakses berdasarkan index posisi pada __row, bukan nama header.
+  // Index 0-based dalam __row: M=12 (nama wilayah), N..Y=13..24 (Jan..Des), Z=25 (Total).
+  const NAMA_IDX = 12;
+  const MONTH_START_IDX = 13;
+  const TOTAL_IDX = 25;
 
   const wilayahData = kpiRows
     .map(r => {
-      const nama = toStr(r['Kabupaten/Kota']).toUpperCase();
+      const row = r.__row || [];
+      const nama = toStr(row[NAMA_IDX]).toUpperCase();
       if (!nama) return null;
-      const monthly = monthCols.map((mc, idx) => ({ monthIdx: idx, label: MONTH_NAMES_ID[idx], invoice: toNumber(r[mc]) }));
-      const total = toNumber(r['TOTAL']) || sum(monthly, m => m.invoice);
+      const monthly = MONTH_NAMES_ID.map((label, idx) => ({ monthIdx: idx, label, invoice: toNumber(row[MONTH_START_IDX + idx]) }));
+      const total = toNumber(row[TOTAL_IDX]) || sum(monthly, m => m.invoice);
       return { nama, monthly, total, zone: zoneOf(total) };
     })
     .filter(Boolean)
@@ -386,15 +394,24 @@ function buildTopProducts(transactions, topN = 15) {
    POIN 6 — STOCK GUDANG & PO GUDANG
    ========================================================================== */
 function buildStock(stockRows, transactions) {
+  // Header asli sheet hanya terbaca untuk kolom A-C (Jenis Barang, Kode Barang,
+  // Deskripsi) karena baris 1 berisi tanggal merged-cell sehingga label kolom
+  // D ke kanan (Turnover, Total Stock by Company) tidak terbaca gviz sebagai
+  // nama kolom. Maka kolom stock diakses berdasarkan index posisi (__row),
+  // sesuai struktur asli: A=0 Jenis, B=1 Kode, C=2 Deskripsi, D=3 MKI Turnover,
+  // E=4 CFN Turnover, F=5 MKI&CFN Turnover, G=6 Stock MKI, H=7 Stock CFN, I=8 Stock MKI&CFN.
   const items = stockRows
-    .map(r => ({
-      jenis: toStr(r['Jenis Barang']),
-      kode: toStr(r['Kode Barang']).toUpperCase(),
-      deskripsi: toStr(r['Deskripsi']),
-      stockMKI: toNumber(r['MKI']),
-      stockCFN: toNumber(r['CFN']),
-      stockTotal: toNumber(r['MKI & CFN']),
-    }))
+    .map(r => {
+      const row = r.__row || [];
+      return {
+        jenis: toStr(row[0]),
+        kode: toStr(row[1]).toUpperCase(),
+        deskripsi: toStr(row[2]),
+        stockMKI: toNumber(row[6]),
+        stockCFN: toNumber(row[7]),
+        stockTotal: toNumber(row[8]),
+      };
+    })
     .filter(r => r.kode);
 
   const totalStockMKI = sum(items, i => i.stockMKI);

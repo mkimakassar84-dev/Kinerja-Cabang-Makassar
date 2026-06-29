@@ -51,7 +51,7 @@ const SHEET_TABS = {
   revSum:     { name: 'Rev SUM',         headerRow: 1 },
   salesSum:   { name: 'Sales SUM',       headerRow: 1 },
   kpiMonitor: { name: 'KPI MONITORING',  headerRow: 1 },
-  stock:      { name: 'Stock GD MKS',    headerRow: 1 },
+  stock:      { name: 'Stock GD MKS',    headerRow: 2 },
   poGudang:   { name: 'PO Gudang',       headerRow: 1 },
   ar:         { name: 'AR 2026',         headerRow: 1 },
 };
@@ -108,9 +108,15 @@ async function fetchSheetTabRaw(sheetName, headerRow = 1) {
 
   const table = json.table;
   const dataRowsRaw = table.rows || [];
-  const colsAsRow = (table.cols || []).map(c => c.label);
 
-  const allSheetRowsArr = [colsAsRow];
+  // PENTING: table.cols (label kolom bawaan gviz) sering kosong ("") untuk
+  // sheet dengan baris pertama berupa merged cell, tanggal, atau campuran
+  // tipe data — ini terjadi pada beberapa sheet di spreadsheet ini (Stock GD
+  // MKS, KPI Monitoring). Karena itu table.cols TIDAK dipakai sebagai sumber
+  // header. Sebagai gantinya, dataRowsRaw dianggap merepresentasikan baris
+  // sheet asli mulai dari baris 1 secara berurutan, dan header diambil dari
+  // baris ke-N (headerRow) sesuai posisi visualnya di Google Sheets.
+  const allSheetRowsArr = [];
   dataRowsRaw.forEach(r => {
     const arr = [];
     if (r && r.c) r.c.forEach((cell, i) => { arr[i] = parseGvizCell(cell); });
