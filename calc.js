@@ -210,11 +210,18 @@ function buildYoyComparison(salesSumRows) {
   // Index kolom 0-based: A=0 ... AS=44, AT=45, AU=46, AV=47, AW=48, AX=49,
   // AY=50, AZ=51, BA=52, BB=53
   const IDX = { AS: 44, AT: 45, AU: 46, AV: 47, AW: 48, AX: 49, AY: 50, AZ: 51, BA: 52, BB: 53 };
+  const MONTH_NAMES_EN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
+  // PENTING: baris pertama sheet Sales SUM berisi judul section
+  // ("TARGET SALES REVENUE"), bukan data bulan Januari. Mengandalkan index
+  // array baris (salesSumRows[m]) secara langsung akan menggeser seluruh
+  // data satu baris. Maka setiap bulan dicari berdasarkan label nama bulan
+  // pada kolom AS (case-insensitive), bukan posisi array.
   const months = [];
   for (let m = 0; m < 12; m++) {
-    const row = salesSumRows[m];
-    if (!row || !row.__row) continue;
+    const monthName = MONTH_NAMES_EN[m];
+    const row = salesSumRows.find(r => r.__row && toStr(r.__row[IDX.AS]).toLowerCase() === monthName.toLowerCase());
+    if (!row) { months.push({ monthIdx: m, label: MONTH_NAMES_ID[m], targetSalesRevenue: 0, rev2025: 0, rev2026: 0, sales2025: 0, sales2026: 0 }); continue; }
     const r = row.__row;
     months.push({
       monthIdx: m,
