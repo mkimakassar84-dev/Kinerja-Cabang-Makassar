@@ -449,29 +449,60 @@ function buildStock(stockRows, transactions) {
 }
 
 function buildPoGudang(poRows) {
-  const items = poRows.map(r => ({
-    no: toStr(r['NO']),
-    orderDate: toDate(r['Order Date']),
-    noPO: toStr(r['NO PO']),
-    company: toStr(r['COMPANY']).toUpperCase(),
-    kodeBarang: toStr(r['Kode Barang']).toUpperCase(),
-    qty: toNumber(r['Quantity']),
-    noSuratJalan: toStr(r['NO Surat Jalan']),
-    statusEkspedisi: toStr(r['Status (Ekspedisi)']),
-    stage: toStr(r['Stage']),
-    qtyDiterima: toNumber(r['Quantity Diterima (GD MKS)']),
-    tglMasukGudang: toDate(r['Tanggal Masuk GD MKS']),
-  })).filter(p => p.orderDate);
+  const items = poRows.map(r => {
+    const stage = toStr(r['Stage']);
+    const noSuratJalan = toStr(r['NO Surat Jalan']);
+    const statusEkspedisi = toStr(r['Status (Ekspedisi)']);
+    const qty = toNumber(r['Quantity']);
+
+    // Status barang ditentukan dari kombinasi Stage / No Surat Jalan / Status
+    // Ekspedisi, BUKAN dari kolom "Quantity Diterima (GD MKS)" yang di sheet
+    // sumber selalu kosong:
+    // - Stage "Complete"   -> barang sudah diterima di gudang Makassar
+    // - Stage "Return"     -> barang TIDAK diterima (retur, stock pusat kosong)
+    // - Stage/No Surat Jalan/Status Ekspedisi semua kosong -> masih ditunggu
+    //   (No Surat Jalan dari kantor pusat belum diterima)
+    let statusBarang;
+    if (stage.toLowerCase() === 'complete') statusBarang = 'diterima';
+    else if (stage.toLowerCase() === 'return') statusBarang = 'retur';
+    else if (!stage && !noSuratJalan && !statusEkspedisi) statusBarang = 'ditunggu';
+    else statusBarang = 'lainnya';
+
+    return {
+      no: toStr(r['NO']),
+      orderDate: toDate(r['Order Date']),
+      noPO: toStr(r['NO PO']),
+      company: toStr(r['COMPANY']).toUpperCase(),
+      kodeBarang: toStr(r['Kode Barang']).toUpperCase(),
+      qty,
+      noSuratJalan,
+      statusEkspedisi,
+      stage,
+      statusBarang,
+      tglMasukGudang: toDate(r['Tanggal Masuk GD MKS']),
+    };
+  }).filter(p => p.orderDate);
 
   const totalPO = items.length;
-  const totalQtyPO = sum(items, i => i.qty);
-  const totalQtyDiterima = sum(items, i => i.qtyDiterima);
-  const completeCount = items.filter(i => i.stage.toLowerCase() === 'complete').length;
+  const totalQtyPO = sum(items, i => i.qty); // indikator pemesanan
+  const itemsDiterima = items.filter(i => i.statusBarang === 'diterima');
+  const itemsRetur = items.filter(i => i.statusBarang === 'retur');
+  const itemsDitunggu = items.filter(i => i.statusBarang === 'ditunggu');
+  const totalQtyDiterima = sum(itemsDiterima, i => i.qty); // indikator barang masuk ke gudang Makassar
+  const totalQtyRetur = sum(itemsRetur, i => i.qty);
+  const totalQtyDitunggu = sum(itemsDitunggu, i => i.qty);
+  const completeCount = itemsDiterima.length;
 
   const byCompany = {};
   ['MKI', 'CFN'].forEach(co => {
     const itemsCo = items.filter(i => i.company === co);
-    byCompany[co] = { count: itemsCo.length, qty: sum(itemsCo, i => i.qty), qtyDiterima: sum(itemsCo, i => i.qtyDiterima) };
+    byCompany[co] = {
+      count: itemsCo.length,
+      qty: sum(itemsCo, i => i.qty),
+      qtyDiterima: sum(itemsCo.filter(i => i.statusBarang === 'diterima'), i => i.qty),
+      qtyRetur: sum(itemsCo.filter(i => i.statusBarang === 'retur'), i => i.qty),
+      qtyDitunggu: sum(itemsCo.filter(i => i.statusBarang === 'ditunggu'), i => i.qty),
+    };
   });
 
   const monthly = {};
@@ -483,7 +514,10 @@ function buildPoGudang(poRows) {
     monthly[key].qty += p.qty;
   });
 
-  return { items, totalPO, totalQtyPO, totalQtyDiterima, completeCount, byCompany, monthly: Object.values(monthly).sort((a,b)=>a.key.localeCompare(b.key)) };
+  return {
+    items, totalPO, totalQtyPO, totalQtyDiterima, totalQtyRetur, totalQtyDitunggu,
+    completeCount, byCompany, monthly: Object.values(monthly).sort((a,b)=>a.key.localeCompare(b.key)),
+  };
 }
 
 /* ==========================================================================

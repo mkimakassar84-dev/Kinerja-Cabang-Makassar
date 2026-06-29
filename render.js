@@ -862,7 +862,7 @@ function renderStockSection(m) {
 
     <div class="panel">
       <h3>Analisis PO Gudang</h3>
-      <p class="panel-note">Data PO Gudang baru tersedia mulai Maret 2026. Total ${fmtNum(po.totalPO)} PO, ${fmtNum(po.totalQtyPO)} unit dipesan, ${fmtNum(po.totalQtyDiterima)} unit sudah diterima di gudang.</p>
+      <p class="panel-note">Data PO Gudang baru tersedia mulai Maret 2026. Total ${fmtNum(po.totalPO)} PO, ${fmtNum(po.totalQtyPO)} unit dipesan &mdash; ${fmtNum(po.totalQtyDiterima)} unit sudah diterima di gudang Makassar, ${fmtNum(po.totalQtyRetur)} unit diretur (stock pusat kosong), ${fmtNum(po.totalQtyDitunggu)} unit masih ditunggu (No Surat Jalan dari pusat belum diterima).</p>
       <div class="two-col">
         <div class="chart-wrap chart-wrap-sm"><canvas id="chartPoGudang"></canvas></div>
         <div class="company-cards">
@@ -871,7 +871,9 @@ function renderStockSection(m) {
               <div class="company-card-head"><span class="company-badge company-badge-${co.toLowerCase()}">${co}</span></div>
               <div class="company-card-row"><span>Jumlah PO</span><strong>${fmtNum(d.count)}</strong></div>
               <div class="company-card-row"><span>Qty Dipesan</span><strong>${fmtNum(d.qty)} unit</strong></div>
-              <div class="company-card-row"><span>Qty Diterima</span><strong>${fmtNum(d.qtyDiterima)} unit</strong></div>
+              <div class="company-card-row"><span>Qty Diterima di Gudang</span><strong>${fmtNum(d.qtyDiterima)} unit</strong></div>
+              <div class="company-card-row"><span>Qty Diretur</span><strong>${fmtNum(d.qtyRetur)} unit</strong></div>
+              <div class="company-card-row"><span>Qty Masih Ditunggu</span><strong>${fmtNum(d.qtyDitunggu)} unit</strong></div>
             </div>
           `).join('')}
         </div>
