@@ -1244,6 +1244,12 @@ function renderFiberOpticSection(m) {
     </div>
 
     <div class="panel">
+      <h3>Total Quantity per Bulan per Kode Barang</h3>
+      <p class="panel-note">Rincian unit terjual setiap bulan untuk masing-masing kode barang FO 1-Core sepanjang tahun 2026.</p>
+      <div class="table-scroll"><table class="data-table data-table-compact" id="tblFOQtyMatrix"></table></div>
+    </div>
+
+    <div class="panel">
       <h3>Pembagian by Company</h3>
       <div class="chart-wrap chart-wrap-sm"><canvas id="chartFOByCompany"></canvas></div>
     </div>
@@ -1254,6 +1260,7 @@ function renderFiberOpticSection(m) {
   renderFOByKodeChart(fo, fo1coreKodeFilter);
   renderFOByCompanyChart(fo);
   renderFOSummaryTable(fo);
+  renderFOQtyMatrixTable(fo);
 
   document.querySelectorAll('#fo1coreToggle .toggle-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1317,6 +1324,26 @@ function renderFOSummaryTable(fo) {
     <thead><tr><th>Kode Barang</th><th>Total Sales</th><th>Total Quantity</th></tr></thead>
     <tbody>${fo.byKode.map(k => `<tr><td>${escapeHtml(k.kode)}</td><td>${fmtRupiah(k.sales)}</td><td>${fmtNum(k.qty)}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td>Total</td><td>${fmtRupiah(fo.totalSales)}</td><td>${fmtNum(fo.totalQty)}</td></tr></tfoot>
+  `;
+}
+
+function renderFOQtyMatrixTable(fo) {
+  // fo.byKode[].monthly sudah terurut monthIdx 0-11 (Jan-Des). Tabel ini
+  // menampilkan matriks: baris = kode barang, kolom = bulan, sel = quantity.
+  const monthHeaders = MONTH_NAMES_SHORT_ID.map(m => `<th>${m}</th>`).join('');
+  const rows = fo.byKode.map(k => {
+    const cells = k.monthly.map(mo => `<td>${mo.qty > 0 ? fmtNum(mo.qty) : '&ndash;'}</td>`).join('');
+    return `<tr><td>${escapeHtml(k.kode)}</td>${cells}<td><strong>${fmtNum(k.qty)}</strong></td></tr>`;
+  }).join('');
+
+  // Baris total per bulan (jumlah seluruh kode barang untuk bulan tersebut)
+  const totalPerBulan = MONTH_NAMES_ID.map((_, idx) => sum(fo.byKode, k => k.monthly[idx].qty));
+  const totalCells = totalPerBulan.map(q => `<td>${q > 0 ? fmtNum(q) : '&ndash;'}</td>`).join('');
+
+  document.getElementById('tblFOQtyMatrix').innerHTML = `
+    <thead><tr><th>Kode Barang</th>${monthHeaders}<th>Total</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td>Total</td>${totalCells}<td><strong>${fmtNum(fo.totalQty)}</strong></td></tr></tfoot>
   `;
 }
 
