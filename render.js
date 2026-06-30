@@ -96,7 +96,7 @@ function fmtRupiahShort(n) {
 let dailyPerfMonth = 'all'; // 'all' atau '0'..'11' (indeks bulan)
 let dailyPerfSearch = '';
 let dailyPerfPage = 1;
-const DAILY_PERF_PAGE_SIZE = 100;
+const DAILY_PERF_PAGE_SIZE = 50;
 
 function renderDailyPerformanceSection(m) {
   const tx2026 = filterYear(m.transactions, CURRENT_YEAR);
