@@ -1137,7 +1137,14 @@ function renderARByCompanyChart(ar) {
 }
 
 function renderARTable(ar) {
-  const belumLunas = ar.items.filter(i => i.sisaSaldo > 0).sort((a, b) => b.sisaSaldo - a.sisaSaldo);
+  // Urutkan berdasarkan Aging (jumlah hari) tertinggi ke terendah, sesuai
+  // judul panel "diurutkan dari Aging tertinggi". Field aging berupa string
+  // seperti "62 Hari", sehingga angkanya diekstrak terlebih dahulu.
+  const parseAgingDays = (aging) => {
+    const match = String(aging).match(/\d+/);
+    return match ? parseInt(match[0], 10) : 0;
+  };
+  const belumLunas = ar.items.filter(i => i.sisaSaldo > 0).sort((a, b) => parseAgingDays(b.aging) - parseAgingDays(a.aging));
   document.getElementById('tblAR').innerHTML = `
     <thead><tr><th>No Faktur</th><th>Customer</th><th>Company</th><th>Nilai Faktur</th><th>Sisa Saldo</th><th>Aging</th><th>Kategori</th></tr></thead>
     <tbody>${belumLunas.slice(0, 50).map(i => `<tr><td>${escapeHtml(i.noFaktur)}</td><td>${escapeHtml(i.customer)}</td><td>${escapeHtml(i.company)}</td><td>${fmtRupiah(i.nilaiFaktur)}</td><td>${fmtRupiah(i.sisaSaldo)}</td><td>${escapeHtml(i.aging)}</td><td>${escapeHtml(i.kategori)}</td></tr>`).join('')}</tbody>
