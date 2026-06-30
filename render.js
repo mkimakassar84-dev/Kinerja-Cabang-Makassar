@@ -1605,8 +1605,24 @@ function renderDashboard(metrics) {
   renderCustFreqSection(metrics);
   renderFiberOpticSection(metrics);
 
+  wrapTablesForMobileScroll();
+
   document.getElementById('loadingOverlay').classList.add('hidden');
   document.getElementById('mainContent').classList.add('visible');
+}
+
+// Membungkus setiap <table class="data-table"> yang belum punya wrapper
+// scroll (.table-scroll) dengan div pembungkus baru, agar di layar mobile
+// tabel bisa digeser horizontal tanpa kolomnya menyempit/wrap. Dipanggil
+// sekali setelah seluruh section selesai dirender.
+function wrapTablesForMobileScroll() {
+  document.querySelectorAll('table.data-table').forEach(table => {
+    if (table.closest('.table-scroll') || table.closest('.data-table-scroll-wrap')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'data-table-scroll-wrap';
+    table.parentNode.insertBefore(wrap, table);
+    wrap.appendChild(table);
+  });
 }
 
 function renderErrorPanel(errors) {
