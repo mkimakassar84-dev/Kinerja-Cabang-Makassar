@@ -117,6 +117,18 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
 .toggle-btn:hover{color:var(--ink);}
 .toggle-btn.active{background:var(--paper); color:var(--terra); box-shadow:var(--shadow);}
 
+.daily-perf-controls{align-items:flex-end;}
+.filter-field{display:flex; flex-direction:column; gap:6px;}
+.filter-field-grow{flex:1; min-width:220px;}
+.filter-field label{font-size:11px; color:var(--slate); text-transform:uppercase; letter-spacing:.04em; font-family:'IBM Plex Mono', monospace;}
+.select-input, .text-input{
+  font-family:'IBM Plex Sans', sans-serif; font-size:13px; color:var(--ink);
+  background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:8px 12px;
+}
+.select-input:focus, .text-input:focus{outline:none; border-color:var(--terra-light);}
+.text-input{width:100%;}
+.panel-note-warn{color:var(--amber); font-style:italic;}
+
 .data-table{width:100%; border-collapse:collapse; font-size:13px; margin-top:8px;}
 .data-table th{
   text-align:left; padding:10px 12px; background:var(--cream-deep); color:var(--ink-soft);
@@ -214,16 +226,17 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
       <div class="brand-sub">PT. Mitra Kabel Indonesia &amp; Cakrawala Fiber Nusantara</div>
     </div>
     <nav class="nav-section" id="navlinks">
-      <a class="nav-link" data-section="s1" href="#s1"><span class="nn">01</span>Tren Penjualan (Sales)</a>
-      <a class="nav-link" data-section="s2" href="#s2"><span class="nn">02</span>Tren Pendapatan (Revenue)</a>
-      <a class="nav-link" data-section="s3" href="#s3"><span class="nn">03</span>Rasio Sales to Revenue</a>
-      <a class="nav-link" data-section="s4" href="#s4"><span class="nn">04</span>Performa &amp; Zona Wilayah</a>
-      <a class="nav-link" data-section="s5" href="#s5"><span class="nn">05</span>Kode Barang Terlaris</a>
-      <a class="nav-link" data-section="s6" href="#s6"><span class="nn">06</span>Stock &amp; PO Gudang</a>
-      <a class="nav-link" data-section="s7" href="#s7"><span class="nn">07</span>Delivery &amp; Ekspedisi</a>
-      <a class="nav-link" data-section="s8" href="#s8"><span class="nn">08</span>Piutang (AR) 2026</a>
-      <a class="nav-link" data-section="s9" href="#s9"><span class="nn">09</span>Frekuensi Customer</a>
-      <a class="nav-link" data-section="s10" href="#s10"><span class="nn">10</span>Fiber Optic 1-Core</a>
+      <a class="nav-link" data-section="s0" href="#s0"><span class="nn">01</span>Daily Performance</a>
+      <a class="nav-link" data-section="s1" href="#s1"><span class="nn">02</span>Tren Penjualan (Sales)</a>
+      <a class="nav-link" data-section="s2" href="#s2"><span class="nn">03</span>Tren Pendapatan (Revenue)</a>
+      <a class="nav-link" data-section="s3" href="#s3"><span class="nn">04</span>Rasio Sales to Revenue</a>
+      <a class="nav-link" data-section="s4" href="#s4"><span class="nn">05</span>Performa &amp; Zona Wilayah</a>
+      <a class="nav-link" data-section="s5" href="#s5"><span class="nn">06</span>Kode Barang Terlaris</a>
+      <a class="nav-link" data-section="s6" href="#s6"><span class="nn">07</span>Stock &amp; PO Gudang</a>
+      <a class="nav-link" data-section="s7" href="#s7"><span class="nn">08</span>Delivery &amp; Ekspedisi</a>
+      <a class="nav-link" data-section="s8" href="#s8"><span class="nn">09</span>Piutang (AR) 2026</a>
+      <a class="nav-link" data-section="s9" href="#s9"><span class="nn">10</span>Frekuensi Customer</a>
+      <a class="nav-link" data-section="s10" href="#s10"><span class="nn">11</span>Fiber Optic 1-Core</a>
     </nav>
     <div class="sidebar-foot">
       <div class="updated-label">Terakhir Diperbarui</div>
@@ -248,6 +261,7 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
       </div>
 
       <div id="mainContent">
+      <div class="section" id="s0"></div>
         <div class="section" id="s1"></div>
         <div class="section" id="s2"></div>
         <div class="section" id="s3"></div>

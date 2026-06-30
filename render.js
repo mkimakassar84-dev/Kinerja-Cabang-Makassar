@@ -87,6 +87,122 @@ function fmtRupiahShort(n) {
 }
 
 /* ==========================================================================
+   SECTION 00 — DAILY PERFORMANCE (Lampiran Detail Transaksi Harian)
+   Sumber: sheet Grand Data 2026 (transaksi mentah, sudah dinormalisasi via
+   normalizeGrandData di calc.js). Tabel ini menampilkan baris transaksi apa
+   adanya (bukan agregat) sehingga tetap diurutkan terbaru dulu, dan bisa
+   difilter per bulan + dicari berdasarkan nama customer / no invoice.
+   ========================================================================== */
+let dailyPerfMonth = 'all'; // 'all' atau '0'..'11' (indeks bulan)
+let dailyPerfSearch = '';
+
+function renderDailyPerformanceSection(m) {
+  const tx2026 = filterYear(m.transactions, CURRENT_YEAR);
+
+  const monthOptions = MONTH_NAMES_ID.map((label, idx) => `<option value="${idx}">${label}</option>`).join('');
+
+  const html = `
+    <div class="section-head">
+      <div class="eyebrow">01 &mdash; Lampiran Harian</div>
+      <h2>Daily Performance Cabang Makassar</h2>
+      <p class="lede">Rincian transaksi harian dari sheet Grand Data 2026, mencakup seluruh invoice MKI &amp; CFN tahun 2026. Gunakan filter bulan dan kolom pencarian untuk menelusuri transaksi tertentu.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head daily-perf-controls">
+        <div class="filter-field">
+          <label for="dailyPerfMonthSelect">Filter Bulan</label>
+          <select id="dailyPerfMonthSelect" class="select-input">
+            <option value="all">Semua Bulan</option>
+            ${monthOptions}
+          </select>
+        </div>
+        <div class="filter-field filter-field-grow">
+          <label for="dailyPerfSearchInput">Cari Customer / No Invoice</label>
+          <input type="text" id="dailyPerfSearchInput" class="text-input" placeholder="Ketik nama customer atau no invoice&hellip;" />
+        </div>
+      </div>
+      <p class="panel-note" id="dailyPerfCount"></p>
+      <div class="table-scroll">
+        <table class="data-table data-table-compact" id="tblDailyPerf">
+          <thead>
+            <tr>
+              <th>Order Date</th><th>No Invoice</th><th>Payment</th><th>Customer</th>
+              <th>Kode Barang</th><th>Qty</th><th>Amount</th><th>Status</th>
+              <th>Company</th><th>Koli</th><th>Stage</th><th>Status Ekspedisi</th>
+              <th>Lokasi</th><th>Tgl Terkirim</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  document.getElementById('s0').innerHTML = html;
+
+  renderDailyPerformanceTable(tx2026);
+
+  document.getElementById('dailyPerfMonthSelect').addEventListener('change', (e) => {
+    dailyPerfMonth = e.target.value;
+    renderDailyPerformanceTable(tx2026);
+  });
+  document.getElementById('dailyPerfSearchInput').addEventListener('input', (e) => {
+    dailyPerfSearch = e.target.value;
+    renderDailyPerformanceTable(tx2026);
+  });
+}
+
+function renderDailyPerformanceTable(tx2026) {
+  let rows = tx2026;
+
+  if (dailyPerfMonth !== 'all') {
+    const monthIdx = parseInt(dailyPerfMonth, 10);
+    rows = rows.filter(t => t.orderDate && t.orderDate.getMonth() === monthIdx);
+  }
+
+  const q = dailyPerfSearch.trim().toUpperCase();
+  if (q) {
+    rows = rows.filter(t => t.customer.includes(q) || t.noInvoice.toUpperCase().includes(q));
+  }
+
+  // Urutkan terbaru dulu agar transaksi hari ini langsung terlihat di atas.
+  rows = [...rows].sort((a, b) => (b.orderDate?.getTime() || 0) - (a.orderDate?.getTime() || 0));
+
+  const countLabel = dailyPerfMonth === 'all'
+    ? `Menampilkan <strong>${fmtNum(rows.length)}</strong> transaksi dari seluruh tahun 2026.`
+    : `Menampilkan <strong>${fmtNum(rows.length)}</strong> transaksi pada bulan <strong>${MONTH_NAMES_ID[parseInt(dailyPerfMonth, 10)]}</strong>.`;
+  document.getElementById('dailyPerfCount').innerHTML = countLabel;
+
+  const MAX_ROWS = 1500; // batas render agar tabel tetap ringan untuk filter "Semua Bulan"
+  const shown = rows.slice(0, MAX_ROWS);
+
+  document.querySelector('#tblDailyPerf tbody').innerHTML = shown.length
+    ? shown.map(t => `
+      <tr>
+        <td>${fmtDateShort(t.orderDate)}</td>
+        <td>${escapeHtml(t.noInvoice)}</td>
+        <td>${escapeHtml(t.payment)}</td>
+        <td>${escapeHtml(t.customer)}</td>
+        <td>${escapeHtml(t.kodeBarang)}</td>
+        <td>${fmtNum(t.qty)}</td>
+        <td>${fmtRupiah(t.amount)}</td>
+        <td>${escapeHtml(t.statusKirim)}</td>
+        <td>${escapeHtml(t.company)}</td>
+        <td>${fmtNum(t.koli)}</td>
+        <td>${escapeHtml(t.stage)}</td>
+        <td>${escapeHtml(t.statusEkspedisi)}</td>
+        <td>${escapeHtml(t.lokasi)}</td>
+        <td>${fmtDateShort(t.tglTerkirim)}</td>
+      </tr>
+    `).join('')
+    : `<tr><td colspan="14" class="empty-row">Tidak ada transaksi yang cocok dengan filter ini.</td></tr>`;
+
+  if (rows.length > MAX_ROWS) {
+    document.getElementById('dailyPerfCount').innerHTML += ` <span class="panel-note-warn">(menampilkan ${fmtNum(MAX_ROWS)} baris pertama, persempit filter untuk melihat sisanya)</span>`;
+  }
+}
+
+/* ==========================================================================
    SECTION 01 — TREN SALES
    ========================================================================== */
 let salesViewMode = 'bulanan'; // bulanan | kuartal | semester
@@ -99,7 +215,7 @@ function renderSalesSection(m) {
 
   const html = `
     <div class="section-head">
-      <div class="eyebrow">01 &mdash; Penjualan</div>
+      <div class="eyebrow">02 &mdash; Penjualan</div>
       <h2>Tren Penjualan (Sales) Tahun 2026</h2>
       <p class="lede">Analisis pergerakan nilai penjualan dari sheet Grand Data 2026, mencakup ringkasan invoice dan customer unik, komparasi terhadap tahun 2025, serta pembagian kontribusi antar perusahaan.</p>
     </div>
@@ -287,7 +403,7 @@ function renderRevenueSection(m) {
 
   const html = `
     <div class="section-head">
-      <div class="eyebrow">02 &mdash; Pendapatan</div>
+      <div class="eyebrow">03 &mdash; Pendapatan</div>
       <h2>Tren Pendapatan (Revenue) Tahun 2026</h2>
       <p class="lede">Revenue dihitung dari pelunasan yang benar-benar diterima (sheet Rev SUM), berbeda dengan Sales yang mencatat nilai transaksi saat invoice terbit.</p>
     </div>
@@ -456,7 +572,7 @@ function renderRatioSection(m) {
 
   const html = `
     <div class="section-head">
-      <div class="eyebrow">03 &mdash; Rasio</div>
+      <div class="eyebrow">04 &mdash; Rasio</div>
       <h2>Rasio Sales terhadap Revenue 2026</h2>
       <p class="lede">Mengukur seberapa besar nilai penjualan yang sudah benar-benar terkonversi menjadi pendapatan (lunas dibayar). Sales bersumber dari Grand Data 2026, Revenue dari Rev SUM.</p>
     </div>
@@ -555,7 +671,7 @@ function renderZonaSection(m) {
 
   const html = `
     <div class="section-head">
-      <div class="eyebrow">04 &mdash; Wilayah</div>
+      <div class="eyebrow">05 &mdash; Wilayah</div>
       <h2>Performa &amp; Zona Wilayah Kabupaten/Kota</h2>
       <p class="lede">Pembagian zona berdasarkan total invoice unik tahun 2026 (sheet KPI Monitoring). Zona <strong>Merah</strong>: 0&ndash;20 invoice, <strong>Kuning</strong>: 20&ndash;50 invoice, <strong>Hijau</strong>: lebih dari 50 invoice.</p>
     </div>
@@ -719,7 +835,7 @@ function renderTopProductsSection(m) {
 
   const html = `
     <div class="section-head">
-      <div class="eyebrow">05 &mdash; Produk</div>
+      <div class="eyebrow">06 &mdash; Produk</div>
       <h2>Kode Barang Terlaris 2026</h2>
       <p class="lede">Peringkat kode barang berdasarkan nilai penjualan dan quantity terjual sepanjang tahun 2026, dari sheet Grand Data 2026, lengkap dengan pembagian per perusahaan.</p>
     </div>
@@ -806,7 +922,7 @@ function renderStockSection(m) {
 
   const html = `
     <div class="section-head">
-      <div class="eyebrow">06 &mdash; Gudang</div>
+      <div class="eyebrow">07 &mdash; Gudang</div>
       <h2>Stock Barang &amp; PO Gudang</h2>
       <p class="lede">Stock tersedia hari ini dari sheet Stock GD MKS (kolom Total Stock by Company), serta analisis PO Gudang yang datanya mulai tersedia sejak Maret 2026.</p>
     </div>
@@ -970,7 +1086,7 @@ function renderDeliverySection(m) {
 
   const html = `
     <div class="section-head">
-      <div class="eyebrow">07 &mdash; Pengiriman</div>
+      <div class="eyebrow">08 &mdash; Pengiriman</div>
       <h2>Delivery Same Day &amp; Cut Off, serta Ekspedisi</h2>
       <p class="lede">Seluruh data pengiriman bersumber dari sheet Grand Data 2026: status pengiriman (Same Day/Cut Off) dan jalur ekspedisi yang digunakan.</p>
     </div>
@@ -1061,7 +1177,7 @@ function renderARSection(m) {
 
   const html = `
     <div class="section-head">
-      <div class="eyebrow">08 &mdash; Piutang</div>
+      <div class="eyebrow">09 &mdash; Piutang</div>
       <h2>Piutang (AR) &amp; Sisa Saldo Piutang 2026</h2>
       <p class="lede">Sumber data: sheet AR 2026. Rasio AR mengukur seberapa besar nilai sales yang masih belum tertagih.</p>
     </div>
@@ -1164,7 +1280,7 @@ function renderCustFreqSection(m) {
 
   const html = `
     <div class="section-head">
-      <div class="eyebrow">09 &mdash; Customer</div>
+      <div class="eyebrow">10 &mdash; Customer</div>
       <h2>Frekuensi Pembelanjaan Customer</h2>
       <p class="lede">Analisis frekuensi transaksi (jumlah invoice unik) dan nominal pembelanjaan per customer sepanjang tahun 2026, termasuk identifikasi customer yang sudah tidak aktif.</p>
     </div>
@@ -1264,7 +1380,7 @@ function renderFiberOpticSection(m) {
 
   const html = `
     <div class="section-head">
-      <div class="eyebrow">10 &mdash; Fiber Optic</div>
+      <div class="eyebrow">11 &mdash; Fiber Optic</div>
       <h2>Tren Kabel Fiber Optic 1-Core</h2>
       <p class="lede">Khusus 5 kode barang: KSFO028, KSFO108, KSFO083, KSFO113, dan KSFO128, dari sheet Grand Data 2026.</p>
     </div>
@@ -1418,6 +1534,7 @@ function renderDashboard(metrics) {
     day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
+  renderDailyPerformanceSection(metrics);
   renderSalesSection(metrics);
   renderRevenueSection(metrics);
   renderRatioSection(metrics);
