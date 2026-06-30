@@ -261,11 +261,12 @@ function renderYoySalesTable(yoy) {
 }
 
 function renderSalesByCompanyChart(byco) {
+  const colorMapSales = { MKI: PALETTE.terra, CFN: PALETTE.sage };
   makeChart('chartSalesByCompany', {
     type: 'doughnut',
     data: {
       labels: byco.companies.map(c => c.company),
-      datasets: [{ data: byco.companies.map(c => c.sales), backgroundColor: [PALETTE.terra, PALETTE.sage], borderWidth: 0 }],
+      datasets: [{ data: byco.companies.map(c => c.sales), backgroundColor: byco.companies.map(c => colorMapSales[c.company] || PALETTE.slate), borderWidth: 0 }],
     },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '62%',
@@ -431,11 +432,12 @@ function renderYoyRevTable(yoy) {
 }
 
 function renderRevByCompanyChart(byco) {
+  const colorMap = { MKI: PALETTE.terra, CFN: PALETTE.sage };
   makeChart('chartRevByCompany', {
     type: 'doughnut',
     data: {
       labels: byco.companies.map(c => c.company),
-      datasets: [{ data: byco.companies.map(c => c.revenue), backgroundColor: [PALETTE.sage, PALETTE.terra], borderWidth: 0 }],
+      datasets: [{ data: byco.companies.map(c => c.revenue), backgroundColor: byco.companies.map(c => colorMap[c.company] || PALETTE.slate), borderWidth: 0 }],
     },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '62%',
@@ -892,7 +894,7 @@ function renderStockSection(m) {
 function renderStockChart(st) {
   makeChart('chartStock', {
     type: 'doughnut',
-    data: { labels: ['MKI', 'CFN'], datasets: [{ data: [st.totalStockMKI, st.totalStockCFN], backgroundColor: [PALETTE.terra, PALETTE.sage], borderWidth: 0 }] },
+    data: { labels: ['MKI', 'CFN'], datasets: [{ data: [st.totalStockMKI, st.totalStockCFN], backgroundColor: [PALETTE.terra, PALETTE.sage], borderWidth: 0 }] }, // label & data sudah manual sinkron MKI lalu CFN
     options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtNum(ctx.parsed)} unit` } } } },
   });
 }
@@ -1129,9 +1131,10 @@ function renderAgingChart(ar) {
 
 function renderARByCompanyChart(ar) {
   const cos = Object.keys(ar.byCompany);
+  const colorMap = { MKI: PALETTE.terra, CFN: PALETTE.sage };
   makeChart('chartARByCompany', {
     type: 'doughnut',
-    data: { labels: cos, datasets: [{ data: cos.map(c => ar.byCompany[c].sisaSaldo), backgroundColor: [PALETTE.terra, PALETTE.sage], borderWidth: 0 }] },
+    data: { labels: cos, datasets: [{ data: cos.map(c => ar.byCompany[c].sisaSaldo), backgroundColor: cos.map(c => colorMap[c] || PALETTE.slate), borderWidth: 0 }] },
     options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtRupiah(ctx.parsed)}` } } } },
   });
 }
