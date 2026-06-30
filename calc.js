@@ -497,6 +497,7 @@ function buildPoGudang(poRows) {
   const itemsDitunggu = items.filter(i => i.statusBarang === 'ditunggu');
   const totalQtyDiterima = sum(itemsDiterima, i => i.qtyDiterimaReal); // angka real dari kolom J
   const totalQtyRetur = sum(itemsRetur, i => i.qtyDiterimaReal);
+  const totalQtyDipesanRetur = sum(itemsRetur, i => i.qty); // qty yang dipesan tapi tidak sampai (diretur)
   const totalQtyDitunggu = sum(itemsDitunggu, i => i.qty); // belum ada qty diterima karena masih ditunggu
   const completeCount = itemsDiterima.length;
 
@@ -523,7 +524,7 @@ function buildPoGudang(poRows) {
   });
 
   return {
-    items, totalPO, totalQtyPO, totalQtyDiterima, totalQtyRetur, totalQtyDitunggu,
+    items, totalPO, totalQtyPO, totalQtyDiterima, totalQtyRetur, totalQtyDitunggu, totalQtyDipesanRetur,
     completeCount, byCompany, monthly: Object.values(monthly).sort((a,b)=>a.key.localeCompare(b.key)),
   };
 }

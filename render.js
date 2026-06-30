@@ -862,7 +862,7 @@ function renderStockSection(m) {
 
     <div class="panel">
       <h3>Analisis PO Gudang</h3>
-      <p class="panel-note">Data PO Gudang baru tersedia mulai Maret 2026. Total ${fmtNum(po.totalPO)} PO, ${fmtNum(po.totalQtyPO)} unit dipesan &mdash; ${fmtNum(po.totalQtyDiterima)} unit sudah diterima di gudang Makassar, ${fmtNum(po.totalQtyRetur)} unit diretur (stock pusat kosong), ${fmtNum(po.totalQtyDitunggu)} unit masih ditunggu (No Surat Jalan dari pusat belum diterima).</p>
+      <p class="panel-note">Data PO Gudang baru tersedia mulai Maret 2026. Total ${fmtNum(po.totalPO)} PO, ${fmtNum(po.totalQtyPO)} unit dipesan &mdash; ${fmtNum(po.totalQtyDiterima)} unit sudah diterima di gudang Makassar, ${fmtNum(po.totalQtyDipesanRetur)} unit diretur (dipesan namun stock pusat kosong sehingga 0 unit sampai di gudang), ${fmtNum(po.totalQtyDitunggu)} unit masih ditunggu (No Surat Jalan dari pusat belum diterima). Qty Diterima dihitung dari kolom Quantity Diterima (GD MKS) sehingga dapat berbeda dari Qty Dipesan apabila terjadi kelebihan atau kekurangan kiriman.</p>
       <div class="two-col">
         <div class="chart-wrap chart-wrap-sm"><canvas id="chartPoGudang"></canvas></div>
         <div class="company-cards">
