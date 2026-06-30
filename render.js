@@ -99,7 +99,7 @@ const DAILY_PERF_PAGE_SIZE = 20;
 // State per sub-tab, terpisah supaya filter/halaman tidak saling timpa
 // ketika berpindah tab.
 const dailyPerfState = {
-  sales:    { month: 'all', search: '', page: 1 },
+  sales:    { month: 'all', search: '', page: 1, date: null },
   revenue:  { month: 'all', search: '', page: 1 },
   ar:       { month: 'all', search: '', page: 1 },
   delivery: { month: 'all', search: '', page: 1 },
@@ -220,11 +220,18 @@ function renderDpSalesPanel(tx2026) {
           <label for="dpSalesMonth">Filter Bulan</label>
           ${dpMonthSelectHtml('dpSalesMonth')}
         </div>
+        <div class="filter-field">
+          <label for="dpSalesDate">Filter Tanggal (Rekap Harian)</label>
+          <input type="date" id="dpSalesDate" class="select-input" min="2026-01-01" max="2026-12-31" />
+        </div>
         <div class="filter-field filter-field-grow">
           <label for="dpSalesSearch">Cari Customer / No Invoice</label>
           <input type="text" id="dpSalesSearch" class="text-input" placeholder="Ketik nama customer atau no invoice&hellip;" />
         </div>
       </div>
+
+      <div id="dpSalesDateRecap" class="hidden"></div>
+
       <p class="panel-note" id="dpSalesCount"></p>
       <div class="table-scroll">
         <table class="data-table data-table-compact" id="dpSalesTable">
@@ -244,10 +251,78 @@ function renderDpSalesPanel(tx2026) {
   `;
   document.getElementById('dpPanel-sales').innerHTML = html;
 
+  // Format Date -> 'YYYY-MM-DD' di waktu lokal (bukan UTC), supaya cocok
+  // dengan nilai <input type="date"> dan tidak bergeser satu hari.
+  const toIsoDateLocal = (d) => {
+    if (!d) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const renderDateRecap = () => {
+    const recapEl = document.getElementById('dpSalesDateRecap');
+    const state = dailyPerfState.sales;
+    if (!state.date) {
+      recapEl.classList.add('hidden');
+      recapEl.innerHTML = '';
+      return;
+    }
+    const rowsOnDate = tx2026.filter(t => t.orderDate && toIsoDateLocal(t.orderDate) === state.date);
+
+    const totalInvoiceUnik = uniqueCount(rowsOnDate, t => t.noInvoice);
+    const totalSales = sum(rowsOnDate, t => t.amount);
+
+    const byKode = {};
+    rowsOnDate.forEach(t => {
+      const kode = t.kodeBarang || 'TIDAK TERCATAT';
+      if (!byKode[kode]) byKode[kode] = { kode, qty: 0 };
+      byKode[kode].qty += t.qty;
+    });
+    const kodeList = Object.values(byKode).sort((a, b) => b.qty - a.qty);
+
+    const dateLabel = new Date(state.date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    recapEl.classList.remove('hidden');
+    recapEl.innerHTML = `
+      <div class="panel-note" style="margin-top:0;">Rekap untuk tanggal <strong>${dateLabel}</strong>:</div>
+      <div class="kpi-grid kpi-grid-3">
+        <div class="kpi-card">
+          <div class="kpi-label">Invoice Unik</div>
+          <div class="kpi-value">${fmtNum(totalInvoiceUnik)}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Nominal Sales</div>
+          <div class="kpi-value">${fmtRupiah(totalSales)}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Kode Barang Unik Keluar</div>
+          <div class="kpi-value">${fmtNum(kodeList.length)}</div>
+        </div>
+      </div>
+      ${kodeList.length ? `
+        <div class="mini-table-title">Rincian Kode Barang Keluar</div>
+        <div class="table-scroll">
+          <table class="data-table data-table-compact" id="dpSalesKodeTable">
+            <thead><tr><th>Kode Barang</th><th>Total Qty</th></tr></thead>
+            <tbody>
+              ${kodeList.map(k => `<tr><td>${escapeHtml(k.kode)}</td><td>${fmtNum(k.qty)}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : `<p class="panel-note">Tidak ada transaksi pada tanggal ini.</p>`}
+    `;
+  };
+
   const renderTable = () => {
     const state = dailyPerfState.sales;
     let rows = tx2026;
-    if (state.month !== 'all') {
+    if (state.date) {
+      // Filter tanggal spesifik aktif: lebih presisi daripada filter bulan,
+      // sehingga filter bulan diabaikan selama tanggal masih terpilih.
+      rows = rows.filter(t => t.orderDate && toIsoDateLocal(t.orderDate) === state.date);
+    } else if (state.month !== 'all') {
       const monthIdx = parseInt(state.month, 10);
       rows = rows.filter(t => t.orderDate && t.orderDate.getMonth() === monthIdx);
     }
@@ -262,8 +337,11 @@ function renderDpSalesPanel(tx2026) {
     const startIdx = (state.page - 1) * DAILY_PERF_PAGE_SIZE;
     const shown = rows.slice(startIdx, startIdx + DAILY_PERF_PAGE_SIZE);
 
+    const periodLabel = state.date
+      ? `tanggal <strong>${new Date(state.date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>`
+      : dpPeriodLabel(state.month);
     document.getElementById('dpSalesCount').innerHTML =
-      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${dpPeriodLabel(state.month)}.`;
+      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${periodLabel}.`;
 
     document.querySelector('#dpSalesTable tbody').innerHTML = shown.length
       ? shown.map(t => `
@@ -290,8 +368,22 @@ function renderDpSalesPanel(tx2026) {
   };
 
   renderTable();
-  document.getElementById('dpSalesMonth').addEventListener('change', (e) => {
+  renderDateRecap();
+  const monthSelectEl = document.getElementById('dpSalesMonth');
+  const syncMonthDisabledState = () => {
+    monthSelectEl.disabled = !!dailyPerfState.sales.date;
+  };
+  syncMonthDisabledState();
+
+  monthSelectEl.addEventListener('change', (e) => {
     dailyPerfState.sales.month = e.target.value; dailyPerfState.sales.page = 1; renderTable();
+  });
+  document.getElementById('dpSalesDate').addEventListener('change', (e) => {
+    dailyPerfState.sales.date = e.target.value || null;
+    dailyPerfState.sales.page = 1;
+    syncMonthDisabledState();
+    renderDateRecap();
+    renderTable();
   });
   document.getElementById('dpSalesSearch').addEventListener('input', (e) => {
     dailyPerfState.sales.search = e.target.value; dailyPerfState.sales.page = 1; renderTable();
