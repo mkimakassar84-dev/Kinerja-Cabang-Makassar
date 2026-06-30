@@ -814,6 +814,10 @@ function computeAllMetrics(sheetData) {
 
   const salesTrend = buildPeriodTrend(transactions, t => t.amount);
   const revTrend = buildRevenueTrend(revRows);
+  // Disimpan terpisah agar render.js (sub-section Revenue di Daily
+  // Performance) bisa menampilkan baris detail per transaksi tanpa
+  // perlu mengulang proses normalisasi dari sheetData mentah.
+  const revAllNormalized = normalizeRevSum(revRows);
   const invoiceCustomerSummary = buildInvoiceCustomerSummary(transactions);
   const yoyComparison = buildYoyComparison(salesSumRows);
   const salesByCompany = buildSalesByCompany(transactions);
@@ -829,7 +833,7 @@ function computeAllMetrics(sheetData) {
   const fiberOptic1Core = buildFiberOptic1Core(transactions);
 
   return {
-    transactions, salesTrend, revTrend, invoiceCustomerSummary, yoyComparison,
+    transactions, salesTrend, revTrend, revAllNormalized, invoiceCustomerSummary, yoyComparison,
     salesByCompany, revenueByCompany, salesToRevenueRatio, zonaWilayah,
     topProducts, stock, poGudang, delivery, ar, customerFrequency, fiberOptic1Core,
     generatedAt: new Date(),

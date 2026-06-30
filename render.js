@@ -87,46 +87,147 @@ function fmtRupiahShort(n) {
 }
 
 /* ==========================================================================
-   SECTION 00 — DAILY PERFORMANCE (Lampiran Detail Transaksi Harian)
-   Sumber: sheet Grand Data 2026 (transaksi mentah, sudah dinormalisasi via
-   normalizeGrandData di calc.js). Tabel diurutkan dari tanggal 1 ke akhir
-   bulan (ascending), bisa difilter per bulan + dicari berdasarkan nama
-   customer / no invoice, dan dipaginasi 100 baris per halaman.
+   SECTION 00 — DAILY PERFORMANCE (Lampiran Harian, 4 Sub-Section)
+   Sub-section: Sales (Grand Data 2026), Revenue (Rev SUM kolom A-E),
+   Account Receivable (AR 2026 kolom L-S), Delivery (Grand Data 2026,
+   fokus status pengiriman). Setiap sub-section punya filter bulan +
+   search sendiri, diurutkan ascending berdasarkan tanggal, dipaginasi
+   20 baris per halaman, navigasi via tab horizontal (bukan scroll).
    ========================================================================== */
-let dailyPerfMonth = 'all'; // 'all' atau '0'..'11' (indeks bulan)
-let dailyPerfSearch = '';
-let dailyPerfPage = 1;
-const DAILY_PERF_PAGE_SIZE = 50;
+const DAILY_PERF_PAGE_SIZE = 20;
+
+// State per sub-tab, terpisah supaya filter/halaman tidak saling timpa
+// ketika berpindah tab.
+const dailyPerfState = {
+  sales:    { month: 'all', search: '', page: 1 },
+  revenue:  { month: 'all', search: '', page: 1 },
+  ar:       { month: 'all', search: '', page: 1 },
+  delivery: { month: 'all', search: '', page: 1 },
+};
+let dailyPerfActiveTab = 'sales';
 
 function renderDailyPerformanceSection(m) {
   const tx2026 = filterYear(m.transactions, CURRENT_YEAR);
-
-  const monthOptions = MONTH_NAMES_ID.map((label, idx) => `<option value="${idx}">${label}</option>`).join('');
+  const rev2026 = m.revAllNormalized.filter(r => r.paymentDate.getFullYear() === CURRENT_YEAR);
 
   const html = `
     <div class="section-head">
       <div class="eyebrow">01 &mdash; Lampiran Harian</div>
       <h2>Daily Performance Cabang Makassar</h2>
-      <p class="lede">Rincian transaksi harian dari sheet Grand Data 2026, mencakup seluruh invoice MKI &amp; CFN tahun 2026. Gunakan filter bulan dan kolom pencarian untuk menelusuri transaksi tertentu.</p>
+      <p class="lede">Rincian transaksi harian Sales, Revenue, Account Receivable, dan Delivery untuk Cabang Makassar tahun 2026. Pilih tab di bawah, lalu gunakan filter bulan dan kolom pencarian untuk menelusuri data tertentu.</p>
     </div>
 
+    <div class="subtab-bar" id="dailyPerfTabBar">
+      <button class="subtab-btn active" data-tab="sales">Sales</button>
+      <button class="subtab-btn" data-tab="revenue">Revenue</button>
+      <button class="subtab-btn" data-tab="ar">Account Receivable</button>
+      <button class="subtab-btn" data-tab="delivery">Delivery</button>
+    </div>
+
+    <div class="subtab-panel active" id="dpPanel-sales"></div>
+    <div class="subtab-panel" id="dpPanel-revenue"></div>
+    <div class="subtab-panel" id="dpPanel-ar"></div>
+    <div class="subtab-panel" id="dpPanel-delivery"></div>
+  `;
+  document.getElementById('s0').innerHTML = html;
+
+  document.getElementById('dailyPerfTabBar').addEventListener('click', (e) => {
+    const btn = e.target.closest('.subtab-btn');
+    if (!btn) return;
+    dailyPerfActiveTab = btn.dataset.tab;
+    document.querySelectorAll('#dailyPerfTabBar .subtab-btn').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('#s0 .subtab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(`dpPanel-${dailyPerfActiveTab}`).classList.add('active');
+  });
+
+  renderDpSalesPanel(tx2026);
+  renderDpRevenuePanel(rev2026);
+  renderDpArPanel(m.ar.items);
+  renderDpDeliveryPanel(tx2026);
+}
+
+/* ----- Helper generik: kerangka panel filter bulan + search + tabel + pagination ----- */
+function dpMonthSelectHtml(id) {
+  const monthOptions = MONTH_NAMES_ID.map((label, idx) => `<option value="${idx}">${label}</option>`).join('');
+  return `
+    <select id="${id}" class="select-input">
+      <option value="all">Semua Bulan</option>
+      ${monthOptions}
+    </select>
+  `;
+}
+
+function dpPeriodLabel(monthVal) {
+  return monthVal === 'all' ? 'seluruh tahun 2026' : `bulan <strong>${MONTH_NAMES_ID[parseInt(monthVal, 10)]}</strong>`;
+}
+
+function dpRangeLabel(totalRows, startIdx, shownLen) {
+  return totalRows
+    ? `${fmtNum(startIdx + 1)}&ndash;${fmtNum(startIdx + shownLen)} dari ${fmtNum(totalRows)}`
+    : '0';
+}
+
+function renderDpPagination(elId, state, totalPages, onRender) {
+  const el = document.getElementById(elId);
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+  const pages = [];
+  const windowSize = 7;
+  if (totalPages <= windowSize) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    let start = Math.max(2, state.page - 2);
+    let end = Math.min(totalPages - 1, state.page + 2);
+    if (start > 2) pages.push('...');
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (end < totalPages - 1) pages.push('...');
+    pages.push(totalPages);
+  }
+
+  el.innerHTML = `
+    <button class="page-btn page-nav" id="${elId}-prev" ${state.page === 1 ? 'disabled' : ''} aria-label="Halaman sebelumnya">&larr;</button>
+    ${pages.map(p => p === '...'
+      ? `<span class="page-ellipsis">&hellip;</span>`
+      : `<button class="page-btn ${p === state.page ? 'active' : ''}" data-page="${p}">${p}</button>`
+    ).join('')}
+    <button class="page-btn page-nav" id="${elId}-next" ${state.page === totalPages ? 'disabled' : ''} aria-label="Halaman berikutnya">&rarr;</button>
+  `;
+
+  el.querySelectorAll('.page-btn[data-page]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.page = parseInt(btn.dataset.page, 10);
+      onRender();
+      document.getElementById('s0').scrollTop = 0;
+    });
+  });
+  const prevBtn = document.getElementById(`${elId}-prev`);
+  const nextBtn = document.getElementById(`${elId}-next`);
+  if (prevBtn) prevBtn.addEventListener('click', () => {
+    if (state.page > 1) { state.page -= 1; onRender(); document.getElementById('s0').scrollTop = 0; }
+  });
+  if (nextBtn) nextBtn.addEventListener('click', () => {
+    if (state.page < totalPages) { state.page += 1; onRender(); document.getElementById('s0').scrollTop = 0; }
+  });
+}
+
+/* ----- Sub-section: SALES (Grand Data 2026, header lengkap) ----- */
+function renderDpSalesPanel(tx2026) {
+  const html = `
     <div class="panel">
       <div class="panel-head daily-perf-controls">
         <div class="filter-field">
-          <label for="dailyPerfMonthSelect">Filter Bulan</label>
-          <select id="dailyPerfMonthSelect" class="select-input">
-            <option value="all">Semua Bulan</option>
-            ${monthOptions}
-          </select>
+          <label for="dpSalesMonth">Filter Bulan</label>
+          ${dpMonthSelectHtml('dpSalesMonth')}
         </div>
         <div class="filter-field filter-field-grow">
-          <label for="dailyPerfSearchInput">Cari Customer / No Invoice</label>
-          <input type="text" id="dailyPerfSearchInput" class="text-input" placeholder="Ketik nama customer atau no invoice&hellip;" />
+          <label for="dpSalesSearch">Cari Customer / No Invoice</label>
+          <input type="text" id="dpSalesSearch" class="text-input" placeholder="Ketik nama customer atau no invoice&hellip;" />
         </div>
       </div>
-      <p class="panel-note" id="dailyPerfCount"></p>
+      <p class="panel-note" id="dpSalesCount"></p>
       <div class="table-scroll">
-        <table class="data-table data-table-compact" id="tblDailyPerf">
+        <table class="data-table data-table-compact" id="dpSalesTable">
           <thead>
             <tr>
               <th>Order Date</th><th>No Invoice</th><th>Payment</th><th>Customer</th>
@@ -138,126 +239,296 @@ function renderDailyPerformanceSection(m) {
           <tbody></tbody>
         </table>
       </div>
-      <div class="pagination" id="dailyPerfPagination"></div>
+      <div class="pagination" id="dpSalesPagination"></div>
     </div>
   `;
-  document.getElementById('s0').innerHTML = html;
+  document.getElementById('dpPanel-sales').innerHTML = html;
 
-  renderDailyPerformanceTable(tx2026);
+  const renderTable = () => {
+    const state = dailyPerfState.sales;
+    let rows = tx2026;
+    if (state.month !== 'all') {
+      const monthIdx = parseInt(state.month, 10);
+      rows = rows.filter(t => t.orderDate && t.orderDate.getMonth() === monthIdx);
+    }
+    const q = state.search.trim().toUpperCase();
+    if (q) rows = rows.filter(t => t.customer.includes(q) || t.noInvoice.toUpperCase().includes(q));
+    rows = [...rows].sort((a, b) => (a.orderDate?.getTime() || 0) - (b.orderDate?.getTime() || 0));
 
-  document.getElementById('dailyPerfMonthSelect').addEventListener('change', (e) => {
-    dailyPerfMonth = e.target.value;
-    dailyPerfPage = 1;
-    renderDailyPerformanceTable(tx2026);
+    const totalRows = rows.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / DAILY_PERF_PAGE_SIZE));
+    if (state.page > totalPages) state.page = totalPages;
+    if (state.page < 1) state.page = 1;
+    const startIdx = (state.page - 1) * DAILY_PERF_PAGE_SIZE;
+    const shown = rows.slice(startIdx, startIdx + DAILY_PERF_PAGE_SIZE);
+
+    document.getElementById('dpSalesCount').innerHTML =
+      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${dpPeriodLabel(state.month)}.`;
+
+    document.querySelector('#dpSalesTable tbody').innerHTML = shown.length
+      ? shown.map(t => `
+        <tr>
+          <td>${fmtDateShort(t.orderDate)}</td>
+          <td>${escapeHtml(t.noInvoice)}</td>
+          <td>${escapeHtml(t.payment)}</td>
+          <td>${escapeHtml(t.customer)}</td>
+          <td>${escapeHtml(t.kodeBarang)}</td>
+          <td>${fmtNum(t.qty)}</td>
+          <td>${fmtRupiah(t.amount)}</td>
+          <td>${escapeHtml(t.statusKirim)}</td>
+          <td>${escapeHtml(t.company)}</td>
+          <td>${fmtNum(t.koli)}</td>
+          <td>${escapeHtml(t.stage)}</td>
+          <td>${escapeHtml(t.statusEkspedisi)}</td>
+          <td>${escapeHtml(t.lokasi)}</td>
+          <td>${fmtDateShort(t.tglTerkirim)}</td>
+        </tr>
+      `).join('')
+      : `<tr><td colspan="14" class="empty-row">Tidak ada transaksi yang cocok dengan filter ini.</td></tr>`;
+
+    renderDpPagination('dpSalesPagination', state, totalPages, renderTable);
+  };
+
+  renderTable();
+  document.getElementById('dpSalesMonth').addEventListener('change', (e) => {
+    dailyPerfState.sales.month = e.target.value; dailyPerfState.sales.page = 1; renderTable();
   });
-  document.getElementById('dailyPerfSearchInput').addEventListener('input', (e) => {
-    dailyPerfSearch = e.target.value;
-    dailyPerfPage = 1;
-    renderDailyPerformanceTable(tx2026);
+  document.getElementById('dpSalesSearch').addEventListener('input', (e) => {
+    dailyPerfState.sales.search = e.target.value; dailyPerfState.sales.page = 1; renderTable();
   });
 }
 
-function renderDailyPerformanceTable(tx2026) {
-  let rows = tx2026;
-
-  if (dailyPerfMonth !== 'all') {
-    const monthIdx = parseInt(dailyPerfMonth, 10);
-    rows = rows.filter(t => t.orderDate && t.orderDate.getMonth() === monthIdx);
-  }
-
-  const q = dailyPerfSearch.trim().toUpperCase();
-  if (q) {
-    rows = rows.filter(t => t.customer.includes(q) || t.noInvoice.toUpperCase().includes(q));
-  }
-
-  // Urutkan dari tanggal 1 ke akhir bulan (ascending) sesuai kebutuhan lampiran harian.
-  rows = [...rows].sort((a, b) => (a.orderDate?.getTime() || 0) - (b.orderDate?.getTime() || 0));
-
-  const totalRows = rows.length;
-  const totalPages = Math.max(1, Math.ceil(totalRows / DAILY_PERF_PAGE_SIZE));
-  if (dailyPerfPage > totalPages) dailyPerfPage = totalPages;
-  if (dailyPerfPage < 1) dailyPerfPage = 1;
-
-  const startIdx = (dailyPerfPage - 1) * DAILY_PERF_PAGE_SIZE;
-  const shown = rows.slice(startIdx, startIdx + DAILY_PERF_PAGE_SIZE);
-
-  const periodLabel = dailyPerfMonth === 'all' ? 'seluruh tahun 2026' : `bulan <strong>${MONTH_NAMES_ID[parseInt(dailyPerfMonth, 10)]}</strong>`;
-  const rangeLabel = totalRows
-    ? `${fmtNum(startIdx + 1)}&ndash;${fmtNum(startIdx + shown.length)} dari ${fmtNum(totalRows)}`
-    : '0';
-  document.getElementById('dailyPerfCount').innerHTML =
-    `Menampilkan <strong>${rangeLabel}</strong> transaksi pada ${periodLabel}.`;
-
-  document.querySelector('#tblDailyPerf tbody').innerHTML = shown.length
-    ? shown.map(t => `
-      <tr>
-        <td>${fmtDateShort(t.orderDate)}</td>
-        <td>${escapeHtml(t.noInvoice)}</td>
-        <td>${escapeHtml(t.payment)}</td>
-        <td>${escapeHtml(t.customer)}</td>
-        <td>${escapeHtml(t.kodeBarang)}</td>
-        <td>${fmtNum(t.qty)}</td>
-        <td>${fmtRupiah(t.amount)}</td>
-        <td>${escapeHtml(t.statusKirim)}</td>
-        <td>${escapeHtml(t.company)}</td>
-        <td>${fmtNum(t.koli)}</td>
-        <td>${escapeHtml(t.stage)}</td>
-        <td>${escapeHtml(t.statusEkspedisi)}</td>
-        <td>${escapeHtml(t.lokasi)}</td>
-        <td>${fmtDateShort(t.tglTerkirim)}</td>
-      </tr>
-    `).join('')
-    : `<tr><td colspan="14" class="empty-row">Tidak ada transaksi yang cocok dengan filter ini.</td></tr>`;
-
-  renderDailyPerfPagination(totalPages, tx2026);
-}
-
-function renderDailyPerfPagination(totalPages, tx2026) {
-  const el = document.getElementById('dailyPerfPagination');
-  if (totalPages <= 1) {
-    el.innerHTML = '';
-    return;
-  }
-
-  // Tampilkan maksimal 7 nomor halaman sekaligus, dengan elipsis bila perlu,
-  // supaya navigasi tetap ringkas walau jumlah halaman besar.
-  const pages = [];
-  const windowSize = 7;
-  if (totalPages <= windowSize) {
-    for (let i = 1; i <= totalPages; i++) pages.push(i);
-  } else {
-    pages.push(1);
-    let start = Math.max(2, dailyPerfPage - 2);
-    let end = Math.min(totalPages - 1, dailyPerfPage + 2);
-    if (start > 2) pages.push('...');
-    for (let i = start; i <= end; i++) pages.push(i);
-    if (end < totalPages - 1) pages.push('...');
-    pages.push(totalPages);
-  }
-
-  el.innerHTML = `
-    <button class="page-btn page-nav" id="dailyPerfPrev" ${dailyPerfPage === 1 ? 'disabled' : ''} aria-label="Halaman sebelumnya">&larr;</button>
-    ${pages.map(p => p === '...'
-      ? `<span class="page-ellipsis">&hellip;</span>`
-      : `<button class="page-btn ${p === dailyPerfPage ? 'active' : ''}" data-page="${p}">${p}</button>`
-    ).join('')}
-    <button class="page-btn page-nav" id="dailyPerfNext" ${dailyPerfPage === totalPages ? 'disabled' : ''} aria-label="Halaman berikutnya">&rarr;</button>
+/* ----- Sub-section: REVENUE (Rev SUM, kolom A-E) ----- */
+function renderDpRevenuePanel(rev2026) {
+  const html = `
+    <div class="panel">
+      <div class="panel-head daily-perf-controls">
+        <div class="filter-field">
+          <label for="dpRevMonth">Filter Bulan</label>
+          ${dpMonthSelectHtml('dpRevMonth')}
+        </div>
+        <div class="filter-field filter-field-grow">
+          <label for="dpRevSearch">Cari Customer / No Faktur</label>
+          <input type="text" id="dpRevSearch" class="text-input" placeholder="Ketik nama customer atau no faktur&hellip;" />
+        </div>
+      </div>
+      <p class="panel-note" id="dpRevCount"></p>
+      <div class="table-scroll">
+        <table class="data-table data-table-compact" id="dpRevTable">
+          <thead>
+            <tr>
+              <th>Payment Date</th><th>No Faktur</th><th>Customer</th><th>Pelunasan</th><th>Company</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="dpRevPagination"></div>
+    </div>
   `;
+  document.getElementById('dpPanel-revenue').innerHTML = html;
 
-  el.querySelectorAll('.page-btn[data-page]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      dailyPerfPage = parseInt(btn.dataset.page, 10);
-      renderDailyPerformanceTable(tx2026);
-      document.getElementById('s0').scrollTop = 0;
-    });
+  const renderTable = () => {
+    const state = dailyPerfState.revenue;
+    let rows = rev2026;
+    if (state.month !== 'all') {
+      const monthIdx = parseInt(state.month, 10);
+      rows = rows.filter(r => r.paymentDate && r.paymentDate.getMonth() === monthIdx);
+    }
+    const q = state.search.trim().toUpperCase();
+    if (q) rows = rows.filter(r => r.customer.includes(q) || r.noFaktur.toUpperCase().includes(q));
+    rows = [...rows].sort((a, b) => (a.paymentDate?.getTime() || 0) - (b.paymentDate?.getTime() || 0));
+
+    const totalRows = rows.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / DAILY_PERF_PAGE_SIZE));
+    if (state.page > totalPages) state.page = totalPages;
+    if (state.page < 1) state.page = 1;
+    const startIdx = (state.page - 1) * DAILY_PERF_PAGE_SIZE;
+    const shown = rows.slice(startIdx, startIdx + DAILY_PERF_PAGE_SIZE);
+
+    document.getElementById('dpRevCount').innerHTML =
+      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${dpPeriodLabel(state.month)}.`;
+
+    document.querySelector('#dpRevTable tbody').innerHTML = shown.length
+      ? shown.map(r => `
+        <tr>
+          <td>${fmtDateShort(r.paymentDate)}</td>
+          <td>${escapeHtml(r.noFaktur)}</td>
+          <td>${escapeHtml(r.customer)}</td>
+          <td>${fmtRupiah(r.pelunasan)}</td>
+          <td>${escapeHtml(r.company)}</td>
+        </tr>
+      `).join('')
+      : `<tr><td colspan="5" class="empty-row">Tidak ada data yang cocok dengan filter ini.</td></tr>`;
+
+    renderDpPagination('dpRevPagination', state, totalPages, renderTable);
+  };
+
+  renderTable();
+  document.getElementById('dpRevMonth').addEventListener('change', (e) => {
+    dailyPerfState.revenue.month = e.target.value; dailyPerfState.revenue.page = 1; renderTable();
   });
-  const prevBtn = document.getElementById('dailyPerfPrev');
-  const nextBtn = document.getElementById('dailyPerfNext');
-  if (prevBtn) prevBtn.addEventListener('click', () => {
-    if (dailyPerfPage > 1) { dailyPerfPage -= 1; renderDailyPerformanceTable(tx2026); document.getElementById('s0').scrollTop = 0; }
+  document.getElementById('dpRevSearch').addEventListener('input', (e) => {
+    dailyPerfState.revenue.search = e.target.value; dailyPerfState.revenue.page = 1; renderTable();
   });
-  if (nextBtn) nextBtn.addEventListener('click', () => {
-    if (dailyPerfPage < totalPages) { dailyPerfPage += 1; renderDailyPerformanceTable(tx2026); document.getElementById('s0').scrollTop = 0; }
+}
+
+/* ----- Sub-section: ACCOUNT RECEIVABLE (AR 2026, kolom L-S) ----- */
+function renderDpArPanel(arItems) {
+  const ar2026 = arItems.filter(a => a.tanggal && a.tanggal.getFullYear() === CURRENT_YEAR);
+
+  const html = `
+    <div class="panel">
+      <div class="panel-head daily-perf-controls">
+        <div class="filter-field">
+          <label for="dpArMonth">Filter Bulan</label>
+          ${dpMonthSelectHtml('dpArMonth')}
+        </div>
+        <div class="filter-field filter-field-grow">
+          <label for="dpArSearch">Cari Customer / No Faktur</label>
+          <input type="text" id="dpArSearch" class="text-input" placeholder="Ketik nama customer atau no faktur&hellip;" />
+        </div>
+      </div>
+      <p class="panel-note" id="dpArCount"></p>
+      <div class="table-scroll">
+        <table class="data-table data-table-compact" id="dpArTable">
+          <thead>
+            <tr>
+              <th>Tanggal</th><th>No Faktur</th><th>Customer</th><th>Nilai Faktur</th>
+              <th>Sisa Saldo</th><th>Aging</th><th>Kategori</th><th>Company</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="dpArPagination"></div>
+    </div>
+  `;
+  document.getElementById('dpPanel-ar').innerHTML = html;
+
+  const renderTable = () => {
+    const state = dailyPerfState.ar;
+    let rows = ar2026;
+    if (state.month !== 'all') {
+      const monthIdx = parseInt(state.month, 10);
+      rows = rows.filter(a => a.tanggal && a.tanggal.getMonth() === monthIdx);
+    }
+    const q = state.search.trim().toUpperCase();
+    if (q) rows = rows.filter(a => a.customer.includes(q) || a.noFaktur.toUpperCase().includes(q));
+    rows = [...rows].sort((a, b) => (a.tanggal?.getTime() || 0) - (b.tanggal?.getTime() || 0));
+
+    const totalRows = rows.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / DAILY_PERF_PAGE_SIZE));
+    if (state.page > totalPages) state.page = totalPages;
+    if (state.page < 1) state.page = 1;
+    const startIdx = (state.page - 1) * DAILY_PERF_PAGE_SIZE;
+    const shown = rows.slice(startIdx, startIdx + DAILY_PERF_PAGE_SIZE);
+
+    document.getElementById('dpArCount').innerHTML =
+      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> data piutang pada ${dpPeriodLabel(state.month)}.`;
+
+    document.querySelector('#dpArTable tbody').innerHTML = shown.length
+      ? shown.map(a => `
+        <tr>
+          <td>${fmtDateShort(a.tanggal)}</td>
+          <td>${escapeHtml(a.noFaktur)}</td>
+          <td>${escapeHtml(a.customer)}</td>
+          <td>${fmtRupiah(a.nilaiFaktur)}</td>
+          <td>${fmtRupiah(a.sisaSaldo)}</td>
+          <td>${escapeHtml(a.aging)}</td>
+          <td>${escapeHtml(a.kategori)}</td>
+          <td>${escapeHtml(a.company)}</td>
+        </tr>
+      `).join('')
+      : `<tr><td colspan="8" class="empty-row">Tidak ada data yang cocok dengan filter ini.</td></tr>`;
+
+    renderDpPagination('dpArPagination', state, totalPages, renderTable);
+  };
+
+  renderTable();
+  document.getElementById('dpArMonth').addEventListener('change', (e) => {
+    dailyPerfState.ar.month = e.target.value; dailyPerfState.ar.page = 1; renderTable();
+  });
+  document.getElementById('dpArSearch').addEventListener('input', (e) => {
+    dailyPerfState.ar.search = e.target.value; dailyPerfState.ar.page = 1; renderTable();
+  });
+}
+
+/* ----- Sub-section: DELIVERY (Grand Data 2026, fokus status pengiriman) ----- */
+function renderDpDeliveryPanel(tx2026) {
+  const html = `
+    <div class="panel">
+      <div class="panel-head daily-perf-controls">
+        <div class="filter-field">
+          <label for="dpDelMonth">Filter Bulan</label>
+          ${dpMonthSelectHtml('dpDelMonth')}
+        </div>
+        <div class="filter-field filter-field-grow">
+          <label for="dpDelSearch">Cari Customer / No Invoice</label>
+          <input type="text" id="dpDelSearch" class="text-input" placeholder="Ketik nama customer atau no invoice&hellip;" />
+        </div>
+      </div>
+      <p class="panel-note" id="dpDelCount"></p>
+      <div class="table-scroll">
+        <table class="data-table data-table-compact" id="dpDelTable">
+          <thead>
+            <tr>
+              <th>Order Date</th><th>No Invoice</th><th>Customer</th><th>Status</th>
+              <th>Status Ekspedisi</th><th>Lokasi</th><th>Tgl Terkirim</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="dpDelPagination"></div>
+    </div>
+  `;
+  document.getElementById('dpPanel-delivery').innerHTML = html;
+
+  const renderTable = () => {
+    const state = dailyPerfState.delivery;
+    let rows = tx2026;
+    if (state.month !== 'all') {
+      const monthIdx = parseInt(state.month, 10);
+      rows = rows.filter(t => t.orderDate && t.orderDate.getMonth() === monthIdx);
+    }
+    const q = state.search.trim().toUpperCase();
+    if (q) rows = rows.filter(t => t.customer.includes(q) || t.noInvoice.toUpperCase().includes(q));
+    rows = [...rows].sort((a, b) => (a.orderDate?.getTime() || 0) - (b.orderDate?.getTime() || 0));
+
+    const totalRows = rows.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / DAILY_PERF_PAGE_SIZE));
+    if (state.page > totalPages) state.page = totalPages;
+    if (state.page < 1) state.page = 1;
+    const startIdx = (state.page - 1) * DAILY_PERF_PAGE_SIZE;
+    const shown = rows.slice(startIdx, startIdx + DAILY_PERF_PAGE_SIZE);
+
+    document.getElementById('dpDelCount').innerHTML =
+      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${dpPeriodLabel(state.month)}.`;
+
+    document.querySelector('#dpDelTable tbody').innerHTML = shown.length
+      ? shown.map(t => `
+        <tr>
+          <td>${fmtDateShort(t.orderDate)}</td>
+          <td>${escapeHtml(t.noInvoice)}</td>
+          <td>${escapeHtml(t.customer)}</td>
+          <td>${escapeHtml(t.statusKirim)}</td>
+          <td>${escapeHtml(t.statusEkspedisi)}</td>
+          <td>${escapeHtml(t.lokasi)}</td>
+          <td>${fmtDateShort(t.tglTerkirim)}</td>
+        </tr>
+      `).join('')
+      : `<tr><td colspan="7" class="empty-row">Tidak ada transaksi yang cocok dengan filter ini.</td></tr>`;
+
+    renderDpPagination('dpDelPagination', state, totalPages, renderTable);
+  };
+
+  renderTable();
+  document.getElementById('dpDelMonth').addEventListener('change', (e) => {
+    dailyPerfState.delivery.month = e.target.value; dailyPerfState.delivery.page = 1; renderTable();
+  });
+  document.getElementById('dpDelSearch').addEventListener('input', (e) => {
+    dailyPerfState.delivery.search = e.target.value; dailyPerfState.delivery.page = 1; renderTable();
   });
 }
 
