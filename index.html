@@ -214,12 +214,41 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
 .error-box p{color:var(--ink-soft); margin-top:6px;}
 .hidden{display:none !important;}
 
+.hamburger-btn{
+  display:none; position:fixed; top:14px; left:14px; z-index:60;
+  width:42px; height:42px; border-radius:10px; border:1px solid var(--line);
+  background:var(--paper); box-shadow:var(--shadow); cursor:pointer;
+  align-items:center; justify-content:center; flex-direction:column; gap:4px;
+}
+.hamburger-btn span{display:block; width:18px; height:2px; background:var(--ink); border-radius:2px;}
+.mobile-title{
+  display:none; position:fixed; top:0; left:0; right:0; height:58px; z-index:55;
+  background:var(--paper); border-bottom:1px solid var(--line);
+  align-items:center; justify-content:center; font-family:'Source Serif 4', serif;
+  font-weight:600; font-size:15px; color:var(--ink); padding:0 60px;
+  text-align:center; box-shadow:var(--shadow);
+}
+.sidebar-overlay{display:none; position:fixed; inset:0; background:rgba(58,53,48,.45); z-index:65;}
+.sidebar-overlay.open{display:block;}
+.slide-nav-fab{display:none; position:fixed; right:16px; bottom:20px; z-index:55; flex-direction:column; gap:10px;}
+.slide-nav-fab button{
+  width:46px; height:46px; border-radius:50%; border:1px solid var(--line); background:var(--paper);
+  box-shadow:var(--shadow); color:var(--ink-soft); font-size:18px; cursor:pointer;
+}
+.slide-nav-fab button:disabled{opacity:.35;}
+
 @media (max-width: 980px){
-  .sidebar{position:relative; width:100%; height:auto; border-right:none; border-bottom:1px solid var(--line);}
-  .main{margin-left:0; max-width:100%;}
+  .hamburger-btn, .mobile-title, .slide-nav-fab{display:flex;}
+  .sidebar{
+    position:fixed; top:0; left:0; width:260px; max-width:80vw; height:100%; z-index:70;
+    transform:translateX(-100%); transition:transform .25s ease; border-right:1px solid var(--line);
+  }
+  .sidebar.open{transform:translateX(0);}
+  .main{margin-left:0; max-width:100%; padding-top:58px;}
+  .cover, .section{padding:24px 18px;}
   .kpi-grid, .kpi-grid-3, .kpi-grid-4{grid-template-columns:1fr 1fr;}
   .two-col{grid-template-columns:1fr;}
-  .section, .cover{padding:32px 22px;}
+  #errorPanel{left:18px; right:18px; top:64px;}
 }
 </style>
 </head>
@@ -228,6 +257,14 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
 <div id="loadingOverlay">
   <div class="loader-spinner"></div>
   <div class="loader-text">Memuat data dari Google Sheets&hellip;</div>
+</div>
+
+<button class="hamburger-btn" id="hamburgerBtn" aria-label="Buka menu navigasi"><span></span><span></span><span></span></button>
+<div class="mobile-title" id="mobileTitle">Dashboard Kinerja Makassar</div>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+<div class="slide-nav-fab">
+  <button id="fabPrev" aria-label="Section sebelumnya">&uarr;</button>
+  <button id="fabNext" aria-label="Section berikutnya">&darr;</button>
 </div>
 
 <div class="app-shell">
@@ -297,7 +334,33 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
   const navLinks = document.querySelectorAll('.nav-link');
   const sections = Array.from(navLinks).map(a => document.getElementById(a.dataset.section));
   const allSlides = [document.getElementById('sCover'), ...sections];
+  const slideTitles = ['Dashboard Kinerja Makassar', ...Array.from(navLinks).map(a => a.textContent.replace(/^\d+/, '').trim())];
   let currentIdx = 0;
+
+  const sidebar = document.querySelector('.sidebar');
+  const sidebarOverlay = document.getElementById('sidebarOverlay');
+  const hamburgerBtn = document.getElementById('hamburgerBtn');
+  const mobileTitle = document.getElementById('mobileTitle');
+  const fabPrev = document.getElementById('fabPrev');
+  const fabNext = document.getElementById('fabNext');
+
+  function openSidebar() {
+    sidebar.classList.add('open');
+    sidebarOverlay.classList.add('open');
+  }
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('open');
+  }
+  hamburgerBtn.addEventListener('click', openSidebar);
+  sidebarOverlay.addEventListener('click', closeSidebar);
+
+  function updateFabState() {
+    fabPrev.disabled = currentIdx === 0;
+    fabNext.disabled = currentIdx === allSlides.length - 1;
+  }
+  fabPrev.addEventListener('click', () => showSlide(currentIdx - 1));
+  fabNext.addEventListener('click', () => showSlide(currentIdx + 1));
 
   function showSlide(idx) {
     currentIdx = Math.max(0, Math.min(allSlides.length - 1, idx));
@@ -306,6 +369,9 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
     });
     navLinks.forEach((a, i) => a.classList.toggle('active', i === currentIdx - 1));
     if (allSlides[currentIdx]) allSlides[currentIdx].scrollTop = 0;
+    mobileTitle.textContent = slideTitles[currentIdx] || 'Dashboard Kinerja Makassar';
+    updateFabState();
+    closeSidebar();
   }
 
   navLinks.forEach((a, i) => {
