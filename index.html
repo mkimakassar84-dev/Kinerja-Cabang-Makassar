@@ -129,6 +129,18 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
 .text-input{width:100%;}
 .panel-note-warn{color:var(--amber); font-style:italic;}
 
+.pagination{display:flex; align-items:center; gap:6px; margin-top:16px; flex-wrap:wrap;}
+.page-btn{
+  min-width:32px; height:32px; padding:0 8px; border:1px solid var(--line); background:var(--paper);
+  color:var(--ink-soft); border-radius:7px; font-family:'IBM Plex Mono', monospace; font-size:12.5px;
+  cursor:pointer; transition:background .15s, color .15s, border-color .15s;
+}
+.page-btn:hover:not(:disabled){background:var(--cream-deep); color:var(--ink);}
+.page-btn.active{background:var(--terra); border-color:var(--terra); color:#fff; font-weight:600;}
+.page-btn:disabled{opacity:.35; cursor:not-allowed;}
+.page-nav{font-family:'IBM Plex Sans', sans-serif; font-weight:600;}
+.page-ellipsis{color:var(--slate); padding:0 4px; font-family:'IBM Plex Mono', monospace; font-size:12.5px;}
+
 .data-table{width:100%; border-collapse:collapse; font-size:13px; margin-top:8px;}
 .data-table th{
   text-align:left; padding:10px 12px; background:var(--cream-deep); color:var(--ink-soft);

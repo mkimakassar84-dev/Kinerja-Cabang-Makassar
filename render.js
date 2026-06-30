@@ -89,12 +89,14 @@ function fmtRupiahShort(n) {
 /* ==========================================================================
    SECTION 00 — DAILY PERFORMANCE (Lampiran Detail Transaksi Harian)
    Sumber: sheet Grand Data 2026 (transaksi mentah, sudah dinormalisasi via
-   normalizeGrandData di calc.js). Tabel ini menampilkan baris transaksi apa
-   adanya (bukan agregat) sehingga tetap diurutkan terbaru dulu, dan bisa
-   difilter per bulan + dicari berdasarkan nama customer / no invoice.
+   normalizeGrandData di calc.js). Tabel diurutkan dari tanggal 1 ke akhir
+   bulan (ascending), bisa difilter per bulan + dicari berdasarkan nama
+   customer / no invoice, dan dipaginasi 100 baris per halaman.
    ========================================================================== */
 let dailyPerfMonth = 'all'; // 'all' atau '0'..'11' (indeks bulan)
 let dailyPerfSearch = '';
+let dailyPerfPage = 1;
+const DAILY_PERF_PAGE_SIZE = 100;
 
 function renderDailyPerformanceSection(m) {
   const tx2026 = filterYear(m.transactions, CURRENT_YEAR);
@@ -136,6 +138,7 @@ function renderDailyPerformanceSection(m) {
           <tbody></tbody>
         </table>
       </div>
+      <div class="pagination" id="dailyPerfPagination"></div>
     </div>
   `;
   document.getElementById('s0').innerHTML = html;
@@ -144,10 +147,12 @@ function renderDailyPerformanceSection(m) {
 
   document.getElementById('dailyPerfMonthSelect').addEventListener('change', (e) => {
     dailyPerfMonth = e.target.value;
+    dailyPerfPage = 1;
     renderDailyPerformanceTable(tx2026);
   });
   document.getElementById('dailyPerfSearchInput').addEventListener('input', (e) => {
     dailyPerfSearch = e.target.value;
+    dailyPerfPage = 1;
     renderDailyPerformanceTable(tx2026);
   });
 }
@@ -165,16 +170,23 @@ function renderDailyPerformanceTable(tx2026) {
     rows = rows.filter(t => t.customer.includes(q) || t.noInvoice.toUpperCase().includes(q));
   }
 
-  // Urutkan terbaru dulu agar transaksi hari ini langsung terlihat di atas.
-  rows = [...rows].sort((a, b) => (b.orderDate?.getTime() || 0) - (a.orderDate?.getTime() || 0));
+  // Urutkan dari tanggal 1 ke akhir bulan (ascending) sesuai kebutuhan lampiran harian.
+  rows = [...rows].sort((a, b) => (a.orderDate?.getTime() || 0) - (b.orderDate?.getTime() || 0));
 
-  const countLabel = dailyPerfMonth === 'all'
-    ? `Menampilkan <strong>${fmtNum(rows.length)}</strong> transaksi dari seluruh tahun 2026.`
-    : `Menampilkan <strong>${fmtNum(rows.length)}</strong> transaksi pada bulan <strong>${MONTH_NAMES_ID[parseInt(dailyPerfMonth, 10)]}</strong>.`;
-  document.getElementById('dailyPerfCount').innerHTML = countLabel;
+  const totalRows = rows.length;
+  const totalPages = Math.max(1, Math.ceil(totalRows / DAILY_PERF_PAGE_SIZE));
+  if (dailyPerfPage > totalPages) dailyPerfPage = totalPages;
+  if (dailyPerfPage < 1) dailyPerfPage = 1;
 
-  const MAX_ROWS = 1500; // batas render agar tabel tetap ringan untuk filter "Semua Bulan"
-  const shown = rows.slice(0, MAX_ROWS);
+  const startIdx = (dailyPerfPage - 1) * DAILY_PERF_PAGE_SIZE;
+  const shown = rows.slice(startIdx, startIdx + DAILY_PERF_PAGE_SIZE);
+
+  const periodLabel = dailyPerfMonth === 'all' ? 'seluruh tahun 2026' : `bulan <strong>${MONTH_NAMES_ID[parseInt(dailyPerfMonth, 10)]}</strong>`;
+  const rangeLabel = totalRows
+    ? `${fmtNum(startIdx + 1)}&ndash;${fmtNum(startIdx + shown.length)} dari ${fmtNum(totalRows)}`
+    : '0';
+  document.getElementById('dailyPerfCount').innerHTML =
+    `Menampilkan <strong>${rangeLabel}</strong> transaksi pada ${periodLabel}.`;
 
   document.querySelector('#tblDailyPerf tbody').innerHTML = shown.length
     ? shown.map(t => `
@@ -197,9 +209,56 @@ function renderDailyPerformanceTable(tx2026) {
     `).join('')
     : `<tr><td colspan="14" class="empty-row">Tidak ada transaksi yang cocok dengan filter ini.</td></tr>`;
 
-  if (rows.length > MAX_ROWS) {
-    document.getElementById('dailyPerfCount').innerHTML += ` <span class="panel-note-warn">(menampilkan ${fmtNum(MAX_ROWS)} baris pertama, persempit filter untuk melihat sisanya)</span>`;
+  renderDailyPerfPagination(totalPages, tx2026);
+}
+
+function renderDailyPerfPagination(totalPages, tx2026) {
+  const el = document.getElementById('dailyPerfPagination');
+  if (totalPages <= 1) {
+    el.innerHTML = '';
+    return;
   }
+
+  // Tampilkan maksimal 7 nomor halaman sekaligus, dengan elipsis bila perlu,
+  // supaya navigasi tetap ringkas walau jumlah halaman besar.
+  const pages = [];
+  const windowSize = 7;
+  if (totalPages <= windowSize) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    let start = Math.max(2, dailyPerfPage - 2);
+    let end = Math.min(totalPages - 1, dailyPerfPage + 2);
+    if (start > 2) pages.push('...');
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (end < totalPages - 1) pages.push('...');
+    pages.push(totalPages);
+  }
+
+  el.innerHTML = `
+    <button class="page-btn page-nav" id="dailyPerfPrev" ${dailyPerfPage === 1 ? 'disabled' : ''} aria-label="Halaman sebelumnya">&larr;</button>
+    ${pages.map(p => p === '...'
+      ? `<span class="page-ellipsis">&hellip;</span>`
+      : `<button class="page-btn ${p === dailyPerfPage ? 'active' : ''}" data-page="${p}">${p}</button>`
+    ).join('')}
+    <button class="page-btn page-nav" id="dailyPerfNext" ${dailyPerfPage === totalPages ? 'disabled' : ''} aria-label="Halaman berikutnya">&rarr;</button>
+  `;
+
+  el.querySelectorAll('.page-btn[data-page]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      dailyPerfPage = parseInt(btn.dataset.page, 10);
+      renderDailyPerformanceTable(tx2026);
+      document.getElementById('s0').scrollTop = 0;
+    });
+  });
+  const prevBtn = document.getElementById('dailyPerfPrev');
+  const nextBtn = document.getElementById('dailyPerfNext');
+  if (prevBtn) prevBtn.addEventListener('click', () => {
+    if (dailyPerfPage > 1) { dailyPerfPage -= 1; renderDailyPerformanceTable(tx2026); document.getElementById('s0').scrollTop = 0; }
+  });
+  if (nextBtn) nextBtn.addEventListener('click', () => {
+    if (dailyPerfPage < totalPages) { dailyPerfPage += 1; renderDailyPerformanceTable(tx2026); document.getElementById('s0').scrollTop = 0; }
+  });
 }
 
 /* ==========================================================================
