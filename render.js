@@ -140,7 +140,7 @@ function renderDailyPerformanceSection(m) {
     document.getElementById(`dpPanel-${dailyPerfActiveTab}`).classList.add('active');
   });
 
-  renderDpSalesPanel(tx2026, m.yoyComparison.months);
+  renderDpSalesPanel(tx2026, m.yoyComparison.months, m.invoiceTargetKpi);
   renderDpRevenuePanel(rev2026);
   renderDpArPanel(m.ar.items);
   renderDpDeliveryPanel(tx2026);
@@ -212,7 +212,7 @@ function renderDpPagination(elId, state, totalPages, onRender) {
 }
 
 /* ----- Sub-section: SALES (Grand Data 2026, header lengkap) ----- */
-function renderDpSalesPanel(tx2026, yoyMonths) {
+function renderDpSalesPanel(tx2026, yoyMonths, invoiceTargetKpi) {
   const html = `
     <div class="panel" id="dpSalesKpiPanel"></div>
 
@@ -263,13 +263,18 @@ function renderDpSalesPanel(tx2026, yoyMonths) {
     return `${y}-${m}-${day}`;
   };
 
-  // Jumlah hari kerja (Senin-Sabtu, Minggu dikecualikan) dalam satu bulan,
-  // dipakai untuk membagi rata Target Bulanan menjadi Target Harian.
-  const countWorkingDaysInMonth = (year, monthIdx) => {
-    const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+  // Sisa hari kerja (Senin-Sabtu, Minggu dikecualikan) dari suatu tanggal
+  // acuan sampai akhir bulan yang sama (inklusif tanggal acuan). Ini meniru
+  // persis formula sheet KPI MONITORING:
+  // NETWORKDAYS.INTL(tanggal_acuan, EOMONTH(tanggal_acuan,0), 11)
+  // — parameter weekend "11" berarti hanya Minggu yang dikecualikan.
+  const countRemainingWorkingDays = (fromDateObj) => {
+    const y = fromDateObj.getFullYear();
+    const m = fromDateObj.getMonth();
+    const lastDay = new Date(y, m + 1, 0).getDate();
     let count = 0;
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dow = new Date(year, monthIdx, d).getDay(); // 0=Minggu .. 6=Sabtu
+    for (let d = fromDateObj.getDate(); d <= lastDay; d++) {
+      const dow = new Date(y, m, d).getDay(); // 0=Minggu .. 6=Sabtu
       if (dow !== 0) count += 1;
     }
     return count;
@@ -280,6 +285,39 @@ function renderDpSalesPanel(tx2026, yoyMonths) {
   const kpiStatusPillHtml = (achieved) => achieved
     ? `<span class="achv-pill achv-hit">&#10003; ACHIEVE</span>`
     : `<span class="achv-pill achv-miss">&#9888; BELUM ACHIEVE</span>`;
+
+  // Baris KPI "kejar target": targetSisa = (Target Bulanan - Aktual Bulan
+  // Berjalan) / Sisa Hari Kerja, persis formula sheet KPI MONITORING.
+  // Saat targetSisa <= 0, artinya target BULANAN sudah terlampaui sejak
+  // sebelum tanggal acuan -> status tetap ACHIEVE, tanpa kekurangan harian.
+  const kpiAchvRowChase = (label, dailyActual, targetSisa, hasMonthlyTarget, fmtFn) => {
+    if (!hasMonthlyTarget) {
+      return `
+        <tr>
+          <td>${escapeHtml(label)}</td>
+          <td>${fmtFn(dailyActual)}</td>
+          <td>&ndash;</td>
+          <td>&ndash;</td>
+          <td><span class="achv-pill achv-na">&ndash; Tanpa Target</span></td>
+          <td>&ndash;</td>
+        </tr>
+      `;
+    }
+    const targetTerlampaui = targetSisa <= 0;
+    const achieved = targetTerlampaui || dailyActual >= targetSisa;
+    const pct = targetSisa > 0 ? (dailyActual / targetSisa) * 100 : 100;
+    const kurang = !targetTerlampaui && targetSisa > dailyActual ? targetSisa - dailyActual : 0;
+    return `
+      <tr>
+        <td>${escapeHtml(label)}</td>
+        <td>${fmtFn(dailyActual)}</td>
+        <td>${targetTerlampaui ? '<span style="color:var(--slate); font-style:italic;">Target tercapai</span>' : fmtFn(targetSisa)}</td>
+        <td>${targetTerlampaui ? '&ndash;' : fmtPct(pct)}</td>
+        <td>${kpiStatusPillHtml(achieved)}</td>
+        <td>${kurang > 0 ? `<span class="delta delta-down" style="font-size:13px;">${fmtFn(kurang)}</span>` : '&ndash;'}</td>
+      </tr>
+    `;
+  };
 
   const kpiAchvRow = (label, actual, target, fmtFn) => {
     const hasTarget = target > 0;
@@ -312,11 +350,14 @@ function renderDpSalesPanel(tx2026, yoyMonths) {
 
     // --- DAILY: mengikuti filter tanggal yang sudah dipilih; kalau belum
     // dipilih, default ke hari ini (TODAY) supaya panel selalu terisi.
+    // Tanggal ini juga menjadi TITIK ACUAN untuk hitung sisa hari kerja
+    // (persis seperti $B$1 pada formula sheet KPI MONITORING, hanya saja
+    // di dashboard ini mengikuti tanggal yang sedang difilter, bukan selalu
+    // hari ini).
     const dailyDateStr = state.date || toIsoDateLocal(TODAY);
     const dailyDateObj = new Date(dailyDateStr + 'T00:00:00');
     const dailyLabel = dailyDateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
     const monthIdxForDaily = dailyDateObj.getMonth();
-    const yearForDaily = dailyDateObj.getFullYear();
 
     const rowsOnDailyDate = tx2026.filter(t => t.orderDate && toIsoDateLocal(t.orderDate) === dailyDateStr);
     const dailySalesActual = sum(rowsOnDailyDate, t => t.amount);
@@ -327,10 +368,29 @@ function renderDpSalesPanel(tx2026, yoyMonths) {
       dailyByCompany[co] = { sales: sum(rowsCo, t => t.amount), invoice: uniqueCount(rowsCo, t => t.noInvoice) };
     });
 
+    // Aktual bulan berjalan S/D tanggal acuan (bukan satu bulan penuh),
+    // karena formula "kejar target" sheet menghitung sisa kebutuhan
+    // berdasarkan progres sampai tanggal acuan saja.
+    const rowsInMonthUpToDaily = tx2026.filter(t =>
+      t.orderDate && t.orderDate.getMonth() === monthIdxForDaily && t.orderDate <= dailyDateObj
+    );
+    const monthToDateSalesActual = sum(rowsInMonthUpToDaily, t => t.amount);
+    const monthToDateInvoiceActual = uniqueCount(rowsInMonthUpToDaily, t => t.noInvoice);
+
     const monthDataForDaily = yoyMonths.find(mo => mo.monthIdx === monthIdxForDaily);
-    const monthlyTargetForDaily = monthDataForDaily ? monthDataForDaily.targetSalesRevenue : 0;
-    const workingDaysForDaily = countWorkingDaysInMonth(yearForDaily, monthIdxForDaily);
-    const dailyTargetSales = workingDaysForDaily > 0 ? monthlyTargetForDaily / workingDaysForDaily : 0;
+    const monthlyTargetSalesForDaily = monthDataForDaily ? monthDataForDaily.targetSalesRevenue : 0;
+    const remainingWorkingDays = countRemainingWorkingDays(dailyDateObj);
+
+    // Target Harian = (Target Bulanan - Aktual Bulan Berjalan s/d tanggal
+    // acuan) / Sisa Hari Kerja. Nilai <= 0 berarti target bulanan sudah
+    // terlampaui sebelum/at tanggal acuan ini.
+    const dailyTargetSalesChase = remainingWorkingDays > 0
+      ? (monthlyTargetSalesForDaily - monthToDateSalesActual) / remainingWorkingDays
+      : 0;
+    const monthlyInvoiceTarget = invoiceTargetKpi.monthlyInvoiceTarget;
+    const dailyTargetInvoiceChase = remainingWorkingDays > 0
+      ? (monthlyInvoiceTarget - monthToDateInvoiceActual) / remainingWorkingDays
+      : 0;
 
     // --- MONTHLY: mengikuti filter bulan yang sudah dipilih; kalau "Semua
     // Bulan" (filter tanggal juga kosong), default ke bulan berjalan.
@@ -349,19 +409,39 @@ function renderDpSalesPanel(tx2026, yoyMonths) {
     });
 
     const monthDataForMonthly = yoyMonths.find(mo => mo.monthIdx === monthIdxForMonthly);
-    const monthlyTargetSales = monthDataForMonthly ? monthDataForMonthly.targetSalesRevenue : 0;
+    const monthlySalesTarget = monthDataForMonthly ? monthDataForMonthly.targetSalesRevenue : 0;
+
+    // Target Invoice Bulanan dari KPI MONITORING hanya valid untuk SATU
+    // bulan yang sedang aktif ditulis manual di sheet (activeMonthLabel),
+    // karena sheet ini bukan tabel 12-bulan seperti Sales SUM. Tampilkan
+    // peringatan kalau bulan yang dilihat di dashboard berbeda dari bulan
+    // aktif di sheet, supaya tidak disalahartikan.
+    const activeMonthLabelUpper = (invoiceTargetKpi.activeMonthLabel || '').toUpperCase();
+    const monthlyLabelUpper = monthLabel.toUpperCase();
+    const invoiceTargetMatchesMonth = activeMonthLabelUpper && activeMonthLabelUpper === monthlyLabelUpper;
+    const monthlyInvoiceTargetForDisplay = invoiceTargetMatchesMonth ? monthlyInvoiceTarget : 0;
+
+    const dailyInvoiceMatchesMonth = activeMonthLabelUpper && activeMonthLabelUpper === MONTH_NAMES_ID[monthIdxForDaily].toUpperCase();
+    const dailyTargetInvoiceForDisplay = dailyInvoiceMatchesMonth ? dailyTargetInvoiceChase : null;
+
+    const invoiceTargetWarningHtml = (!invoiceTargetMatchesMonth && activeMonthLabelUpper)
+      ? `<p class="panel-note panel-note-warn">Target Invoice Bulanan di sheet KPI MONITORING saat ini diisi untuk bulan <strong>${escapeHtml(invoiceTargetKpi.activeMonthLabel)}</strong>, sehingga tidak ditampilkan untuk bulan ${escapeHtml(monthLabel)} di atas. Perbarui sheet KPI MONITORING untuk melihat target invoice bulan ini.</p>`
+      : '';
 
     kpiEl.innerHTML = `
       <h3>Rekap Pencapaian Sales</h3>
-      <p class="panel-note">Pencapaian Sales terhadap target, dihitung dari sheet Sales SUM (Target Bulanan, kolom AT). Target Harian = Target Bulanan &divide; jumlah hari kerja (Senin&ndash;Sabtu) pada bulan terkait.</p>
+      <p class="panel-note">Target Sales dari sheet Sales SUM (Target Bulanan, kolom AT). Target Invoice dari sheet KPI MONITORING (Target Invoice Bulanan, sel C32). Target Harian dihitung dengan formula kejar-target yang sama seperti sheet: (Target Bulanan &minus; Aktual Bulan Berjalan) &divide; Sisa Hari Kerja (Senin&ndash;Sabtu) sejak tanggal terpilih. Nilai target harian yang sudah "Target tercapai" berarti target bulanan sudah terlampaui.</p>
+      ${invoiceTargetWarningHtml}
 
       <h4 class="sub-heading">Harian &mdash; ${escapeHtml(dailyLabel)}</h4>
       <div class="table-scroll">
         <table class="data-table data-table-compact">
           <thead><tr><th>Metrik</th><th>Aktual</th><th>Target Harian</th><th>Capaian</th><th>Status</th><th>Kekurangan</th></tr></thead>
           <tbody>
-            ${kpiAchvRow('Total Sales', dailySalesActual, dailyTargetSales, fmtRupiah)}
-            ${kpiAchvRow('Total Invoice', dailyInvoiceActual, 0, fmtNum)}
+            ${kpiAchvRowChase('Total Sales', dailySalesActual, dailyTargetSalesChase, monthlyTargetSalesForDaily > 0, fmtRupiah)}
+            ${dailyTargetInvoiceForDisplay !== null
+              ? kpiAchvRowChase('Total Invoice', dailyInvoiceActual, dailyTargetInvoiceForDisplay, monthlyInvoiceTarget > 0, fmtNum)
+              : kpiAchvRow('Total Invoice', dailyInvoiceActual, 0, fmtNum)}
           </tbody>
         </table>
       </div>
@@ -381,8 +461,8 @@ function renderDpSalesPanel(tx2026, yoyMonths) {
         <table class="data-table data-table-compact">
           <thead><tr><th>Metrik</th><th>Aktual</th><th>Target Bulanan</th><th>Capaian</th><th>Status</th><th>Kekurangan</th></tr></thead>
           <tbody>
-            ${kpiAchvRow('Total Sales 1 Bulan', monthlySalesActual, monthlyTargetSales, fmtRupiah)}
-            ${kpiAchvRow('Total Invoice 1 Bulan', monthlyInvoiceActual, 0, fmtNum)}
+            ${kpiAchvRow('Total Sales 1 Bulan', monthlySalesActual, monthlySalesTarget, fmtRupiah)}
+            ${kpiAchvRow('Total Invoice 1 Bulan', monthlyInvoiceActual, monthlyInvoiceTargetForDisplay, fmtNum)}
           </tbody>
         </table>
       </div>

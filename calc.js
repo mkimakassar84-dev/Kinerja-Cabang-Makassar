@@ -370,6 +370,33 @@ function buildZonaWilayah(kpiRows, transactions) {
 }
 
 /* ==========================================================================
+   TARGET INVOICE BULANAN (dari sheet KPI MONITORING, area "MONTHLY KPI
+   MEASUREMENT" yang formatnya bukan tabel kolom biasa, melainkan layout
+   custom per baris). Diambil berdasarkan POSISI BARIS ABSOLUT di sheet asli
+   (bukan nama header), karena area ini adalah blok ringkasan KPI, bukan
+   tabel data tabular:
+   - Baris 22 kolom B = label bulan aktif (mis. "JUNI"), diisi & diganti
+     MANUAL oleh user setiap pergantian bulan — bukan formula otomatis.
+   - Baris 32 kolom C = Target Invoice Bulanan (TOTAL INVOICE 1 BULAN),
+     nilai tetap yang juga diisi manual oleh user.
+   Karena headerRow sheet ini = 1, baris ke-N pada sheet asli berada pada
+   index (N - 2) di kpiRows (index 0-based, setelah baris header dibuang).
+   Maka baris 22 -> kpiRows[20], baris 32 -> kpiRows[30].
+   ========================================================================== */
+function buildInvoiceTargetFromKpiSheet(kpiRows) {
+  const ROW22_IDX = 20; // baris 22 di sheet -> index 20 di kpiRows
+  const ROW32_IDX = 30; // baris 32 di sheet -> index 30 di kpiRows
+
+  const row22 = kpiRows[ROW22_IDX] ? kpiRows[ROW22_IDX].__row || [] : [];
+  const row32 = kpiRows[ROW32_IDX] ? kpiRows[ROW32_IDX].__row || [] : [];
+
+  const activeMonthLabel = toStr(row22[1]).toUpperCase(); // kolom B, mis. "JUNI"
+  const monthlyInvoiceTarget = toNumber(row32[2]); // kolom C
+
+  return { activeMonthLabel, monthlyInvoiceTarget };
+}
+
+/* ==========================================================================
    POIN 5 — KODE BARANG TERLARIS 2026 (by sales & quantity), by company
    ========================================================================== */
 function buildTopProducts(transactions, topN = 15) {
@@ -831,11 +858,12 @@ function computeAllMetrics(sheetData) {
   const ar = buildAR(arRows, invoiceCustomerSummary.totalSales);
   const customerFrequency = buildCustomerFrequency(transactions);
   const fiberOptic1Core = buildFiberOptic1Core(transactions);
+  const invoiceTargetKpi = buildInvoiceTargetFromKpiSheet(kpiRows);
 
   return {
     transactions, salesTrend, revTrend, revAllNormalized, invoiceCustomerSummary, yoyComparison,
     salesByCompany, revenueByCompany, salesToRevenueRatio, zonaWilayah,
-    topProducts, stock, poGudang, delivery, ar, customerFrequency, fiberOptic1Core,
+    topProducts, stock, poGudang, delivery, ar, customerFrequency, fiberOptic1Core, invoiceTargetKpi,
     generatedAt: new Date(),
   };
 }
