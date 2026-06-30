@@ -249,7 +249,15 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
   .kpi-grid, .kpi-grid-3, .kpi-grid-4{grid-template-columns:1fr 1fr;}
   .two-col{grid-template-columns:1fr;}
   #errorPanel{left:18px; right:18px; top:64px;}
+
+  /* Tabel data tetap selebar versi desktop (kolom tidak menyempit/wrap),
+     digeser horizontal lewat swipe agar semua data tetap terlihat utuh. */
+  .data-table{display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap; width:auto; max-width:100%;}
+  .data-table thead, .data-table tbody, .data-table tfoot, .data-table tr{display:table; width:100%; table-layout:auto;}
+  .data-table th, .data-table td{white-space:nowrap;}
+  .table-scroll table{min-width:0;}
 }
+
 </style>
 </head>
 <body>
