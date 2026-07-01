@@ -97,8 +97,11 @@ async function load(){
   const rM=S(rv.filter(r=>r.dt.getMonth()===mi),r=>r.p),rD=S(rv.filter(r=>Iso(r.dt)===ts),r=>r.p);
   const rMm=S(rv.filter(r=>r.dt.getMonth()===mi&&r.co==='MKI'),r=>r.p),rMc=S(rv.filter(r=>r.dt.getMonth()===mi&&r.co==='CFN'),r=>r.p);
   const rDm=S(rv.filter(r=>Iso(r.dt)===ts&&r.co==='MKI'),r=>r.p),rDc=S(rv.filter(r=>Iso(r.dt)===ts&&r.co==='CFN'),r=>r.p);
-  const MN=['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'];
-  let tgS=0;for(const row of sR.slice(1)){if((row[0]||'').toUpperCase().includes(MN[mi].slice(0,3))){tgS=N(row[45]);break;}}
+  // Target dari KPI Monitoring: baris "TOTAL SALES 1 BULAN", kolom index 2
+  let tgS=0;
+  for(const row of kR){
+    if((row[0]||'').includes('TOTAL SALES 1 BULAN')){tgS=N(row[2]);break;}
+  }
   const pSm=tgS>0?(sM/tgS)*100:0,pRm=tgS>0?(rM/tgS)*100:0;
   const TI=280;
   return {T,ts,mi,rd,sM,sD,sMm,sMc,sDm,sDc,tgS,pSm,tgSd:rd>0?(tgS-sM)/rd:0,iM,iD,iMm,iMc,iDm,iDc,TI,tgId:rd>0?(TI-iM)/rd:0,rM,rD,rMm,rMc,rDm,rDc,pRm,tgRd:rd>0?(tgS-rM)/rd:0,oPm,oPd,oTm,oHm,oTd,oHd,oMKI_t,oMKI_h,oCFN_t,oCFN_h,qty,kol,lkMl,lkDl,lkM:Object.keys(lkM).length,lkD:Object.keys(lkD).length};
