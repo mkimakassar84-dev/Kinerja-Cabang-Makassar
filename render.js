@@ -99,7 +99,7 @@ const DAILY_PERF_PAGE_SIZE = 20;
 // State per sub-tab, terpisah supaya filter/halaman tidak saling timpa
 // ketika berpindah tab.
 const dailyPerfState = {
-  sales:    { month: 'all', search: '', page: 1, date: null },
+  sales:    { month: 'all', search: '', page: 1 },
   revenue:  { month: 'all', search: '', page: 1 },
   ar:       { month: 'all', search: '', page: 1 },
   delivery: { month: 'all', search: '', page: 1 },
@@ -140,7 +140,7 @@ function renderDailyPerformanceSection(m) {
     document.getElementById(`dpPanel-${dailyPerfActiveTab}`).classList.add('active');
   });
 
-  renderDpSalesPanel(tx2026, m.yoyComparison.months, m.invoiceTargetKpi);
+  renderDpSalesPanel(tx2026);
   renderDpRevenuePanel(rev2026);
   renderDpArPanel(m.ar.items);
   renderDpDeliveryPanel(tx2026);
@@ -212,28 +212,19 @@ function renderDpPagination(elId, state, totalPages, onRender) {
 }
 
 /* ----- Sub-section: SALES (Grand Data 2026, header lengkap) ----- */
-function renderDpSalesPanel(tx2026, yoyMonths, invoiceTargetKpi) {
+function renderDpSalesPanel(tx2026) {
   const html = `
-    <div class="panel" id="dpSalesKpiPanel"></div>
-
     <div class="panel">
       <div class="panel-head daily-perf-controls">
         <div class="filter-field">
           <label for="dpSalesMonth">Filter Bulan</label>
           ${dpMonthSelectHtml('dpSalesMonth')}
         </div>
-        <div class="filter-field">
-          <label for="dpSalesDate">Filter Tanggal (Rekap Harian)</label>
-          <input type="date" id="dpSalesDate" class="select-input" min="2026-01-01" max="2026-12-31" />
-        </div>
         <div class="filter-field filter-field-grow">
           <label for="dpSalesSearch">Cari Customer / No Invoice</label>
           <input type="text" id="dpSalesSearch" class="text-input" placeholder="Ketik nama customer atau no invoice&hellip;" />
         </div>
       </div>
-
-      <div id="dpSalesDateRecap" class="hidden"></div>
-
       <p class="panel-note" id="dpSalesCount"></p>
       <div class="table-scroll">
         <table class="data-table data-table-compact" id="dpSalesTable">
@@ -253,294 +244,10 @@ function renderDpSalesPanel(tx2026, yoyMonths, invoiceTargetKpi) {
   `;
   document.getElementById('dpPanel-sales').innerHTML = html;
 
-  // Format Date -> 'YYYY-MM-DD' di waktu lokal (bukan UTC), supaya cocok
-  // dengan nilai <input type="date"> dan tidak bergeser satu hari.
-  const toIsoDateLocal = (d) => {
-    if (!d) return '';
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
-
-  // Sisa hari kerja (Senin-Sabtu, Minggu dikecualikan) dari suatu tanggal
-  // acuan sampai akhir bulan yang sama (inklusif tanggal acuan). Ini meniru
-  // persis formula sheet KPI MONITORING:
-  // NETWORKDAYS.INTL(tanggal_acuan, EOMONTH(tanggal_acuan,0), 11)
-  // — parameter weekend "11" berarti hanya Minggu yang dikecualikan.
-  const countRemainingWorkingDays = (fromDateObj) => {
-    const y = fromDateObj.getFullYear();
-    const m = fromDateObj.getMonth();
-    const lastDay = new Date(y, m + 1, 0).getDate();
-    let count = 0;
-    for (let d = fromDateObj.getDate(); d <= lastDay; d++) {
-      const dow = new Date(y, m, d).getDay(); // 0=Minggu .. 6=Sabtu
-      if (dow !== 0) count += 1;
-    }
-    return count;
-  };
-
-  // Status pill kecil ("achieve"/"not achieve") konsisten dengan gaya badge
-  // achievement yang sudah ada di dashboard (achv-pill).
-  const kpiStatusPillHtml = (achieved) => achieved
-    ? `<span class="achv-pill achv-hit">&#10003; ACHIEVE</span>`
-    : `<span class="achv-pill achv-miss">&#9888; BELUM ACHIEVE</span>`;
-
-  // Baris KPI "kejar target": targetSisa = (Target Bulanan - Aktual Bulan
-  // Berjalan) / Sisa Hari Kerja, persis formula sheet KPI MONITORING.
-  // Saat targetSisa <= 0, artinya target BULANAN sudah terlampaui sejak
-  // sebelum tanggal acuan -> status tetap ACHIEVE, tanpa kekurangan harian.
-  const kpiAchvRowChase = (label, dailyActual, targetSisa, hasMonthlyTarget, fmtFn) => {
-    if (!hasMonthlyTarget) {
-      return `
-        <tr>
-          <td>${escapeHtml(label)}</td>
-          <td>${fmtFn(dailyActual)}</td>
-          <td>&ndash;</td>
-          <td>&ndash;</td>
-          <td><span class="achv-pill achv-na">&ndash; Tanpa Target</span></td>
-          <td>&ndash;</td>
-        </tr>
-      `;
-    }
-    const targetTerlampaui = targetSisa <= 0;
-    const achieved = targetTerlampaui || dailyActual >= targetSisa;
-    const pct = targetSisa > 0 ? (dailyActual / targetSisa) * 100 : 100;
-    const kurang = !targetTerlampaui && targetSisa > dailyActual ? targetSisa - dailyActual : 0;
-    return `
-      <tr>
-        <td>${escapeHtml(label)}</td>
-        <td>${fmtFn(dailyActual)}</td>
-        <td>${targetTerlampaui ? '<span style="color:var(--slate); font-style:italic;">Target tercapai</span>' : fmtFn(targetSisa)}</td>
-        <td>${targetTerlampaui ? '&ndash;' : fmtPct(pct)}</td>
-        <td>${kpiStatusPillHtml(achieved)}</td>
-        <td>${kurang > 0 ? `<span class="delta delta-down" style="font-size:13px;">${fmtFn(kurang)}</span>` : '&ndash;'}</td>
-      </tr>
-    `;
-  };
-
-  const kpiAchvRow = (label, actual, target, fmtFn) => {
-    const hasTarget = target > 0;
-    const achieved = hasTarget && actual >= target;
-    const pct = hasTarget ? (actual / target) * 100 : null;
-    const kurang = hasTarget && target > actual ? target - actual : 0;
-    return `
-      <tr>
-        <td>${escapeHtml(label)}</td>
-        <td>${fmtFn(actual)}</td>
-        <td>${hasTarget ? fmtFn(target) : '&ndash;'}</td>
-        <td>${hasTarget ? fmtPct(pct) : '&ndash;'}</td>
-        <td>${hasTarget ? kpiStatusPillHtml(achieved) : '<span class="achv-pill achv-na">&ndash; Tanpa Target</span>'}</td>
-        <td>${kurang > 0 ? `<span class="delta delta-down" style="font-size:13px;">${fmtFn(kurang)}</span>` : '&ndash;'}</td>
-      </tr>
-    `;
-  };
-
-  const companyMiniRow = (label, valMki, valCfn, fmtFn) => `
-    <tr>
-      <td>${escapeHtml(label)}</td>
-      <td style="color:var(--terra); font-weight:600;">${fmtFn(valMki)}</td>
-      <td style="color:var(--sage); font-weight:600;">${fmtFn(valCfn)}</td>
-    </tr>
-  `;
-
-  const renderKpiPanel = () => {
-    const kpiEl = document.getElementById('dpSalesKpiPanel');
-    const state = dailyPerfState.sales;
-
-    // --- DAILY: mengikuti filter tanggal yang sudah dipilih; kalau belum
-    // dipilih, default ke hari ini (TODAY) supaya panel selalu terisi.
-    // Tanggal ini juga menjadi TITIK ACUAN untuk hitung sisa hari kerja
-    // (persis seperti $B$1 pada formula sheet KPI MONITORING, hanya saja
-    // di dashboard ini mengikuti tanggal yang sedang difilter, bukan selalu
-    // hari ini).
-    const dailyDateStr = state.date || toIsoDateLocal(TODAY);
-    const dailyDateObj = new Date(dailyDateStr + 'T00:00:00');
-    const dailyLabel = dailyDateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-    const monthIdxForDaily = dailyDateObj.getMonth();
-
-    const rowsOnDailyDate = tx2026.filter(t => t.orderDate && toIsoDateLocal(t.orderDate) === dailyDateStr);
-    const dailySalesActual = sum(rowsOnDailyDate, t => t.amount);
-    const dailyInvoiceActual = uniqueCount(rowsOnDailyDate, t => t.noInvoice);
-    const dailyByCompany = {};
-    ['MKI', 'CFN'].forEach(co => {
-      const rowsCo = rowsOnDailyDate.filter(t => t.company === co);
-      dailyByCompany[co] = { sales: sum(rowsCo, t => t.amount), invoice: uniqueCount(rowsCo, t => t.noInvoice) };
-    });
-
-    // Aktual bulan berjalan S/D tanggal acuan (bukan satu bulan penuh),
-    // karena formula "kejar target" sheet menghitung sisa kebutuhan
-    // berdasarkan progres sampai tanggal acuan saja.
-    const rowsInMonthUpToDaily = tx2026.filter(t =>
-      t.orderDate && t.orderDate.getMonth() === monthIdxForDaily && t.orderDate <= dailyDateObj
-    );
-    const monthToDateSalesActual = sum(rowsInMonthUpToDaily, t => t.amount);
-    const monthToDateInvoiceActual = uniqueCount(rowsInMonthUpToDaily, t => t.noInvoice);
-
-    const monthDataForDaily = yoyMonths.find(mo => mo.monthIdx === monthIdxForDaily);
-    const monthlyTargetSalesForDaily = monthDataForDaily ? monthDataForDaily.targetSalesRevenue : 0;
-    const remainingWorkingDays = countRemainingWorkingDays(dailyDateObj);
-
-    // Target Harian = (Target Bulanan - Aktual Bulan Berjalan s/d tanggal
-    // acuan) / Sisa Hari Kerja. Nilai <= 0 berarti target bulanan sudah
-    // terlampaui sebelum/at tanggal acuan ini.
-    const dailyTargetSalesChase = remainingWorkingDays > 0
-      ? (monthlyTargetSalesForDaily - monthToDateSalesActual) / remainingWorkingDays
-      : 0;
-    const monthlyInvoiceTarget = invoiceTargetKpi.monthlyInvoiceTarget;
-    const dailyTargetInvoiceChase = remainingWorkingDays > 0
-      ? (monthlyInvoiceTarget - monthToDateInvoiceActual) / remainingWorkingDays
-      : 0;
-
-    // --- MONTHLY: mengikuti filter bulan yang sudah dipilih; kalau "Semua
-    // Bulan" (filter tanggal juga kosong), default ke bulan berjalan.
-    const monthIdxForMonthly = state.date
-      ? new Date(state.date + 'T00:00:00').getMonth()
-      : (state.month !== 'all' ? parseInt(state.month, 10) : TODAY.getMonth());
-    const monthLabel = MONTH_NAMES_ID[monthIdxForMonthly];
-
-    const rowsInMonth = tx2026.filter(t => t.orderDate && t.orderDate.getMonth() === monthIdxForMonthly);
-    const monthlySalesActual = sum(rowsInMonth, t => t.amount);
-    const monthlyInvoiceActual = uniqueCount(rowsInMonth, t => t.noInvoice);
-    const monthlyByCompany = {};
-    ['MKI', 'CFN'].forEach(co => {
-      const rowsCo = rowsInMonth.filter(t => t.company === co);
-      monthlyByCompany[co] = { sales: sum(rowsCo, t => t.amount), invoice: uniqueCount(rowsCo, t => t.noInvoice) };
-    });
-
-    const monthDataForMonthly = yoyMonths.find(mo => mo.monthIdx === monthIdxForMonthly);
-    const monthlySalesTarget = monthDataForMonthly ? monthDataForMonthly.targetSalesRevenue : 0;
-
-    // Target Invoice Bulanan dari KPI MONITORING hanya valid untuk SATU
-    // bulan yang sedang aktif ditulis manual di sheet (activeMonthLabel),
-    // karena sheet ini bukan tabel 12-bulan seperti Sales SUM. Tampilkan
-    // peringatan kalau bulan yang dilihat di dashboard berbeda dari bulan
-    // aktif di sheet, supaya tidak disalahartikan.
-    const activeMonthLabelUpper = (invoiceTargetKpi.activeMonthLabel || '').toUpperCase();
-    const monthlyLabelUpper = monthLabel.toUpperCase();
-    const invoiceTargetMatchesMonth = activeMonthLabelUpper && activeMonthLabelUpper === monthlyLabelUpper;
-    const monthlyInvoiceTargetForDisplay = invoiceTargetMatchesMonth ? monthlyInvoiceTarget : 0;
-
-    const dailyInvoiceMatchesMonth = activeMonthLabelUpper && activeMonthLabelUpper === MONTH_NAMES_ID[monthIdxForDaily].toUpperCase();
-    const dailyTargetInvoiceForDisplay = dailyInvoiceMatchesMonth ? dailyTargetInvoiceChase : null;
-
-    const invoiceTargetWarningHtml = (!invoiceTargetMatchesMonth && activeMonthLabelUpper)
-      ? `<p class="panel-note panel-note-warn">Target Invoice Bulanan di sheet KPI MONITORING saat ini diisi untuk bulan <strong>${escapeHtml(invoiceTargetKpi.activeMonthLabel)}</strong>, sehingga tidak ditampilkan untuk bulan ${escapeHtml(monthLabel)} di atas. Perbarui sheet KPI MONITORING untuk melihat target invoice bulan ini.</p>`
-      : '';
-
-    kpiEl.innerHTML = `
-      <h3>Rekap Pencapaian Sales</h3>
-      <p class="panel-note">Target Sales dari sheet Sales SUM (Target Bulanan, kolom AT). Target Invoice dari sheet KPI MONITORING (Target Invoice Bulanan, sel C32). Target Harian dihitung dengan formula kejar-target yang sama seperti sheet: (Target Bulanan &minus; Aktual Bulan Berjalan) &divide; Sisa Hari Kerja (Senin&ndash;Sabtu) sejak tanggal terpilih. Nilai target harian yang sudah "Target tercapai" berarti target bulanan sudah terlampaui.</p>
-      ${invoiceTargetWarningHtml}
-
-      <h4 class="sub-heading">Harian &mdash; ${escapeHtml(dailyLabel)}</h4>
-      <div class="table-scroll">
-        <table class="data-table data-table-compact">
-          <thead><tr><th>Metrik</th><th>Aktual</th><th>Target Harian</th><th>Capaian</th><th>Status</th><th>Kekurangan</th></tr></thead>
-          <tbody>
-            ${kpiAchvRowChase('Total Sales', dailySalesActual, dailyTargetSalesChase, monthlyTargetSalesForDaily > 0, fmtRupiah)}
-            ${dailyTargetInvoiceForDisplay !== null
-              ? kpiAchvRowChase('Total Invoice', dailyInvoiceActual, dailyTargetInvoiceForDisplay, monthlyInvoiceTarget > 0, fmtNum)
-              : kpiAchvRow('Total Invoice', dailyInvoiceActual, 0, fmtNum)}
-          </tbody>
-        </table>
-      </div>
-      <div class="mini-table-title" style="margin-top:16px;">Company Daily Performance</div>
-      <div class="table-scroll">
-        <table class="data-table data-table-compact">
-          <thead><tr><th>Metrik</th><th>MKI</th><th>CFN</th></tr></thead>
-          <tbody>
-            ${companyMiniRow('Total Sales', dailyByCompany.MKI.sales, dailyByCompany.CFN.sales, fmtRupiah)}
-            ${companyMiniRow('Total Invoice', dailyByCompany.MKI.invoice, dailyByCompany.CFN.invoice, fmtNum)}
-          </tbody>
-        </table>
-      </div>
-
-      <h4 class="sub-heading">Bulanan &mdash; ${escapeHtml(monthLabel)}</h4>
-      <div class="table-scroll">
-        <table class="data-table data-table-compact">
-          <thead><tr><th>Metrik</th><th>Aktual</th><th>Target Bulanan</th><th>Capaian</th><th>Status</th><th>Kekurangan</th></tr></thead>
-          <tbody>
-            ${kpiAchvRow('Total Sales 1 Bulan', monthlySalesActual, monthlySalesTarget, fmtRupiah)}
-            ${kpiAchvRow('Total Invoice 1 Bulan', monthlyInvoiceActual, monthlyInvoiceTargetForDisplay, fmtNum)}
-          </tbody>
-        </table>
-      </div>
-      <div class="mini-table-title" style="margin-top:16px;">Company Monthly Performance</div>
-      <div class="table-scroll">
-        <table class="data-table data-table-compact">
-          <thead><tr><th>Metrik</th><th>MKI</th><th>CFN</th></tr></thead>
-          <tbody>
-            ${companyMiniRow('Total Sales (1 Bulan)', monthlyByCompany.MKI.sales, monthlyByCompany.CFN.sales, fmtRupiah)}
-            ${companyMiniRow('Total Invoice (1 Bulan)', monthlyByCompany.MKI.invoice, monthlyByCompany.CFN.invoice, fmtNum)}
-          </tbody>
-        </table>
-      </div>
-    `;
-  };
-
-  const renderDateRecap = () => {
-    const recapEl = document.getElementById('dpSalesDateRecap');
-    const state = dailyPerfState.sales;
-    if (!state.date) {
-      recapEl.classList.add('hidden');
-      recapEl.innerHTML = '';
-      return;
-    }
-    const rowsOnDate = tx2026.filter(t => t.orderDate && toIsoDateLocal(t.orderDate) === state.date);
-
-    const totalInvoiceUnik = uniqueCount(rowsOnDate, t => t.noInvoice);
-    const totalSales = sum(rowsOnDate, t => t.amount);
-
-    const byKode = {};
-    rowsOnDate.forEach(t => {
-      const kode = t.kodeBarang || 'TIDAK TERCATAT';
-      if (!byKode[kode]) byKode[kode] = { kode, qty: 0 };
-      byKode[kode].qty += t.qty;
-    });
-    const kodeList = Object.values(byKode).sort((a, b) => b.qty - a.qty);
-
-    const dateLabel = new Date(state.date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-
-    recapEl.classList.remove('hidden');
-    recapEl.innerHTML = `
-      <div class="panel-note" style="margin-top:0;">Rekap untuk tanggal <strong>${dateLabel}</strong>:</div>
-      <div class="kpi-grid kpi-grid-3">
-        <div class="kpi-card">
-          <div class="kpi-label">Invoice Unik</div>
-          <div class="kpi-value">${fmtNum(totalInvoiceUnik)}</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Nominal Sales</div>
-          <div class="kpi-value">${fmtRupiah(totalSales)}</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Kode Barang Unik Keluar</div>
-          <div class="kpi-value">${fmtNum(kodeList.length)}</div>
-        </div>
-      </div>
-      ${kodeList.length ? `
-        <div class="mini-table-title">Rincian Kode Barang Keluar</div>
-        <div class="table-scroll">
-          <table class="data-table data-table-compact" id="dpSalesKodeTable">
-            <thead><tr><th>Kode Barang</th><th>Total Qty</th></tr></thead>
-            <tbody>
-              ${kodeList.map(k => `<tr><td>${escapeHtml(k.kode)}</td><td>${fmtNum(k.qty)}</td></tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      ` : `<p class="panel-note">Tidak ada transaksi pada tanggal ini.</p>`}
-    `;
-  };
-
   const renderTable = () => {
     const state = dailyPerfState.sales;
     let rows = tx2026;
-    if (state.date) {
-      // Filter tanggal spesifik aktif: lebih presisi daripada filter bulan,
-      // sehingga filter bulan diabaikan selama tanggal masih terpilih.
-      rows = rows.filter(t => t.orderDate && toIsoDateLocal(t.orderDate) === state.date);
-    } else if (state.month !== 'all') {
+    if (state.month !== 'all') {
       const monthIdx = parseInt(state.month, 10);
       rows = rows.filter(t => t.orderDate && t.orderDate.getMonth() === monthIdx);
     }
@@ -555,11 +262,8 @@ function renderDpSalesPanel(tx2026, yoyMonths, invoiceTargetKpi) {
     const startIdx = (state.page - 1) * DAILY_PERF_PAGE_SIZE;
     const shown = rows.slice(startIdx, startIdx + DAILY_PERF_PAGE_SIZE);
 
-    const periodLabel = state.date
-      ? `tanggal <strong>${new Date(state.date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>`
-      : dpPeriodLabel(state.month);
     document.getElementById('dpSalesCount').innerHTML =
-      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${periodLabel}.`;
+      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${dpPeriodLabel(state.month)}.`;
 
     document.querySelector('#dpSalesTable tbody').innerHTML = shown.length
       ? shown.map(t => `
@@ -586,24 +290,8 @@ function renderDpSalesPanel(tx2026, yoyMonths, invoiceTargetKpi) {
   };
 
   renderTable();
-  renderDateRecap();
-  renderKpiPanel();
-  const monthSelectEl = document.getElementById('dpSalesMonth');
-  const syncMonthDisabledState = () => {
-    monthSelectEl.disabled = !!dailyPerfState.sales.date;
-  };
-  syncMonthDisabledState();
-
-  monthSelectEl.addEventListener('change', (e) => {
-    dailyPerfState.sales.month = e.target.value; dailyPerfState.sales.page = 1; renderTable(); renderKpiPanel();
-  });
-  document.getElementById('dpSalesDate').addEventListener('change', (e) => {
-    dailyPerfState.sales.date = e.target.value || null;
-    dailyPerfState.sales.page = 1;
-    syncMonthDisabledState();
-    renderDateRecap();
-    renderTable();
-    renderKpiPanel();
+  document.getElementById('dpSalesMonth').addEventListener('change', (e) => {
+    dailyPerfState.sales.month = e.target.value; dailyPerfState.sales.page = 1; renderTable();
   });
   document.getElementById('dpSalesSearch').addEventListener('input', (e) => {
     dailyPerfState.sales.search = e.target.value; dailyPerfState.sales.page = 1; renderTable();
