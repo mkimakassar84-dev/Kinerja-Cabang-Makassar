@@ -486,7 +486,7 @@ function renderDpDeliveryPanel(tx2026) {
             <tr>
               <th>Order Date</th><th>No Invoice</th><th>Payment</th><th>Customer</th>
               <th>Kode Barang</th><th>Qty</th><th>Amount</th><th>Status</th>
-              <th>Company</th><th>Koli</th><th>Stage</th><th>Status Ekspedisi</th>
+              <th>Company</th><th>Koli</th><th>Status Ekspedisi</th>
               <th>Lokasi</th><th>Tgl Terkirim</th>
             </tr>
           </thead>
@@ -532,13 +532,12 @@ function renderDpDeliveryPanel(tx2026) {
           <td>${escapeHtml(t.statusKirim)}</td>
           <td>${escapeHtml(t.company)}</td>
           <td>${fmtNum(t.koli)}</td>
-          <td>${escapeHtml(t.stage)}</td>
           <td>${escapeHtml(t.statusEkspedisi)}</td>
           <td>${escapeHtml(t.lokasi)}</td>
           <td>${fmtDateShort(t.tglTerkirim)}</td>
         </tr>
       `).join('')
-      : `<tr><td colspan="14" class="empty-row">Tidak ada transaksi pengiriman yang belum selesai pada periode ini.</td></tr>`;
+      : `<tr><td colspan="13" class="empty-row">Tidak ada transaksi pengiriman yang belum selesai pada periode ini.</td></tr>`;
 
     renderDpPagination('dpDelPagination', state, totalPages, renderTable);
   };
