@@ -87,6 +87,47 @@ function fmtRupiahShort(n) {
 }
 
 /* ==========================================================================
+   HELPER — PAGINATION STATIS
+   Untuk tabel-tabel non-reaktif (bukan state-driven), makePagBtns menghasilkan
+   HTML tombol pagination, attachPagBtns mengikat event listener-nya.
+   ========================================================================== */
+function makePagBtns(id, currentPage, totalPages, onPage) {
+  if (totalPages <= 1) return '';
+  const pages = [];
+  if (totalPages <= 7) { for (let i=1; i<=totalPages; i++) pages.push(i); }
+  else {
+    pages.push(1);
+    if (currentPage > 3) pages.push('...');
+    for (let i=Math.max(2,currentPage-1); i<=Math.min(totalPages-1,currentPage+1); i++) pages.push(i);
+    if (currentPage < totalPages-2) pages.push('...');
+    pages.push(totalPages);
+  }
+  return `
+    <button class="page-btn page-nav" data-dir="prev" ${currentPage===1?'disabled':''} aria-label="Sebelumnya">&larr;</button>
+    ${pages.map(p => p==='...'
+      ? `<span class="page-ellipsis">&hellip;</span>`
+      : `<button class="page-btn ${p===currentPage?'active':''}" data-page="${p}">${p}</button>`
+    ).join('')}
+    <button class="page-btn page-nav" data-dir="next" ${currentPage===totalPages?'disabled':''} aria-label="Berikutnya">&rarr;</button>
+  `;
+}
+function attachPagBtns(elId, onPage) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.querySelectorAll('.page-btn[data-page]').forEach(btn =>
+    btn.addEventListener('click', () => onPage(parseInt(btn.dataset.page, 10)))
+  );
+  el.querySelectorAll('.page-btn[data-dir]').forEach(btn =>
+    btn.addEventListener('click', () => {
+      const cur = parseInt(el.querySelector('.page-btn.active')?.textContent || '1', 10);
+      const total = Math.max(...[...el.querySelectorAll('.page-btn[data-page]')].map(b => parseInt(b.dataset.page,10)).filter(n=>!isNaN(n)));
+      if (btn.dataset.dir==='prev' && cur>1) onPage(cur-1);
+      if (btn.dataset.dir==='next' && cur<total) onPage(cur+1);
+    })
+  );
+}
+
+/* ==========================================================================
    SECTION 00 — DAILY PERFORMANCE (Lampiran Harian, 4 Sub-Section)
    Sub-section: Sales (Grand Data 2026), Revenue (Rev SUM kolom A-E),
    Account Receivable (AR 2026 kolom L-S), Delivery (Grand Data 2026,
@@ -1725,11 +1766,32 @@ function renderStockChart(st) {
 }
 
 function renderStockTable(st) {
+  const PAGE = 15;
+  let page = 1;
   const items = st.items.filter(i => i.stockTotal > 0).sort((a, b) => a.kode.localeCompare(b.kode));
-  document.getElementById('tblStock').innerHTML = `
-    <thead><tr><th>Kode Barang</th><th>Deskripsi</th><th>Stock MKI</th><th>Stock CFN</th><th>Total</th></tr></thead>
-    <tbody>${items.map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.stockMKI)}</td><td>${fmtNum(i.stockCFN)}</td><td><strong>${fmtNum(i.stockTotal)}</strong></td></tr>`).join('')}</tbody>
-  `;
+
+  const render = () => {
+    const total = items.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE));
+    if (page > totalPages) page = totalPages;
+    const shown = items.slice((page-1)*PAGE, page*PAGE);
+    const pagHtml = makePagBtns('pagStock', page, totalPages, p => { page = p; render(); });
+    document.getElementById('tblStock').outerHTML = `<table class="data-table" id="tblStock">
+      <thead><tr><th>Kode Barang</th><th>Deskripsi</th><th>Stock MKI</th><th>Stock CFN</th><th>Total</th></tr></thead>
+      <tbody>${shown.map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.stockMKI)}</td><td>${fmtNum(i.stockCFN)}</td><td><strong>${fmtNum(i.stockTotal)}</strong></td></tr>`).join('')}</tbody>
+    </table>`;
+    const pagEl = document.getElementById('pagStock');
+    if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagStock', p => { page = p; render(); }); }
+    else {
+      const wrap = document.createElement('div');
+      wrap.id = 'pagStock';
+      wrap.className = 'pagination';
+      wrap.innerHTML = pagHtml;
+      document.getElementById('tblStock').insertAdjacentElement('afterend', wrap);
+      attachPagBtns('pagStock', p => { page = p; render(); });
+    }
+  };
+  render();
 }
 
 function renderPoGudangChart(po) {
@@ -1872,10 +1934,32 @@ function renderEkspedisiChart(d) {
 }
 
 function renderEkspedisiTable(d) {
-  document.getElementById('tblEkspedisi').innerHTML = `
-    <thead><tr><th>Jalur Ekspedisi</th><th>Jumlah</th><th>Persentase</th><th>Quantity</th><th>Koli</th></tr></thead>
-    <tbody>${d.byEkspedisi.map(e => `<tr><td>${escapeHtml(e.nama)}</td><td>${fmtNum(e.count)}</td><td>${fmtPct(e.pct)}</td><td>${fmtNum(e.qty)}</td><td>${fmtNum(e.koli)}</td></tr>`).join('')}</tbody>
-  `;
+  const PAGE = 15;
+  let page = 1;
+  const items = d.byEkspedisi;
+
+  const render = () => {
+    const total = items.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE));
+    if (page > totalPages) page = totalPages;
+    const shown = items.slice((page-1)*PAGE, page*PAGE);
+    const pagHtml = makePagBtns('pagEkspedisi', page, totalPages, p => { page = p; render(); });
+    document.getElementById('tblEkspedisi').outerHTML = `<table class="data-table" id="tblEkspedisi">
+      <thead><tr><th>Jalur Ekspedisi</th><th>Jumlah</th><th>Persentase</th><th>Quantity</th><th>Koli</th></tr></thead>
+      <tbody>${shown.map(e => `<tr><td>${escapeHtml(e.nama)}</td><td>${fmtNum(e.count)}</td><td>${fmtPct(e.pct)}</td><td>${fmtNum(e.qty)}</td><td>${fmtNum(e.koli)}</td></tr>`).join('')}</tbody>
+    </table>`;
+    const pagEl = document.getElementById('pagEkspedisi');
+    if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagEkspedisi', p => { page = p; render(); }); }
+    else {
+      const wrap = document.createElement('div');
+      wrap.id = 'pagEkspedisi';
+      wrap.className = 'pagination';
+      wrap.innerHTML = pagHtml;
+      document.getElementById('tblEkspedisi').insertAdjacentElement('afterend', wrap);
+      attachPagBtns('pagEkspedisi', p => { page = p; render(); });
+    }
+  };
+  render();
 }
 
 /* ==========================================================================
@@ -1903,6 +1987,7 @@ function renderARSection(m) {
       <div class="kpi-card">
         <div class="kpi-label">Rasio AR terhadap Sales</div>
         <div class="kpi-value">${fmtPct(ar.ratioARtoSales)}</div>
+        <div class="kpi-sub" style="font-size:12px; color:var(--ink-soft); margin-top:4px;">Sisa Saldo Piutang ÷ Total Sales 2026</div>
       </div>
     </div>
 
@@ -1965,18 +2050,33 @@ function renderARByCompanyChart(ar) {
 }
 
 function renderARTable(ar) {
-  // Urutkan berdasarkan Aging (jumlah hari) tertinggi ke terendah, sesuai
-  // judul panel "diurutkan dari Aging tertinggi". Field aging berupa string
-  // seperti "62 Hari", sehingga angkanya diekstrak terlebih dahulu.
-  const parseAgingDays = (aging) => {
-    const match = String(aging).match(/\d+/);
-    return match ? parseInt(match[0], 10) : 0;
-  };
+  const PAGE = 15;
+  let page = 1;
+  const parseAgingDays = (aging) => { const m = String(aging).match(/\d+/); return m ? parseInt(m[0], 10) : 0; };
   const belumLunas = ar.items.filter(i => i.sisaSaldo > 0).sort((a, b) => parseAgingDays(b.aging) - parseAgingDays(a.aging));
-  document.getElementById('tblAR').innerHTML = `
-    <thead><tr><th>No Faktur</th><th>Customer</th><th>Company</th><th>Nilai Faktur</th><th>Sisa Saldo</th><th>Aging</th><th>Kategori</th></tr></thead>
-    <tbody>${belumLunas.map(i => `<tr><td>${escapeHtml(i.noFaktur)}</td><td>${escapeHtml(i.customer)}</td><td>${escapeHtml(i.company)}</td><td>${fmtRupiah(i.nilaiFaktur)}</td><td>${fmtRupiah(i.sisaSaldo)}</td><td>${escapeHtml(i.aging)}</td><td>${escapeHtml(i.kategori)}</td></tr>`).join('')}</tbody>
-  `;
+
+  const render = () => {
+    const total = belumLunas.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE));
+    if (page > totalPages) page = totalPages;
+    const shown = belumLunas.slice((page-1)*PAGE, page*PAGE);
+    const pagHtml = makePagBtns('pagAR', page, totalPages, p => { page = p; render(); });
+    document.getElementById('tblAR').outerHTML = `<table class="data-table" id="tblAR">
+      <thead><tr><th>No Faktur</th><th>Customer</th><th>Company</th><th>Nilai Faktur</th><th>Sisa Saldo</th><th>Aging</th><th>Kategori</th></tr></thead>
+      <tbody>${shown.map(i => `<tr><td>${escapeHtml(i.noFaktur)}</td><td>${escapeHtml(i.customer)}</td><td>${escapeHtml(i.company)}</td><td>${fmtRupiah(i.nilaiFaktur)}</td><td>${fmtRupiah(i.sisaSaldo)}</td><td>${escapeHtml(i.aging)}</td><td>${escapeHtml(i.kategori)}</td></tr>`).join('')}</tbody>
+    </table>`;
+    const pagEl = document.getElementById('pagAR');
+    if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagAR', p => { page = p; render(); }); }
+    else {
+      const wrap = document.createElement('div');
+      wrap.id = 'pagAR';
+      wrap.className = 'pagination';
+      wrap.innerHTML = pagHtml;
+      document.getElementById('tblAR').insertAdjacentElement('afterend', wrap);
+      attachPagBtns('pagAR', p => { page = p; render(); });
+    }
+  };
+  render();
 }
 
 /* ==========================================================================
@@ -2073,10 +2173,32 @@ function renderTop10CustomerChart(cf, metric) {
 }
 
 function renderChurnedTable(cf) {
-  document.getElementById('tblChurned').innerHTML = `
-    <thead><tr><th>Customer</th><th>Transaksi Terakhir</th><th>Hari Tidak Aktif</th><th>Total Sales 2026</th></tr></thead>
-    <tbody>${cf.churnedCustomers.slice(0, 50).map(c => `<tr><td>${escapeHtml(c.customer)}</td><td>${fmtDateShort(c.lastPurchase)}</td><td>${fmtNum(c.daysSinceLastPurchase)} hari</td><td>${fmtRupiah(c.totalSales)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty-row">Tidak ada customer yang tidak aktif.</td></tr>'}</tbody>
-  `;
+  const PAGE = 10;
+  let page = 1;
+  const items = cf.churnedCustomers;
+
+  const render = () => {
+    const total = items.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE));
+    if (page > totalPages) page = totalPages;
+    const shown = items.slice((page-1)*PAGE, page*PAGE);
+    const pagHtml = makePagBtns('pagChurned', page, totalPages, p => { page = p; render(); });
+    document.getElementById('tblChurned').outerHTML = `<table class="data-table" id="tblChurned">
+      <thead><tr><th>Customer</th><th>Transaksi Terakhir</th><th>Hari Tidak Aktif</th><th>Total Sales 2026</th></tr></thead>
+      <tbody>${shown.length ? shown.map(c => `<tr><td>${escapeHtml(c.customer)}</td><td>${fmtDateShort(c.lastPurchase)}</td><td>${fmtNum(c.daysSinceLastPurchase)} hari</td><td>${fmtRupiah(c.totalSales)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">Tidak ada customer yang tidak aktif.</td></tr>'}</tbody>
+    </table>`;
+    const pagEl = document.getElementById('pagChurned');
+    if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagChurned', p => { page = p; render(); }); }
+    else {
+      const wrap = document.createElement('div');
+      wrap.id = 'pagChurned';
+      wrap.className = 'pagination';
+      wrap.innerHTML = pagHtml;
+      document.getElementById('tblChurned').insertAdjacentElement('afterend', wrap);
+      attachPagBtns('pagChurned', p => { page = p; render(); });
+    }
+  };
+  render();
 }
 
 /* ==========================================================================
