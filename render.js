@@ -103,6 +103,7 @@ const dailyPerfState = {
   revenue:  { month: 'all', search: '', page: 1 },
   ar:       { month: 'all', search: '', page: 1 },
   delivery: { month: 'all', search: '', page: 1 },
+  po:       { month: 'all', search: '', page: 1 },
 };
 let dailyPerfActiveTab = 'sales';
 
@@ -114,7 +115,7 @@ function renderDailyPerformanceSection(m) {
     <div class="section-head">
       <div class="eyebrow">01 &mdash; Lampiran Harian</div>
       <h2>Daily Performance Cabang Makassar</h2>
-      <p class="lede">Rincian transaksi harian Sales, Revenue, Account Receivable, dan Delivery untuk Cabang Makassar tahun 2026. Pilih tab di bawah, lalu gunakan filter bulan dan kolom pencarian untuk menelusuri data tertentu.</p>
+      <p class="lede">Rincian transaksi harian Sales, Revenue, Account Receivable, Delivery, dan PO Gudang untuk Cabang Makassar tahun 2026. Pilih tab di bawah, lalu gunakan filter bulan dan kolom pencarian untuk menelusuri data tertentu.</p>
     </div>
 
     <div class="subtab-bar" id="dailyPerfTabBar">
@@ -122,12 +123,14 @@ function renderDailyPerformanceSection(m) {
       <button class="subtab-btn" data-tab="revenue">Revenue</button>
       <button class="subtab-btn" data-tab="ar">Account Receivable</button>
       <button class="subtab-btn" data-tab="delivery">Delivery</button>
+      <button class="subtab-btn" data-tab="po">PO Gudang</button>
     </div>
 
     <div class="subtab-panel active" id="dpPanel-sales"></div>
     <div class="subtab-panel" id="dpPanel-revenue"></div>
     <div class="subtab-panel" id="dpPanel-ar"></div>
     <div class="subtab-panel" id="dpPanel-delivery"></div>
+    <div class="subtab-panel" id="dpPanel-po"></div>
   `;
   document.getElementById('s0').innerHTML = html;
 
@@ -144,6 +147,7 @@ function renderDailyPerformanceSection(m) {
   renderDpRevenuePanel(rev2026);
   renderDpArPanel(m.ar.items);
   renderDpDeliveryPanel(tx2026);
+  renderDpPoGudangPanel(m.poGudang.items);
 }
 
 /* ----- Helper generik: kerangka panel filter bulan + search + tabel + pagination ----- */
@@ -545,6 +549,93 @@ function renderDpDeliveryPanel(tx2026) {
   });
   document.getElementById('dpDelSearch').addEventListener('input', (e) => {
     dailyPerfState.delivery.search = e.target.value; dailyPerfState.delivery.page = 1; renderTable();
+  });
+}
+
+/* ----- Sub-section: PO GUDANG ----- */
+function renderDpPoGudangPanel(poItems) {
+  // Filter: hanya PO yang Stage-nya bukan "Complete" (statusBarang !== 'diterima')
+  // — yaitu yang masih ditunggu atau dalam proses pengiriman ke gudang Makassar.
+  const poPending = poItems.filter(p => p.statusBarang !== 'diterima');
+
+  const html = `
+    <div class="panel">
+      <div class="panel-head daily-perf-controls">
+        <div class="filter-field">
+          <label for="dpPoMonth">Filter Bulan</label>
+          ${dpMonthSelectHtml('dpPoMonth')}
+        </div>
+        <div class="filter-field filter-field-grow">
+          <label for="dpPoSearch">Cari NO PO / Kode Barang</label>
+          <input type="text" id="dpPoSearch" class="text-input" placeholder="Ketik no PO atau kode barang&hellip;" />
+        </div>
+      </div>
+      <p class="panel-note" id="dpPoCount"></p>
+      <div class="table-scroll">
+        <table class="data-table data-table-compact" id="dpPoTable">
+          <thead>
+            <tr>
+              <th>Order Date</th><th>NO PO</th><th>Company</th><th>Kode Barang</th>
+              <th>Quantity</th><th>NO Surat Jalan</th><th>Status Ekspedisi</th><th>Stage</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="dpPoPagination"></div>
+    </div>
+  `;
+  document.getElementById('dpPanel-po').innerHTML = html;
+
+  const renderTable = () => {
+    const state = dailyPerfState.po;
+    let rows = poPending;
+    if (state.month !== 'all') {
+      const monthIdx = parseInt(state.month, 10);
+      rows = rows.filter(p => p.orderDate && p.orderDate.getMonth() === monthIdx);
+    }
+    const q = state.search.trim().toUpperCase();
+    if (q) rows = rows.filter(p => p.noPO.toUpperCase().includes(q) || p.kodeBarang.includes(q));
+    rows = [...rows].sort((a, b) => (a.orderDate?.getTime() || 0) - (b.orderDate?.getTime() || 0));
+
+    const totalRows = rows.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / DAILY_PERF_PAGE_SIZE));
+    if (state.page > totalPages) state.page = totalPages;
+    if (state.page < 1) state.page = 1;
+    const startIdx = (state.page - 1) * DAILY_PERF_PAGE_SIZE;
+    const shown = rows.slice(startIdx, startIdx + DAILY_PERF_PAGE_SIZE);
+
+    document.getElementById('dpPoCount').innerHTML =
+      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> PO yang belum diterima pada ${dpPeriodLabel(state.month)}.`;
+
+    document.querySelector('#dpPoTable tbody').innerHTML = shown.length
+      ? shown.map(p => {
+          // Stage kosong = barang masih ditunggu, belum ada surat jalan dari pusat
+          const stageLabel = p.stage ? escapeHtml(p.stage) : '<span style="color:var(--amber);font-weight:600;">BARANG DITUNGGU</span>';
+          return `
+            <tr>
+              <td>${fmtDateShort(p.orderDate)}</td>
+              <td>${escapeHtml(p.noPO)}</td>
+              <td>${escapeHtml(p.company)}</td>
+              <td>${escapeHtml(p.kodeBarang)}</td>
+              <td>${fmtNum(p.qty)}</td>
+              <td>${escapeHtml(p.noSuratJalan)}</td>
+              <td>${escapeHtml(p.statusEkspedisi)}</td>
+              <td>${stageLabel}</td>
+            </tr>
+          `;
+        }).join('')
+      : `<tr><td colspan="8" class="empty-row">Semua PO sudah diterima di gudang pada periode ini.</td></tr>`;
+
+    renderDpPagination('dpPoPagination', state, totalPages, renderTable);
+  };
+
+  renderTable();
+  document.getElementById('dpPoMonth').addEventListener('change', (e) => {
+    dailyPerfState.po.month = e.target.value; dailyPerfState.po.page = 1; renderTable();
+  });
+  document.getElementById('dpPoSearch').addEventListener('input', (e) => {
+    dailyPerfState.po.search = e.target.value; dailyPerfState.po.page = 1; renderTable();
   });
 }
 
