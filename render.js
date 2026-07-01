@@ -99,13 +99,14 @@ const DAILY_PERF_PAGE_SIZE = 20;
 // State per sub-tab, terpisah supaya filter/halaman tidak saling timpa
 // ketika berpindah tab.
 const dailyPerfState = {
+  kpi:      { month: String(TODAY.getMonth()) }, // default bulan berjalan
   sales:    { month: 'all', search: '', page: 1 },
   revenue:  { month: 'all', search: '', page: 1 },
   ar:       { month: 'all', search: '', page: 1 },
   delivery: { month: 'all', search: '', page: 1 },
   po:       { month: 'all', search: '', page: 1 },
 };
-let dailyPerfActiveTab = 'sales';
+let dailyPerfActiveTab = 'kpi';
 
 function renderDailyPerformanceSection(m) {
   const tx2026 = filterYear(m.transactions, CURRENT_YEAR);
@@ -115,18 +116,20 @@ function renderDailyPerformanceSection(m) {
     <div class="section-head">
       <div class="eyebrow">01 &mdash; Lampiran Harian</div>
       <h2>Daily Performance Cabang Makassar</h2>
-      <p class="lede">Rincian transaksi harian Sales, Revenue, Account Receivable, Delivery, dan PO Gudang untuk Cabang Makassar tahun 2026. Pilih tab di bawah, lalu gunakan filter bulan dan kolom pencarian untuk menelusuri data tertentu.</p>
+      <p class="lede">Ringkasan KPI dan rincian transaksi harian untuk Cabang Makassar tahun 2026. Pilih tab di bawah untuk berpindah antar panel.</p>
     </div>
 
     <div class="subtab-bar" id="dailyPerfTabBar">
-      <button class="subtab-btn active" data-tab="sales">Sales</button>
+      <button class="subtab-btn active" data-tab="kpi">KPI Monitoring</button>
+      <button class="subtab-btn" data-tab="sales">Sales</button>
       <button class="subtab-btn" data-tab="revenue">Revenue</button>
       <button class="subtab-btn" data-tab="ar">Account Receivable</button>
       <button class="subtab-btn" data-tab="delivery">Delivery</button>
       <button class="subtab-btn" data-tab="po">PO Gudang</button>
     </div>
 
-    <div class="subtab-panel active" id="dpPanel-sales"></div>
+    <div class="subtab-panel active" id="dpPanel-kpi"></div>
+    <div class="subtab-panel" id="dpPanel-sales"></div>
     <div class="subtab-panel" id="dpPanel-revenue"></div>
     <div class="subtab-panel" id="dpPanel-ar"></div>
     <div class="subtab-panel" id="dpPanel-delivery"></div>
@@ -143,6 +146,7 @@ function renderDailyPerformanceSection(m) {
     document.getElementById(`dpPanel-${dailyPerfActiveTab}`).classList.add('active');
   });
 
+  renderDpKpiPanel(tx2026, rev2026, m.yoyComparison.months);
   renderDpSalesPanel(tx2026);
   renderDpRevenuePanel(rev2026);
   renderDpArPanel(m.ar.items);
@@ -212,6 +216,172 @@ function renderDpPagination(elId, state, totalPages, onRender) {
   });
   if (nextBtn) nextBtn.addEventListener('click', () => {
     if (state.page < totalPages) { state.page += 1; onRender(); document.getElementById('s0').scrollTop = 0; }
+  });
+}
+
+/* ----- Sub-section: KPI MONITORING ----- */
+function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
+  const html = `
+    <div class="panel">
+      <div class="panel-head daily-perf-controls">
+        <div class="filter-field">
+          <label for="dpKpiMonth">Periode</label>
+          ${dpMonthSelectHtml('dpKpiMonth')}
+        </div>
+      </div>
+      <div id="dpKpiContent"></div>
+    </div>
+  `;
+  document.getElementById('dpPanel-kpi').innerHTML = html;
+
+  // Set default ke bulan berjalan
+  const kpiMonthEl = document.getElementById('dpKpiMonth');
+  kpiMonthEl.value = dailyPerfState.kpi.month;
+
+  const kpiBar = (pct, thresholdHit = 100, thresholdWarn = 60) => {
+    const capped = Math.min(pct, 100);
+    const cls = pct >= thresholdHit ? 'kmc-bar-hit' : pct >= thresholdWarn ? 'kmc-bar-warn' : 'kmc-bar-miss';
+    return `<div class="kmc-bar-wrap"><div class="kmc-bar ${cls}" style="width:${capped.toFixed(1)}%"></div></div>`;
+  };
+
+  const kpiStatus = (pct, thresholdHit = 100, thresholdWarn = 60) => {
+    if (pct >= thresholdHit) return `<span class="kmc-status kmc-status-hit">&#10003; TARGET HIT</span>`;
+    if (pct >= thresholdWarn) return `<span class="kmc-status kmc-status-warn">&#9650; ON PROGRESS</span>`;
+    return `<span class="kmc-status kmc-status-miss">&#9888; BELUM ACHIEVE</span>`;
+  };
+
+  const render = () => {
+    const monthIdx = parseInt(dailyPerfState.kpi.month, 10);
+    const monthLabel = MONTH_NAMES_ID[monthIdx];
+
+    // Filter transaksi bulan terpilih (exclude Return)
+    const txMonth = tx2026.filter(t =>
+      t.orderDate && t.orderDate.getMonth() === monthIdx &&
+      (t.stage || '').toLowerCase() !== 'return'
+    );
+    const revMonth = rev2026.filter(r => r.paymentDate && r.paymentDate.getMonth() === monthIdx);
+
+    // Angka harian (TODAY) — untuk semua bulan, bukan hanya bulan ini,
+    // karena user bisa lihat histori bulan lalu dan perlu tahu harian di hari ini.
+    const todayStr = [TODAY.getFullYear(), String(TODAY.getMonth()+1).padStart(2,'0'), String(TODAY.getDate()).padStart(2,'0')].join('-');
+    const toIsoLocal = d => d ? [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-') : '';
+    const txToday  = txMonth.filter(t => toIsoLocal(t.orderDate) === todayStr);
+    const revToday = revMonth.filter(r => toIsoLocal(r.paymentDate) === todayStr);
+
+    // ── 1. TOTAL SALES ──
+    const totalSales   = sum(txMonth, t => t.amount);
+    const dailySales   = sum(txToday, t => t.amount);
+    const monthData    = yoyMonths.find(mo => mo.monthIdx === monthIdx);
+    const targetSales  = monthData ? monthData.targetSalesRevenue : 0;
+    const pctSales     = targetSales > 0 ? (totalSales / targetSales) * 100 : 0;
+
+    // ── 2. TOTAL REVENUE ──
+    const totalRevenue = sum(revMonth, r => r.pelunasan);
+    const dailyRevenue = sum(revToday, r => r.pelunasan);
+    const pctRevenue   = targetSales > 0 ? (totalRevenue / targetSales) * 100 : 0;
+
+    // ── 3. COLLECTION RATE (Revenue ÷ Sales) ──
+    const collectionRate = totalSales > 0 ? (totalRevenue / totalSales) * 100 : 0;
+
+    // ── 4. OTD ACCURACY ──
+    const txNoHC           = txMonth.filter(t => (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
+    const invoiceUnikTotal = uniqueCount(txNoHC, t => t.noInvoice);
+    const invoiceSameDay   = uniqueCount(txNoHC.filter(t => t.statusKirim === 'Same Day'), t => t.noInvoice);
+    const otdPct    = invoiceUnikTotal > 0 ? (invoiceSameDay / invoiceUnikTotal) * 100 : 0;
+    const otdTarget = 80;
+    // OTD harian
+    const txTodayNoHC     = txToday.filter(t => (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
+    const invTodayTotal   = uniqueCount(txTodayNoHC, t => t.noInvoice);
+    const invTodaySameDay = uniqueCount(txTodayNoHC.filter(t => t.statusKirim === 'Same Day'), t => t.noInvoice);
+    const otdPctToday     = invTodayTotal > 0 ? (invTodaySameDay / invTodayTotal) * 100 : null;
+
+    // ── 5. TOTAL INVOICE ──
+    const TARGET_INVOICE  = 280; // target tetap per bulan, berlaku semua bulan
+    const invoiceUnikAll  = uniqueCount(txMonth, t => t.noInvoice);
+    const dailyInvoice    = uniqueCount(txToday, t => t.noInvoice);
+    const pctInvoice      = (invoiceUnikAll / TARGET_INVOICE) * 100;
+
+    // Label tanggal hari ini (untuk sub-label harian)
+    const todayLabel = TODAY.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' });
+
+    const cardSales = `
+      <div class="kpi-monitor-card">
+        <div class="kmc-label">Total Sales — ${escapeHtml(monthLabel)}</div>
+        <div class="kmc-value">${fmtRupiah(totalSales)}</div>
+        <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong>${fmtRupiah(dailySales)}</strong></div>
+        ${targetSales > 0 ? `
+          <div class="kmc-target">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctSales)}</strong></div>
+          ${kpiBar(pctSales)}
+          ${kpiStatus(pctSales)}
+        ` : '<div class="kmc-sub" style="margin-top:8px;">Target tidak tersedia untuk bulan ini</div>'}
+      </div>`;
+
+    const cardRevenue = `
+      <div class="kpi-monitor-card">
+        <div class="kmc-label">Total Revenue — ${escapeHtml(monthLabel)}</div>
+        <div class="kmc-value">${fmtRupiah(totalRevenue)}</div>
+        <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong>${fmtRupiah(dailyRevenue)}</strong></div>
+        ${targetSales > 0 ? `
+          <div class="kmc-target">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctRevenue)}</strong></div>
+          ${kpiBar(pctRevenue)}
+          ${kpiStatus(pctRevenue)}
+        ` : '<div class="kmc-sub" style="margin-top:8px;">Target tidak tersedia untuk bulan ini</div>'}
+      </div>`;
+
+    const cardCollection = `
+      <div class="kpi-monitor-card">
+        <div class="kmc-label">Collection Rate (Revenue ÷ Sales)</div>
+        <div class="kmc-value">${fmtPct(collectionRate)}</div>
+        <div class="kmc-sub">Seberapa banyak tagihan dari penjualan yang sudah terbayar</div>
+        <div class="kmc-target">Target: 100% &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(collectionRate)}</strong></div>
+        ${kpiBar(collectionRate)}
+        ${kpiStatus(collectionRate, 90, 60)}
+      </div>`;
+
+    const cardOTD = `
+      <div class="kpi-monitor-card">
+        <div class="kmc-label">OTD Accuracy — ${escapeHtml(monthLabel)}</div>
+        <div class="kmc-value">${fmtPct(otdPct)}</div>
+        <div class="kmc-sub">
+          Hari ini: <strong>${otdPctToday !== null ? fmtPct(otdPctToday) : '&ndash;'}</strong>
+          &nbsp;(${fmtNum(invTodaySameDay)}/${fmtNum(invTodayTotal)} invoice Same Day)
+        </div>
+        <div class="kmc-sub" style="margin-top:2px;">Bulan ini: ${fmtNum(invoiceSameDay)} Same Day / ${fmtNum(invoiceUnikTotal)} invoice (no HAND CARRY)</div>
+        <div class="kmc-target">Target: ${otdTarget}% &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(otdPct)}</strong></div>
+        ${kpiBar(otdPct, otdTarget, 60)}
+        ${kpiStatus(otdPct, otdTarget, 60)}
+      </div>`;
+
+    const cardInvoice = `
+      <div class="kpi-monitor-card">
+        <div class="kmc-label">Total Invoice — ${escapeHtml(monthLabel)}</div>
+        <div class="kmc-value">${fmtNum(invoiceUnikAll)}</div>
+        <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong>${fmtNum(dailyInvoice)} invoice</strong></div>
+        <div class="kmc-target">Target: ${fmtNum(TARGET_INVOICE)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctInvoice)}</strong></div>
+        ${kpiBar(pctInvoice)}
+        ${kpiStatus(pctInvoice)}
+      </div>`;
+
+    document.getElementById('dpKpiContent').innerHTML = `
+      <p class="panel-note" style="margin-bottom:20px;">
+        KPI bulan <strong>${escapeHtml(monthLabel)} ${CURRENT_YEAR}</strong>.
+        OTD = invoice Same Day ÷ total invoice (exclude HAND CARRY &amp; Return), target 80%.
+        Target Sales &amp; Revenue dari Sales SUM (kolom AT). Target Invoice = 280/bulan (tetap).
+      </p>
+      <div class="kpi-monitor-grid">
+        ${cardSales}
+        ${cardRevenue}
+        ${cardCollection}
+        ${cardOTD}
+        ${cardInvoice}
+      </div>
+    `;
+  };
+
+  render();
+  kpiMonthEl.addEventListener('change', (e) => {
+    dailyPerfState.kpi.month = e.target.value;
+    render();
   });
 }
 
