@@ -261,56 +261,73 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     );
     const revMonth = rev2026.filter(r => r.paymentDate && r.paymentDate.getMonth() === monthIdx);
 
-    // Angka harian (TODAY) — untuk semua bulan, bukan hanya bulan ini,
-    // karena user bisa lihat histori bulan lalu dan perlu tahu harian di hari ini.
-    const todayStr = [TODAY.getFullYear(), String(TODAY.getMonth()+1).padStart(2,'0'), String(TODAY.getDate()).padStart(2,'0')].join('-');
+    // Angka harian (TODAY)
+    const todayStr  = [TODAY.getFullYear(), String(TODAY.getMonth()+1).padStart(2,'0'), String(TODAY.getDate()).padStart(2,'0')].join('-');
     const toIsoLocal = d => d ? [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-') : '';
     const txToday  = txMonth.filter(t => toIsoLocal(t.orderDate) === todayStr);
     const revToday = revMonth.filter(r => toIsoLocal(r.paymentDate) === todayStr);
+    const todayLabel = TODAY.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' });
 
     // ── 1. TOTAL SALES ──
-    const totalSales   = sum(txMonth, t => t.amount);
-    const dailySales   = sum(txToday, t => t.amount);
-    const monthData    = yoyMonths.find(mo => mo.monthIdx === monthIdx);
-    const targetSales  = monthData ? monthData.targetSalesRevenue : 0;
-    const pctSales     = targetSales > 0 ? (totalSales / targetSales) * 100 : 0;
+    const totalSales  = sum(txMonth, t => t.amount);
+    const dailySales  = sum(txToday, t => t.amount);
+    const salesMKI    = sum(txMonth.filter(t => t.company === 'MKI'), t => t.amount);
+    const salesCFN    = sum(txMonth.filter(t => t.company === 'CFN'), t => t.amount);
+    const monthData   = yoyMonths.find(mo => mo.monthIdx === monthIdx);
+    const targetSales = monthData ? monthData.targetSalesRevenue : 0;
+    const pctSales    = targetSales > 0 ? (totalSales / targetSales) * 100 : 0;
 
     // ── 2. TOTAL REVENUE ──
     const totalRevenue = sum(revMonth, r => r.pelunasan);
     const dailyRevenue = sum(revToday, r => r.pelunasan);
+    const revMKI       = sum(revMonth.filter(r => r.company === 'MKI'), r => r.pelunasan);
+    const revCFN       = sum(revMonth.filter(r => r.company === 'CFN'), r => r.pelunasan);
     const pctRevenue   = targetSales > 0 ? (totalRevenue / targetSales) * 100 : 0;
 
-    // ── 3. COLLECTION RATE (Revenue ÷ Sales) ──
+    // ── 3. COLLECTION RATE ──
     const collectionRate = totalSales > 0 ? (totalRevenue / totalSales) * 100 : 0;
 
     // ── 4. OTD ACCURACY ──
-    const txNoHC           = txMonth.filter(t => (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
-    const invoiceUnikTotal = uniqueCount(txNoHC, t => t.noInvoice);
-    const invoiceSameDay   = uniqueCount(txNoHC.filter(t => t.statusKirim === 'Same Day'), t => t.noInvoice);
-    const otdPct    = invoiceUnikTotal > 0 ? (invoiceSameDay / invoiceUnikTotal) * 100 : 0;
-    const otdTarget = 80;
+    // OTD = invoice Stage "Complete" & Status "Same Day" ÷ total invoice Stage "Complete"
+    // (exclude HAND CARRY), menggunakan Stage Complete sebagai tolak ukur pengiriman selesai.
+    const txComplete      = txMonth.filter(t => (t.stage || '').toLowerCase() === 'complete' && (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
+    const invoiceComplete = uniqueCount(txComplete, t => t.noInvoice);
+    const invoiceOTD      = uniqueCount(txComplete.filter(t => t.statusKirim === 'Same Day'), t => t.noInvoice);
+    const otdPct          = invoiceComplete > 0 ? (invoiceOTD / invoiceComplete) * 100 : 0;
+    const otdTarget       = 80;
     // OTD harian
-    const txTodayNoHC     = txToday.filter(t => (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
-    const invTodayTotal   = uniqueCount(txTodayNoHC, t => t.noInvoice);
-    const invTodaySameDay = uniqueCount(txTodayNoHC.filter(t => t.statusKirim === 'Same Day'), t => t.noInvoice);
-    const otdPctToday     = invTodayTotal > 0 ? (invTodaySameDay / invTodayTotal) * 100 : null;
+    const txTodayComplete  = txToday.filter(t => (t.stage || '').toLowerCase() === 'complete' && (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
+    const invTodayComplete = uniqueCount(txTodayComplete, t => t.noInvoice);
+    const invTodayOTD      = uniqueCount(txTodayComplete.filter(t => t.statusKirim === 'Same Day'), t => t.noInvoice);
+    const otdPctToday      = invTodayComplete > 0 ? (invTodayOTD / invTodayComplete) * 100 : null;
 
     // ── 5. TOTAL INVOICE ──
-    const TARGET_INVOICE  = 280; // target tetap per bulan, berlaku semua bulan
-    const invoiceUnikAll  = uniqueCount(txMonth, t => t.noInvoice);
-    const dailyInvoice    = uniqueCount(txToday, t => t.noInvoice);
-    const pctInvoice      = (invoiceUnikAll / TARGET_INVOICE) * 100;
+    const TARGET_INVOICE = 280;
+    const invoiceUnikAll = uniqueCount(txMonth, t => t.noInvoice);
+    const invoiceMKI     = uniqueCount(txMonth.filter(t => t.company === 'MKI'), t => t.noInvoice);
+    const invoiceCFN     = uniqueCount(txMonth.filter(t => t.company === 'CFN'), t => t.noInvoice);
+    const dailyInvoice   = uniqueCount(txToday, t => t.noInvoice);
+    const pctInvoice     = (invoiceUnikAll / TARGET_INVOICE) * 100;
 
-    // Label tanggal hari ini (untuk sub-label harian)
-    const todayLabel = TODAY.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' });
+    // ── Helper breakdown MKI/CFN (tanpa indikator target) ──
+    const companyRow = (label, valMki, valCfn, fmtFn) => `
+      <div style="display:flex; justify-content:space-between; font-size:12.5px; margin-top:5px;">
+        <span style="color:var(--ink-soft);">${escapeHtml(label)}</span>
+        <span>
+          <span style="color:var(--terra); font-weight:600;">MKI ${fmtFn(valMki)}</span>
+          &nbsp;&nbsp;
+          <span style="color:var(--sage); font-weight:600;">CFN ${fmtFn(valCfn)}</span>
+        </span>
+      </div>`;
 
     const cardSales = `
       <div class="kpi-monitor-card">
         <div class="kmc-label">Total Sales — ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtRupiah(totalSales)}</div>
         <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong>${fmtRupiah(dailySales)}</strong></div>
+        ${companyRow('Breakdown', salesMKI, salesCFN, fmtRupiah)}
         ${targetSales > 0 ? `
-          <div class="kmc-target">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctSales)}</strong></div>
+          <div class="kmc-target" style="margin-top:10px;">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctSales)}</strong></div>
           ${kpiBar(pctSales)}
           ${kpiStatus(pctSales)}
         ` : '<div class="kmc-sub" style="margin-top:8px;">Target tidak tersedia untuk bulan ini</div>'}
@@ -321,8 +338,9 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         <div class="kmc-label">Total Revenue — ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtRupiah(totalRevenue)}</div>
         <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong>${fmtRupiah(dailyRevenue)}</strong></div>
+        ${companyRow('Breakdown', revMKI, revCFN, fmtRupiah)}
         ${targetSales > 0 ? `
-          <div class="kmc-target">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctRevenue)}</strong></div>
+          <div class="kmc-target" style="margin-top:10px;">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctRevenue)}</strong></div>
           ${kpiBar(pctRevenue)}
           ${kpiStatus(pctRevenue)}
         ` : '<div class="kmc-sub" style="margin-top:8px;">Target tidak tersedia untuk bulan ini</div>'}
@@ -344,9 +362,9 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         <div class="kmc-value">${fmtPct(otdPct)}</div>
         <div class="kmc-sub">
           Hari ini: <strong>${otdPctToday !== null ? fmtPct(otdPctToday) : '&ndash;'}</strong>
-          &nbsp;(${fmtNum(invTodaySameDay)}/${fmtNum(invTodayTotal)} invoice Same Day)
+          &nbsp;(${fmtNum(invTodayOTD)}/${fmtNum(invTodayComplete)} invoice)
         </div>
-        <div class="kmc-sub" style="margin-top:2px;">Bulan ini: ${fmtNum(invoiceSameDay)} Same Day / ${fmtNum(invoiceUnikTotal)} invoice (no HAND CARRY)</div>
+        <div class="kmc-sub" style="margin-top:2px;">Bulan ini: ${fmtNum(invoiceOTD)} Same Day / ${fmtNum(invoiceComplete)} invoice Complete (no HAND CARRY)</div>
         <div class="kmc-target">Target: ${otdTarget}% &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(otdPct)}</strong></div>
         ${kpiBar(otdPct, otdTarget, 60)}
         ${kpiStatus(otdPct, otdTarget, 60)}
@@ -357,17 +375,13 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         <div class="kmc-label">Total Invoice — ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtNum(invoiceUnikAll)}</div>
         <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong>${fmtNum(dailyInvoice)} invoice</strong></div>
-        <div class="kmc-target">Target: ${fmtNum(TARGET_INVOICE)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctInvoice)}</strong></div>
+        ${companyRow('Breakdown', invoiceMKI, invoiceCFN, fmtNum)}
+        <div class="kmc-target" style="margin-top:10px;">Target: ${fmtNum(TARGET_INVOICE)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctInvoice)}</strong></div>
         ${kpiBar(pctInvoice)}
         ${kpiStatus(pctInvoice)}
       </div>`;
 
     document.getElementById('dpKpiContent').innerHTML = `
-      <p class="panel-note" style="margin-bottom:20px;">
-        KPI bulan <strong>${escapeHtml(monthLabel)} ${CURRENT_YEAR}</strong>.
-        OTD = invoice Same Day ÷ total invoice (exclude HAND CARRY &amp; Return), target 80%.
-        Target Sales &amp; Revenue dari Sales SUM (kolom AT). Target Invoice = 280/bulan (tetap).
-      </p>
       <div class="kpi-monitor-grid">
         ${cardSales}
         ${cardRevenue}
