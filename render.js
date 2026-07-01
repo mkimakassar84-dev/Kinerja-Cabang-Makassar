@@ -2002,14 +2002,23 @@ function renderARSection(m) {
       <div class="two-col">
         <div class="chart-wrap chart-wrap-sm"><canvas id="chartARByCompany"></canvas></div>
         <div class="company-cards">
-          ${Object.entries(ar.byCompany).map(([co, d]) => `
-            <div class="company-card company-${co.toLowerCase()}">
-              <div class="company-card-head"><span class="company-badge company-badge-${co.toLowerCase()}">${co}</span></div>
-              <div class="company-card-row"><span>Nilai Faktur</span><strong>${fmtRupiah(d.nilaiFaktur)}</strong></div>
-              <div class="company-card-row"><span>Sisa Saldo Piutang</span><strong>${fmtRupiah(d.sisaSaldo)}</strong></div>
-              <div class="company-card-row"><span>Sudah Dibayar</span><strong>${fmtRupiah(d.paidAmount)}</strong></div>
-            </div>
-          `).join('')}
+          ${(() => {
+            const totalSisaSaldo = Object.values(ar.byCompany).reduce((s, d) => s + d.sisaSaldo, 0);
+            return Object.entries(ar.byCompany).map(([co, d]) => {
+              const pct = totalSisaSaldo > 0 ? (d.sisaSaldo / totalSisaSaldo) * 100 : 0;
+              return `
+                <div class="company-card company-${co.toLowerCase()}">
+                  <div class="company-card-head">
+                    <span class="company-badge company-badge-${co.toLowerCase()}">${co}</span>
+                    <span style="font-size:12px; font-weight:600; color:var(--ink-soft); margin-left:auto;">${fmtPct(pct)} dari total piutang</span>
+                  </div>
+                  <div class="company-card-row"><span>Nilai Faktur</span><strong>${fmtRupiah(d.nilaiFaktur)}</strong></div>
+                  <div class="company-card-row"><span>Sisa Saldo Piutang</span><strong>${fmtRupiah(d.sisaSaldo)}</strong></div>
+                  <div class="company-card-row"><span>Sudah Dibayar</span><strong>${fmtRupiah(d.paidAmount)}</strong></div>
+                </div>
+              `;
+            }).join('');
+          })()}
         </div>
       </div>
     </div>
