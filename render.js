@@ -2004,8 +2004,10 @@ function renderARSection(m) {
         <div class="company-cards">
           ${(() => {
             const totalSisaSaldo = Object.values(ar.byCompany).reduce((s, d) => s + d.sisaSaldo, 0);
+            const belumLunas = ar.items.filter(i => i.sisaSaldo > 0);
             return Object.entries(ar.byCompany).map(([co, d]) => {
               const pct = totalSisaSaldo > 0 ? (d.sisaSaldo / totalSisaSaldo) * 100 : 0;
+              const invUnikCo = new Set(belumLunas.filter(i => i.company === co).map(i => i.noFaktur)).size;
               return `
                 <div class="company-card company-${co.toLowerCase()}">
                   <div class="company-card-head">
@@ -2014,7 +2016,7 @@ function renderARSection(m) {
                   </div>
                   <div class="company-card-row"><span>Nilai Faktur</span><strong>${fmtRupiah(d.nilaiFaktur)}</strong></div>
                   <div class="company-card-row"><span>Sisa Saldo Piutang</span><strong>${fmtRupiah(d.sisaSaldo)}</strong></div>
-                  <div class="company-card-row"><span>Sudah Dibayar</span><strong>${fmtRupiah(d.paidAmount)}</strong></div>
+                  <div class="company-card-row"><span>Invoice Unik Belum Lunas</span><strong>${fmtNum(invUnikCo)} invoice</strong></div>
                 </div>
               `;
             }).join('');
@@ -2025,6 +2027,7 @@ function renderARSection(m) {
 
     <div class="panel">
       <h3>Daftar Piutang Belum Lunas (diurutkan dari Aging tertinggi)</h3>
+      <p class="panel-note" id="arTableNote"></p>
       <table class="data-table" id="tblAR"></table>
     </div>
   `;
@@ -2063,6 +2066,11 @@ function renderARTable(ar) {
   let page = 1;
   const parseAgingDays = (aging) => { const m = String(aging).match(/\d+/); return m ? parseInt(m[0], 10) : 0; };
   const belumLunas = ar.items.filter(i => i.sisaSaldo > 0).sort((a, b) => parseAgingDays(b.aging) - parseAgingDays(a.aging));
+  const invoiceUnikBelumLunas = new Set(belumLunas.map(i => i.noFaktur)).size;
+
+  // Tampilkan ringkasan invoice unik di panel note
+  const noteEl = document.getElementById('arTableNote');
+  if (noteEl) noteEl.innerHTML = `Total <strong>${fmtNum(belumLunas.length)}</strong> baris dari <strong>${fmtNum(invoiceUnikBelumLunas)}</strong> invoice unik belum lunas.`;
 
   const render = () => {
     const total = belumLunas.length;
