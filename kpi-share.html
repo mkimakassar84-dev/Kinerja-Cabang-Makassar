@@ -11,201 +11,314 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#1a1209;min-height:1
 #spinner{width:44px;height:44px;border:3px solid rgba(255,255,255,.2);border-top-color:#c17a5a;border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 canvas{display:none;border-radius:12px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.5);}
-.btn-group{display:none;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:360px;}
-#btnWA{background:#25D366;color:#fff;border:none;border-radius:12px;padding:16px 0;font-size:18px;font-weight:700;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 4px 16px rgba(37,211,102,.4);}
-#btnWA svg{width:22px;height:22px;flex-shrink:0;}
-#btnSave{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:12px 0;font-size:14px;cursor:pointer;width:100%;}
+.btns{display:none;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:360px;}
+#btnWA{background:#25D366;color:#fff;border:none;border-radius:12px;padding:16px;font-size:17px;font-weight:700;cursor:pointer;width:100%;}
+#btnSave{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:12px;font-size:14px;cursor:pointer;width:100%;}
 #note{color:rgba(255,255,255,.45);font-size:12px;text-align:center;max-width:320px;line-height:1.6;display:none;}
-#errMsg{display:none;color:#ff6b6b;font-size:14px;text-align:center;max-width:320px;}
+#err{display:none;color:#ff6b6b;font-size:14px;text-align:center;max-width:320px;}
 </style>
 </head>
 <body>
 <div id="spinner"></div>
-<div id="status">Mengambil data terkini…</div>
-<canvas id="kpiCanvas" width="1080" height="1350"></canvas>
-<div class="btn-group" id="btnGroup">
-  <button id="btnWA">
-    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.374 0 0 5.373 0 12c0 2.117.554 4.103 1.523 5.83L.057 23.997l6.334-1.648A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-4.976-1.352l-.357-.211-3.68.957.984-3.57-.232-.368A9.818 9.818 0 012.182 12C2.182 6.566 6.566 2.182 12 2.182S21.818 6.566 21.818 12 17.434 21.818 12 21.818z"/></svg>
-    Kirim ke WhatsApp
-  </button>
-  <button id="btnSave">Simpan ke Galeri</button>
+<div id="status">Mengambil data…</div>
+<canvas id="cv" width="1080" height="100"></canvas>
+<div class="btns" id="btns">
+  <button id="btnWA">📲 Kirim ke WhatsApp</button>
+  <button id="btnSave">⬇ Simpan ke Galeri</button>
 </div>
 <div id="note"></div>
-<div id="errMsg"></div>
+<div id="err"></div>
 <script>
 
-const SHEET_ID='1_uou6JDGV-Tm80oALMrduuj9ZIVWM1r9ppuQsYq7_qo';
-const fmtRp=v=>{if(!v||v===0)return'Rp0';return'Rp'+Math.round(v).toLocaleString('id-ID');};
-const fmtPct=v=>(v||0).toFixed(1)+'%';
-const fmtNum=v=>(v||0).toLocaleString('id-ID');
-const toNum=v=>parseFloat(String(v||'').replace(/[^0-9.-]/g,''))||0;
-const toIso=d=>d?[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'):'';
-function parseDate(s){
+const SID='1_uou6JDGV-Tm80oALMrduuj9ZIVWM1r9ppuQsYq7_qo';
+const Rp=v=>v?'Rp'+Math.round(v).toLocaleString('id-ID'):'Rp0';
+const Pct=v=>(v||0).toFixed(1)+'%';
+const Num=v=>(v||0).toLocaleString('id-ID');
+const N=v=>parseFloat(String(v||'').replace(/[^0-9.-]/g,''))||0;
+const Iso=d=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+const S=(a,f)=>a.reduce((s,x)=>s+(f(x)||0),0);
+const U=(a,f)=>new Set(a.map(f)).size;
+
+function pDate(s){
   if(!s)return null;
   const mo={jan:0,feb:1,mar:2,apr:3,mei:4,may:4,jun:5,jul:6,agu:7,aug:7,sep:8,okt:9,oct:9,nov:10,des:11,dec:11};
-  const m1=s.match(/(\d{1,2})[-\s]+([A-Za-z]+)[-\s]+(\d{4})/);
-  if(m1){const m=mo[m1[2].toLowerCase().substring(0,3)];if(m!==undefined)return new Date(+m1[3],m,+m1[1]);}
-  const m2=s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if(m2)return new Date(+m2[3],+m2[2]-1,+m2[1]);
-  const m3=s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if(m3)return new Date(+m3[1],+m3[2]-1,+m3[3]);
+  let m=s.match(/(\d{1,2})[-\s]+([A-Za-z]+)[-\s]+(\d{4})/);
+  if(m){const k=mo[m[2].toLowerCase().slice(0,3)];if(k!==undefined)return new Date(+m[3],k,+m[1]);}
+  m=s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);
+  m=s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return new Date(+m[1],+m[2]-1,+m[3]);
   return null;
 }
-function parseCSV(txt){
-  const rows=[];let row=[],field='',inQ=false;
-  for(let i=0;i<txt.length;i++){
-    const c=txt[i];
-    if(inQ){if(c==='"'&&txt[i+1]==='"'){field+='"';i++;}else if(c==='"')inQ=false;else field+=c;}
-    else if(c==='"')inQ=true;
-    else if(c===','){row.push(field.trim());field='';}
-    else if(c==='\n'||c==='\r'){if(field||row.length){row.push(field.trim());rows.push(row);}row=[];field='';if(c==='\r'&&txt[i+1]==='\n')i++;}
-    else field+=c;
+function csv(t){
+  const rows=[];let row=[],f='',q=false;
+  for(let i=0;i<t.length;i++){const c=t[i];
+    if(q){if(c==='"'&&t[i+1]==='"'){f+='"';i++;}else if(c==='"')q=false;else f+=c;}
+    else if(c==='"')q=true;else if(c===','){row.push(f.trim());f='';}
+    else if(c==='\n'||c==='\r'){if(f||row.length){row.push(f.trim());rows.push(row);}row=[];f='';if(c==='\r'&&t[i+1]==='\n')i++;}
+    else f+=c;
   }
-  if(field||row.length){row.push(field.trim());rows.push(row);}
-  return rows;
+  if(f||row.length){row.push(f.trim());rows.push(row);}return rows;
 }
-const uniq=(arr,fn)=>new Set(arr.map(fn)).size;
-async function loadData(){
-  const f=gid=>fetch('https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/export?format=csv&gid='+gid+'&_='+Date.now()).then(r=>r.ok?r.text():Promise.reject('err '+gid));
-  document.getElementById('status').textContent='Mengambil data…';
-  const [gTxt,rTxt,sTxt]=await Promise.all([f('1703817529'),f('1062237088'),f('1234708655')]);
-  const gRows=parseCSV(gTxt),rRows=parseCSV(rTxt),sRows=parseCSV(sTxt);
-  const TODAY=new Date(),todayStr=toIso(TODAY),mIdx=TODAY.getMonth();
-  const tx=gRows.slice(1).map(r=>({
-    date:parseDate(r[0]),noInv:r[1],amount:toNum(r[6]),qty:toNum(r[5]),koli:toNum(r[9]),
-    stage:(r[10]||'').toLowerCase(),eksp:(r[11]||'').toUpperCase(),status:r[7]||'',co:r[8]||'',lokasi:(r[12]||'').trim()
-  })).filter(t=>t.date);
-  const txM=tx.filter(t=>t.date.getMonth()===mIdx&&t.stage!=='return');
-  const txD=txM.filter(t=>toIso(t.date)===todayStr);
-  const salesM=txM.reduce((s,t)=>s+t.amount,0),salesD=txD.reduce((s,t)=>s+t.amount,0);
-  const salesMKI=txM.filter(t=>t.co==='MKI').reduce((s,t)=>s+t.amount,0),salesCFN=txM.filter(t=>t.co==='CFN').reduce((s,t)=>s+t.amount,0);
-  const invM=uniq(txM,t=>t.noInv),invD=uniq(txD,t=>t.noInv);
-  const invMKI=uniq(txM.filter(t=>t.co==='MKI'),t=>t.noInv),invCFN=uniq(txM.filter(t=>t.co==='CFN'),t=>t.noInv);
-  const txNoHC=txM.filter(t=>t.eksp!=='HAND CARRY');
-  const invTot=uniq(txNoHC,t=>t.noInv);
-  const invOTD=uniq(txNoHC.filter(t=>t.stage==='complete'&&t.status==='Same Day'),t=>t.noInv);
-  const otdPct=invTot>0?(invOTD/invTot)*100:0;
-  const txDNoHC=txD.filter(t=>t.eksp!=='HAND CARRY');
-  const invDTot=uniq(txDNoHC,t=>t.noInv);
-  const invDOTD=uniq(txDNoHC.filter(t=>t.stage==='complete'&&t.status==='Same Day'),t=>t.noInv);
-  const otdDay=invDTot>0?(invDOTD/invDTot)*100:null;
-  const totalQty=txNoHC.reduce((s,t)=>s+t.qty,0),totalKoli=txNoHC.reduce((s,t)=>s+t.koli,0);
-  const lokasiMap={};
-  txM.forEach(t=>{if(!t.lokasi)return;if(!lokasiMap[t.lokasi])lokasiMap[t.lokasi]=new Set();lokasiMap[t.lokasi].add(t.noInv);});
-  const totalLokasi=Object.keys(lokasiMap).length;
-  const top5=Object.entries(lokasiMap).sort((a,b)=>b[1].size-a[1].size).slice(0,5).map(([l,s])=>({lokasi:l,inv:s.size}));
-  const rh=rRows[0];
-  const iRD=rh.findIndex(x=>x.includes('Date')),iRP=rh.findIndex(x=>x.toLowerCase().includes('pelunasan')),iRC=rh.findIndex(x=>x.toLowerCase().includes('company'));
-  const rv=rRows.slice(1).map(r=>({date:parseDate(r[iRD]),pel:toNum(r[iRP]),co:r[iRC]||''})).filter(r=>r.date);
-  const revM=rv.filter(r=>r.date.getMonth()===mIdx).reduce((s,r)=>s+r.pel,0),revD=rv.filter(r=>toIso(r.date)===todayStr).reduce((s,r)=>s+r.pel,0);
-  const revMKI=rv.filter(r=>r.date.getMonth()===mIdx&&r.co==='MKI').reduce((s,r)=>s+r.pel,0),revCFN=rv.filter(r=>r.date.getMonth()===mIdx&&r.co==='CFN').reduce((s,r)=>s+r.pel,0);
+function remWD(d){
+  const y=d.getFullYear(),m=d.getMonth(),last=new Date(y,m+1,0).getDate();
+  let n=0;for(let i=d.getDate();i<=last;i++)if(new Date(y,m,i).getDay()!==0)n++;return n;
+}
+
+async function load(){
+  const g=id=>fetch('https://docs.google.com/spreadsheets/d/'+SID+'/export?format=csv&gid='+id+'&_='+Date.now()).then(r=>r.ok?r.text():Promise.reject(id));
+  document.getElementById('status').textContent='Mengambil data\u2026';
+  const [gT,rT,sT]=await Promise.all([g('1703817529'),g('1062237088'),g('1234708655')]);
+  const gR=csv(gT),rR=csv(rT),sR=csv(sT);
+  const T=new Date(),ts=Iso(T),mi=T.getMonth(),rd=remWD(T);
+  const tx=gR.slice(1).map(r=>({
+    dt:pDate(r[0]),inv:r[1],amt:N(r[6]),qty:N(r[5]),kol:N(r[9]),
+    stg:(r[10]||'').toLowerCase(),eks:(r[11]||'').toUpperCase(),sts:r[7]||'',co:r[8]||'',lok:(r[12]||'').trim()
+  })).filter(t=>t.dt);
+  const tM=tx.filter(t=>t.dt.getMonth()===mi&&t.stg!=='return'),tD=tM.filter(t=>Iso(t.dt)===ts);
+  const sM=S(tM,t=>t.amt),sD=S(tD,t=>t.amt);
+  const sMm=S(tM.filter(t=>t.co==='MKI'),t=>t.amt),sMc=S(tM.filter(t=>t.co==='CFN'),t=>t.amt);
+  const sDm=S(tD.filter(t=>t.co==='MKI'),t=>t.amt),sDc=S(tD.filter(t=>t.co==='CFN'),t=>t.amt);
+  const iM=U(tM,t=>t.inv),iD=U(tD,t=>t.inv);
+  const iMm=U(tM.filter(t=>t.co==='MKI'),t=>t.inv),iMc=U(tM.filter(t=>t.co==='CFN'),t=>t.inv);
+  const iDm=U(tD.filter(t=>t.co==='MKI'),t=>t.inv),iDc=U(tD.filter(t=>t.co==='CFN'),t=>t.inv);
+  const nhM=tM.filter(t=>t.eks!=='HAND CARRY'),nhD=tD.filter(t=>t.eks!=='HAND CARRY');
+  const oTm=U(nhM,t=>t.inv),oHm=U(nhM.filter(t=>t.stg==='complete'&&t.sts==='Same Day'),t=>t.inv);
+  const oTd=U(nhD,t=>t.inv),oHd=U(nhD.filter(t=>t.stg==='complete'&&t.sts==='Same Day'),t=>t.inv);
+  const oPm=oTm>0?(oHm/oTm)*100:0,oPd=oTd>0?(oHd/oTd)*100:null;
+  const oMKI_t=U(nhM.filter(t=>t.co==='MKI'),t=>t.inv),oMKI_h=U(nhM.filter(t=>t.co==='MKI'&&t.stg==='complete'&&t.sts==='Same Day'),t=>t.inv);
+  const oCFN_t=U(nhM.filter(t=>t.co==='CFN'),t=>t.inv),oCFN_h=U(nhM.filter(t=>t.co==='CFN'&&t.stg==='complete'&&t.sts==='Same Day'),t=>t.inv);
+  const qty=S(nhM,t=>t.qty),kol=S(nhM,t=>t.kol);
+  const lkM={},lkD={};
+  tM.forEach(t=>{if(!t.lok)return;if(!lkM[t.lok])lkM[t.lok]=new Set();lkM[t.lok].add(t.inv);});
+  tD.forEach(t=>{if(!t.lok)return;if(!lkD[t.lok])lkD[t.lok]=new Set();lkD[t.lok].add(t.inv);});
+  const lkMl=Object.entries(lkM).sort((a,b)=>b[1].size-a[1].size);
+  const lkDl=Object.entries(lkD).sort((a,b)=>b[1].size-a[1].size);
+  const rh=rR[0],iRd=rh.findIndex(x=>x.includes('Date')),iRp=rh.findIndex(x=>x.toLowerCase().includes('pelunasan')),iRc=rh.findIndex(x=>x.toLowerCase().includes('company'));
+  const rv=rR.slice(1).map(r=>({dt:pDate(r[iRd]),p:N(r[iRp]),co:r[iRc]||''})).filter(r=>r.dt);
+  const rM=S(rv.filter(r=>r.dt.getMonth()===mi),r=>r.p),rD=S(rv.filter(r=>Iso(r.dt)===ts),r=>r.p);
+  const rMm=S(rv.filter(r=>r.dt.getMonth()===mi&&r.co==='MKI'),r=>r.p),rMc=S(rv.filter(r=>r.dt.getMonth()===mi&&r.co==='CFN'),r=>r.p);
+  const rDm=S(rv.filter(r=>Iso(r.dt)===ts&&r.co==='MKI'),r=>r.p),rDc=S(rv.filter(r=>Iso(r.dt)===ts&&r.co==='CFN'),r=>r.p);
   const MN=['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'];
-  let targetSales=0;
-  for(const row of sRows.slice(1)){if((row[0]||'').toUpperCase().includes(MN[mIdx].substring(0,3))){targetSales=toNum(row[45]);break;}}
-  const pctSales=targetSales>0?(salesM/targetSales)*100:0,pctRev=targetSales>0?(revM/targetSales)*100:0,collection=salesM>0?(revM/salesM)*100:0;
-  return {TODAY,todayStr,mIdx,salesM,salesD,salesMKI,salesCFN,targetSales,pctSales,invM,invD,invMKI,invCFN,revM,revD,revMKI,revCFN,pctRev,otdPct,otdDay,invOTD,invTot,invDOTD,invDTot,totalQty,totalKoli,totalLokasi,top5,collection};
+  let tgS=0;for(const row of sR.slice(1)){if((row[0]||'').toUpperCase().includes(MN[mi].slice(0,3))){tgS=N(row[45]);break;}}
+  const pSm=tgS>0?(sM/tgS)*100:0,pRm=tgS>0?(rM/tgS)*100:0;
+  const TI=280;
+  return {T,ts,mi,rd,sM,sD,sMm,sMc,sDm,sDc,tgS,pSm,tgSd:rd>0?(tgS-sM)/rd:0,iM,iD,iMm,iMc,iDm,iDc,TI,tgId:rd>0?(TI-iM)/rd:0,rM,rD,rMm,rMc,rDm,rDc,pRm,tgRd:rd>0?(tgS-rM)/rd:0,oPm,oPd,oTm,oHm,oTd,oHd,oMKI_t,oMKI_h,oCFN_t,oCFN_h,qty,kol,lkMl,lkDl,lkM:Object.keys(lkM).length,lkD:Object.keys(lkD).length};
 }
-function drawCanvas(d){
-  const cv=document.getElementById('kpiCanvas'),ctx=cv.getContext('2d'),W=1080,H=1350;
-  cv.height=H;
-  const MONTHS=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-  const DAYS=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
-  ctx.fillStyle='#f8f5f0';ctx.fillRect(0,0,W,H);
-  const hg=ctx.createLinearGradient(0,0,W,0);hg.addColorStop(0,'#c17a5a');hg.addColorStop(1,'#a85d3f');
-  ctx.fillStyle=hg;ctx.fillRect(0,0,W,106);
-  ctx.fillStyle='rgba(255,255,255,.65)';ctx.font='600 20px system-ui,sans-serif';ctx.fillText('MKI \u2014 CABANG MAKASSAR',44,34);
-  ctx.fillStyle='#fff';ctx.font='bold 28px system-ui,sans-serif';ctx.fillText('Dashboard Kinerja Bisnis MKI Makassar 2026',44,74);
-  ctx.fillStyle='rgba(255,255,255,.75)';ctx.font='400 18px system-ui,sans-serif';ctx.textAlign='right';
-  ctx.fillText(DAYS[d.TODAY.getDay()]+', '+d.TODAY.getDate()+' '+MONTHS[d.mIdx]+' '+d.TODAY.getFullYear(),W-44,62);
-  ctx.textAlign='left';
-  function pBar(x,y,w,pct){
-    ctx.fillStyle='#e8e0d4';ctx.beginPath();ctx.roundRect(x,y,w,7,3.5);ctx.fill();
-    const fc=Math.min(pct/100,1)*w;
-    if(fc>0){ctx.fillStyle=pct>=100?'#4d8a5c':pct>=60?'#d4a843':'#c17a5a';ctx.beginPath();ctx.roundRect(x,y,fc,7,3.5);ctx.fill();}
+
+function draw(d){
+  const W=1080,GAP=18,L=38,CW=491;
+  const HDR=18,DH=148,MH=162;
+  const WDH=102,WMH=208;
+  const CH=HDR+DH+MH,WH=HDR+WDH+WMH;
+  const R1=104,R2=R1+CH+GAP,R3=R2+CH+GAP;
+  const RH=HDR+DH+MH-18;
+  const TH=R3+Math.max(RH,WH)+GAP+46;
+  const cv=document.getElementById('cv');cv.height=TH;
+  const cx=cv.getContext('2d');
+  const C={bg:'#f8f5f0',h1:'#c17a5a',h2:'#a85d3f',
+    dBg:'#edf5f0',dBr:'#a8cfb8',dLb:'#2d5a3d',
+    mBg:'#fdf9f5',mBr:'#c8b4a0',mLb:'#7a4a2a',
+    bar:'#ddd6cc',grn:'#4d8a5c',red:'#b84040',
+    tr:'#c17a5a',sg:'#6a9070',ink:'#2a2520',sf:'#6a5a4a',fn:'#9a8a7a',
+    ft:'#ede6de'};
+  const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  cx.fillStyle=C.bg;cx.fillRect(0,0,W,TH);
+  const hg=cx.createLinearGradient(0,0,W,0);hg.addColorStop(0,C.h1);hg.addColorStop(1,C.h2);
+  cx.fillStyle=hg;cx.fillRect(0,0,W,98);
+  cx.fillStyle='rgba(255,255,255,.6)';cx.font='600 18px system-ui';cx.fillText('MKI \u2014 CABANG MAKASSAR',44,30);
+  cx.fillStyle='#fff';cx.font='bold 24px system-ui';cx.fillText('Dashboard Kinerja Bisnis MKI Makassar 2026',44,64);
+  cx.fillStyle='rgba(255,255,255,.8)';cx.font='400 15px system-ui';cx.textAlign='right';
+  cx.fillText(DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.mi]+' '+d.T.getFullYear(),W-40,54);cx.textAlign='left';
+
+  function bar(x,y,w,p,t){const h=p>=(t||100);cx.fillStyle=C.bar;cx.fillRect(x,y,w,5);const f=Math.min(p/100,1)*w;if(f>0){cx.fillStyle=h?C.grn:C.red;cx.fillRect(x,y,f,5);}}
+  function bdg(x,y,p,t){const h=p>=(t||100);const s=h?'\u2713 ACHIEVE':'\u2717 BELUM';cx.font='bold 10px system-ui';const bw=cx.measureText(s).width+12;cx.fillStyle=h?'#cce8d8':'#f0d0d0';cx.fillRect(x,y,bw,16);cx.fillStyle=h?C.grn:C.red;cx.fillText(s,x+6,y+11);}
+  function coR(x,y,vm,vc){cx.fillStyle=C.tr;cx.font='bold 11px system-ui';cx.fillText('MKI',x,y);cx.fillStyle=C.ink;cx.font='400 11px system-ui';cx.fillText(vm,x+27,y);cx.fillStyle=C.sg;cx.font='bold 11px system-ui';cx.fillText('CFN',x+210,y);cx.fillStyle=C.ink;cx.font='400 11px system-ui';cx.fillText(vc,x+237,y);}
+  function div(x,y,w){cx.strokeStyle='#d8d0c8';cx.lineWidth=0.5;cx.beginPath();cx.moveTo(x,y);cx.lineTo(x+w,y);cx.stroke();}
+
+  function card(cx2,cy,cw,cd,cm,lbl,fnD,fnM){
+    cx.fillStyle='#e8e0d8';cx.fillRect(cx2,cy,cw,HDR);
+    cx.fillStyle=C.sf;cx.font='bold 11px system-ui';cx.fillText(lbl,cx2+10,cy+13);
+    cx.strokeStyle='#c4b8a8';cx.lineWidth=1;cx.strokeRect(cx2,cy,cw,HDR+cd+cm);
+    cx.fillStyle=C.dBg;cx.fillRect(cx2,cy+HDR,cw,cd);
+    cx.strokeStyle=C.dBr;cx.lineWidth=0.5;cx.strokeRect(cx2,cy+HDR,cw,cd);
+    cx.fillStyle=C.dLb;cx.font='bold 10px system-ui';cx.fillText('\u25b6 HARIAN',cx2+10,cy+HDR+12);
+    fnD(cx2+10,cy+HDR+15,cw-20);
+    cx.fillStyle=C.mBg;cx.fillRect(cx2,cy+HDR+cd,cw,cm);
+    cx.strokeStyle=C.mBr;cx.lineWidth=0.5;cx.strokeRect(cx2,cy+HDR+cd,cw,cm);
+    cx.fillStyle=C.mLb;cx.font='bold 10px system-ui';cx.fillText('\u25b6 BULANAN',cx2+10,cy+HDR+cd+12);
+    fnM(cx2+10,cy+HDR+cd+15,cw-20);
   }
-  function bdg(x,y,pct){
-    const st=pct>=100?'\u2713 TARGET HIT':pct>=60?'\u25b2 ON PROGRESS':'\u26a0 BELUM ACHIEVE';
-    const bc=pct>=100?'#dceede':pct>=60?'#fef3cd':'#f3dad6',tc=pct>=100?'#4d6b46':pct>=60?'#856404':'#8c3c30';
-    ctx.font='bold 13px system-ui,sans-serif';const bw=ctx.measureText(st).width+20;
-    ctx.fillStyle=bc;ctx.beginPath();ctx.roundRect(x,y,bw,24,5);ctx.fill();
-    ctx.fillStyle=tc;ctx.fillText(st,x+10,y+16);
-  }
-  function card(x,y,w,h2,o){
-    ctx.save();ctx.fillStyle='#fff';ctx.strokeStyle='#ddd6cc';ctx.lineWidth=1;
-    ctx.beginPath();ctx.roundRect(x,y,w,h2,12);ctx.fill();ctx.stroke();ctx.restore();
-    ctx.fillStyle='#9a7a5a';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText(o.label,x+22,y+30);
-    ctx.fillStyle=o.vc||'#2a2520';ctx.font='bold '+(o.fs||32)+'px system-ui,sans-serif';ctx.fillText(o.val,x+22,y+72);
-    let yy=y+94;
-    if(o.sub1){ctx.fillStyle='#6a5a4a';ctx.font='400 14px system-ui,sans-serif';ctx.fillText(o.sub1,x+22,yy);yy+=20;}
-    if(o.mki!==undefined){
-      ctx.fillStyle='#c17a5a';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText('MKI '+o.mki,x+22,yy);
-      ctx.fillStyle='#7a9872';ctx.fillText('CFN '+o.cfn,x+22+210,yy);yy+=20;
+
+  // CARD 1 — SALES
+  card(L,R1,CW,DH,MH,'TOTAL SALES \u2014 '+MO[d.mi].toUpperCase(),
+    (x,y,w)=>{
+      cx.fillStyle=C.ink;cx.font='bold 26px system-ui';cx.fillText(Rp(d.sD),x,y+24);
+      coR(x,y+36,Rp(d.sDm),Rp(d.sDc));div(x,y+44,w);
+      const tg=d.tgSd;
+      cx.fillStyle=C.sf;cx.font='400 11px system-ui';
+      cx.fillText(tg<=0?'Target bulanan sudah tercapai':('Target hari ini: '+Rp(tg)),x,y+58);
+      const p=tg<=0?100:tg>0?Math.min((d.sD/tg)*100,150):100;
+      bar(x,y+64,w,p);bdg(x,y+72,p);
+      cx.fillStyle=C.fn;cx.font='400 10px system-ui';cx.fillText('Sisa '+d.rd+' hari kerja bulan ini',x,y+100);
+    },
+    (x,y,w)=>{
+      cx.fillStyle=C.ink;cx.font='bold 24px system-ui';cx.fillText(Rp(d.sM),x,y+22);
+      coR(x,y+34,Rp(d.sMm),Rp(d.sMc));div(x,y+42,w);
+      cx.fillStyle=C.sf;cx.font='400 11px system-ui';
+      cx.fillText('Target: '+Rp(d.tgS)+'  Capaian: '+Pct(d.pSm),x,y+56);
+      bar(x,y+62,w,d.pSm);bdg(x,y+70,d.pSm);
     }
-    if(o.sub2){ctx.fillStyle='#6a5a4a';ctx.font='400 13px system-ui,sans-serif';ctx.fillText(o.sub2,x+22,yy);yy+=18;}
-    if(o.sub3){ctx.fillStyle='#6a5a4a';ctx.font='400 13px system-ui,sans-serif';ctx.fillText(o.sub3,x+22,yy);yy+=18;}
-    if(o.pct!==undefined){yy+=4;pBar(x+22,yy,w-44,o.pct);yy+=14;bdg(x+22,yy,o.pct);}
-  }
-  const CW=488,CH=230,GAP=24,L=40,T=118;
-  card(L,T,CW,CH,{label:'TOTAL SALES \u2014 '+MONTHS[d.mIdx].toUpperCase(),val:fmtRp(d.salesM),sub1:'Hari ini: '+fmtRp(d.salesD),mki:fmtRp(d.salesMKI),cfn:fmtRp(d.salesCFN),pct:d.pctSales});
-  card(L+CW+GAP,T,CW,CH,{label:'TOTAL REVENUE \u2014 '+MONTHS[d.mIdx].toUpperCase(),val:fmtRp(d.revM),sub1:'Hari ini: '+fmtRp(d.revD),mki:fmtRp(d.revMKI),cfn:fmtRp(d.revCFN),pct:d.pctRev});
-  const T2=T+CH+GAP;
-  card(L,T2,CW,CH,{label:'TOTAL INVOICE \u2014 '+MONTHS[d.mIdx].toUpperCase(),val:fmtNum(d.invM),fs:44,sub1:'Hari ini: '+fmtNum(d.invD)+' invoice',mki:fmtNum(d.invMKI),cfn:fmtNum(d.invCFN),pct:d.invM>0?(d.invM/280)*100:0});
-  card(L+CW+GAP,T2,CW,CH,{label:'OTD ACCURACY \u2014 '+MONTHS[d.mIdx].toUpperCase(),val:fmtPct(d.otdPct),fs:44,vc:d.otdPct>=80?'#4d8a5c':d.otdPct>=60?'#d4a843':'#c17a5a',sub1:'Hari ini: '+(d.otdDay!==null?fmtPct(d.otdDay):'\u2014')+' ('+fmtNum(d.invDOTD)+'/'+fmtNum(d.invDTot)+' inv)',sub2:fmtNum(d.invOTD)+' Same Day / '+fmtNum(d.invTot)+' invoice (no HC)',sub3:'Total Qty: '+fmtNum(d.totalQty)+'  |  Total Koli: '+fmtNum(d.totalKoli),pct:d.otdPct});
-  const T3=T2+CH+GAP;
-  card(L,T3,CW,CH-10,{label:'SALES TO REVENUE RATIO',val:fmtPct(d.collection),fs:44,sub1:'Sales: '+fmtRp(d.salesM),sub2:'Revenue: '+fmtRp(d.revM)});
-  const wx=L+CW+GAP,wy=T3,ww=CW,wh=CH-10;
-  ctx.save();ctx.fillStyle='#fff';ctx.strokeStyle='#ddd6cc';ctx.lineWidth=1;
-  ctx.beginPath();ctx.roundRect(wx,wy,ww,wh,12);ctx.fill();ctx.stroke();ctx.restore();
-  ctx.fillStyle='#9a7a5a';ctx.font='bold 14px system-ui,sans-serif';ctx.fillText('PERFORMA WILAYAH \u2014 '+MONTHS[d.mIdx].toUpperCase(),wx+22,wy+30);
-  ctx.fillStyle='#2a2520';ctx.font='bold 36px system-ui,sans-serif';ctx.fillText(fmtNum(d.totalLokasi)+' area aktif',wx+22,wy+72);
-  ctx.fillStyle='#9a7a5a';ctx.font='bold 12px system-ui,sans-serif';ctx.fillText('TOP 5 WILAYAH',wx+22,wy+96);
-  d.top5.forEach((w,i)=>{
-    ctx.fillStyle='#3a3530';ctx.font='400 14px system-ui,sans-serif';ctx.fillText((i+1)+'. '+w.lokasi,wx+22,wy+114+i*22);
-    ctx.fillStyle='#c17a5a';ctx.font='bold 14px system-ui,sans-serif';ctx.textAlign='right';ctx.fillText(fmtNum(w.inv)+' inv',wx+ww-22,wy+114+i*22);ctx.textAlign='left';
-  });
-  ctx.fillStyle='#efe8df';ctx.fillRect(0,H-56,W,56);
-  ctx.fillStyle='#a08060';ctx.font='400 13px system-ui,sans-serif';
-  ctx.fillText('mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar  \u2022  '+new Date().toLocaleString('id-ID'),44,H-20);
+  );
+
+  // CARD 2 — REVENUE
+  card(L+CW+GAP,R1,CW,DH,MH,'TOTAL REVENUE \u2014 '+MO[d.mi].toUpperCase(),
+    (x,y,w)=>{
+      cx.fillStyle=C.ink;cx.font='bold 26px system-ui';cx.fillText(Rp(d.rD),x,y+24);
+      coR(x,y+36,Rp(d.rDm),Rp(d.rDc));div(x,y+44,w);
+      const tg=d.tgRd;
+      cx.fillStyle=C.sf;cx.font='400 11px system-ui';
+      cx.fillText(tg<=0?'Target bulanan sudah tercapai':('Target hari ini: '+Rp(tg)),x,y+58);
+      const p=tg<=0?100:tg>0?(d.rD/tg)*100:100;
+      bar(x,y+64,w,p);bdg(x,y+72,p);
+      cx.fillStyle=C.fn;cx.font='400 10px system-ui';cx.fillText('Sisa '+d.rd+' hari kerja bulan ini',x,y+100);
+    },
+    (x,y,w)=>{
+      cx.fillStyle=C.ink;cx.font='bold 24px system-ui';cx.fillText(Rp(d.rM),x,y+22);
+      coR(x,y+34,Rp(d.rMm),Rp(d.rMc));div(x,y+42,w);
+      cx.fillStyle=C.sf;cx.font='400 11px system-ui';
+      cx.fillText('Target: '+Rp(d.tgS)+'  Capaian: '+Pct(d.pRm),x,y+56);
+      bar(x,y+62,w,d.pRm);bdg(x,y+70,d.pRm);
+    }
+  );
+
+  // CARD 3 — INVOICE
+  card(L,R2,CW,DH,MH,'TOTAL INVOICE \u2014 '+MO[d.mi].toUpperCase(),
+    (x,y,w)=>{
+      cx.fillStyle=C.ink;cx.font='bold 34px system-ui';cx.fillText(Num(d.iD)+' invoice',x,y+30);
+      coR(x,y+42,Num(d.iDm)+' inv',Num(d.iDc)+' inv');div(x,y+50,w);
+      const tg=d.tgId;
+      cx.fillStyle=C.sf;cx.font='400 11px system-ui';
+      cx.fillText(tg<=0?'Target bulanan sudah tercapai':('Target hari ini: \u2248'+Num(Math.ceil(tg))+' invoice'),x,y+64);
+      const p=tg<=0?100:(d.iD/tg)*100;
+      bar(x,y+70,w,p);bdg(x,y+78,p);
+      cx.fillStyle=C.fn;cx.font='400 10px system-ui';cx.fillText('Sisa '+d.rd+' hari kerja bulan ini',x,y+102);
+    },
+    (x,y,w)=>{
+      cx.fillStyle=C.ink;cx.font='bold 30px system-ui';cx.fillText(Num(d.iM)+' / '+Num(d.TI),x,y+26);
+      coR(x,y+38,Num(d.iMm)+' inv',Num(d.iMc)+' inv');div(x,y+46,w);
+      const p=(d.iM/d.TI)*100;
+      cx.fillStyle=C.sf;cx.font='400 11px system-ui';
+      cx.fillText('Target: '+Num(d.TI)+'  Capaian: '+Pct(p),x,y+60);
+      bar(x,y+66,w,p);bdg(x,y+74,p);
+    }
+  );
+
+  // CARD 4 — OTD
+  card(L+CW+GAP,R2,CW,DH,MH,'OTD ACCURACY \u2014 '+MO[d.mi].toUpperCase(),
+    (x,y,w)=>{
+      const vd=d.oPd!==null?Pct(d.oPd):'\u2014';
+      cx.fillStyle=d.oPd!==null&&d.oPd>=80?C.grn:(d.oPd===null?C.sf:C.red);
+      cx.font='bold 34px system-ui';cx.fillText(vd,x,y+30);
+      cx.fillStyle=C.sf;cx.font='400 11px system-ui';
+      cx.fillText(Num(d.oHd)+'/'+Num(d.oTd)+' Same Day (no HC)',x,y+44);
+      div(x,y+50,w);cx.fillText('Target: 80%',x,y+62);
+      const p=d.oPd!==null?d.oPd:0;
+      bar(x,y+68,w,p,80);bdg(x,y+76,p,80);
+    },
+    (x,y,w)=>{
+      cx.fillStyle=d.oPm>=80?C.grn:C.red;
+      cx.font='bold 28px system-ui';cx.fillText(Pct(d.oPm),x,y+24);
+      cx.fillStyle=C.sf;cx.font='400 11px system-ui';
+      cx.fillText(Num(d.oHm)+' Same Day / '+Num(d.oTm)+' invoice (no HC)',x,y+38);
+      cx.fillText('Total Qty: '+Num(d.qty)+'  Koli: '+Num(d.kol),x,y+52);
+      div(x,y+58,w);bar(x,y+64,w,d.oPm,80);bdg(x,y+72,d.oPm,80);
+      const pm=d.oMKI_t>0?(d.oMKI_h/d.oMKI_t)*100:0,pc=d.oCFN_t>0?(d.oCFN_h/d.oCFN_t)*100:0;
+      coR(x,y+98,Pct(pm),Pct(pc));
+    }
+  );
+
+  // CARD 5 — SALES TO REVENUE RATIO
+  card(L,R3,CW,DH,MH-18,'SALES TO REVENUE RATIO',
+    (x,y,w)=>{
+      const cd=d.sD>0?(d.rD/d.sD)*100:0;
+      cx.fillStyle=C.ink;cx.font='bold 34px system-ui';cx.fillText(Pct(cd),x,y+30);
+      cx.fillStyle=C.sf;cx.font='400 11px system-ui';
+      cx.fillText('Sales: '+Rp(d.sD)+'  Rev: '+Rp(d.rD),x,y+44);
+      div(x,y+50,w);
+      const cm=d.sDm>0?(d.rDm/d.sDm)*100:0,cc=d.sDc>0?(d.rDc/d.sDc)*100:0;
+      coR(x,y+64,Pct(cm),Pct(cc));
+    },
+    (x,y,w)=>{
+      const cm=d.sM>0?(d.rM/d.sM)*100:0;
+      cx.fillStyle=C.ink;cx.font='bold 28px system-ui';cx.fillText(Pct(cm),x,y+24);
+      cx.fillStyle=C.sf;cx.font='400 11px system-ui';
+      cx.fillText('Sales: '+Rp(d.sM)+'  Rev: '+Rp(d.rM),x,y+38);
+      div(x,y+44,w);
+      const cmm=d.sMm>0?(d.rMm/d.sMm)*100:0,cmc=d.sMc>0?(d.rMc/d.sMc)*100:0;
+      coR(x,y+58,Pct(cmm),Pct(cmc));
+    }
+  );
+
+  // CARD 6 — PERFORMA WILAYAH
+  card(L+CW+GAP,R3,CW,WDH,WMH,'PERFORMA WILAYAH \u2014 '+MO[d.mi].toUpperCase(),
+    (x,y,w)=>{
+      cx.fillStyle=C.ink;cx.font='bold 26px system-ui';cx.fillText(Num(d.lkD)+' area aktif',x,y+22);
+      cx.fillStyle=C.sf;cx.font='400 11px system-ui';cx.fillText('Wilayah dengan transaksi hari ini',x,y+36);
+      d.lkDl.slice(0,3).forEach((e,i)=>{
+        cx.fillStyle=C.ink;cx.font='400 11px system-ui';
+        cx.fillText((i+1)+'. '+e[0]+' ('+e[1].size+')',x+(i*160),y+54);
+      });
+    },
+    (x,y,w)=>{
+      cx.fillStyle=C.ink;cx.font='bold 24px system-ui';cx.fillText(Num(d.lkM)+' area aktif',x,y+20);
+      cx.fillStyle=C.sf;cx.font='400 11px system-ui';cx.fillText('Coverage bulan '+MO[d.mi],x,y+34);
+      div(x,y+40,w);
+      cx.fillStyle=C.fn;cx.font='bold 10px system-ui';cx.fillText('TOP 5 WILAYAH',x,y+54);
+      d.lkMl.slice(0,5).forEach((e,i)=>{
+        cx.fillStyle=C.ink;cx.font='400 12px system-ui';cx.fillText((i+1)+'. '+e[0],x,y+68+i*22);
+        cx.fillStyle=C.tr;cx.font='bold 12px system-ui';cx.textAlign='right';cx.fillText(Num(e[1].size)+' inv',x+w,y+68+i*22);cx.textAlign='left';
+      });
+      const inact=d.lkM-d.lkD;
+      if(inact>0){cx.fillStyle='#b08030';cx.font='400 11px system-ui';cx.fillText('\u2022 '+inact+' wilayah tidak aktif hari ini',x,y+182);}
+    }
+  );
+
+  cx.fillStyle=C.ft;cx.fillRect(0,TH-46,W,46);
+  cx.fillStyle=C.fn;cx.font='400 12px system-ui';
+  cx.fillText('mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar  \u2022  '+new Date().toLocaleString('id-ID'),44,TH-16);
 }
-function getCaption(d){
-  const DAYS=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
-  const MONTHS=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-  const tgl=DAYS[d.TODAY.getDay()]+', '+d.TODAY.getDate()+' '+MONTHS[d.mIdx]+' '+d.TODAY.getFullYear();
-  return '\ud83d\udcca *Report '+tgl+'*\n\nhttps://mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar/';
+
+function cap(d){
+  const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  return '\ud83d\udcca *Report '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.mi]+' '+d.T.getFullYear()+'*\n\nhttps://mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar/';
 }
+
 async function main(){
   try{
-    const data=await loadData();
-    document.getElementById('status').textContent='Membuat gambar KPI\u2026';
-    drawCanvas(data);
+    const data=await load();
+    document.getElementById('status').textContent='Membuat gambar\u2026';
+    draw(data);
     document.getElementById('spinner').style.display='none';
     document.getElementById('status').style.display='none';
-    const cv=document.getElementById('kpiCanvas');cv.style.display='block';
-    document.getElementById('btnGroup').style.display='flex';
-    const caption=getCaption(data),filename='Report-MKI-'+data.todayStr+'.png';
-    const getBlob=()=>new Promise(res=>cv.toBlob(res,'image/png'));
+    const cv=document.getElementById('cv');cv.style.display='block';
+    document.getElementById('btns').style.display='flex';
+    const c=cap(data),fn='Report-MKI-'+data.ts+'.png';
+    const blob=()=>new Promise(r=>cv.toBlob(r,'image/png'));
     document.getElementById('btnWA').addEventListener('click',async()=>{
-      if(navigator.share&&navigator.canShare){
-        const blob=await getBlob();const file=new File([blob],filename,{type:'image/png'});
-        if(navigator.canShare({files:[file]})){
-          try{await navigator.share({files:[file],title:'Report '+data.todayStr,text:caption});return;}
-          catch(e){if(e.name==='AbortError')return;}
-        }
-      }
-      const a=document.createElement('a');a.download=filename;a.href=cv.toDataURL('image/png');a.click();
-      setTimeout(()=>window.open('https://wa.me/?text='+encodeURIComponent(caption),'_blank'),800);
+      if(navigator.share&&navigator.canShare){const b=await blob();const f=new File([b],fn,{type:'image/png'});
+        if(navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:'Report '+data.ts,text:c});return;}catch(e){if(e.name==='AbortError')return;}}}
+      const a=document.createElement('a');a.download=fn;a.href=cv.toDataURL('image/png');a.click();
+      setTimeout(()=>window.open('https://wa.me/?text='+encodeURIComponent(c),'_blank'),800);
       const n=document.getElementById('note');n.textContent='Gambar disimpan. Kirim dari galeri ke WhatsApp.';n.style.display='block';
     });
-    document.getElementById('btnSave').addEventListener('click',()=>{
-      const a=document.createElement('a');a.download=filename;a.href=cv.toDataURL('image/png');a.click();
-    });
+    document.getElementById('btnSave').addEventListener('click',()=>{const a=document.createElement('a');a.download=fn;a.href=cv.toDataURL('image/png');a.click();});
   }catch(err){
     document.getElementById('spinner').style.display='none';document.getElementById('status').style.display='none';
-    const e=document.getElementById('errMsg');e.style.display='block';e.textContent='Gagal: '+err.message;console.error(err);
+    const e=document.getElementById('err');e.style.display='block';e.textContent='Gagal: '+err.message;console.error(err);
   }
 }
 main();
-
 </script>
 </body>
 </html>
