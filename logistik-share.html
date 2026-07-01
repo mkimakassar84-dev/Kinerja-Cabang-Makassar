@@ -47,15 +47,23 @@ async function load(){
   const tx=gR.slice(1).map(r=>{
     const inv=r[1]||'';
     const amt=N(r[6]);
+    const qty=N(r[5]);
     const isRetur=inv.toUpperCase().startsWith('R-')||amt<0;
     return {
       dt:pDate(r[0]), inv, customer:(r[3]||'').toUpperCase(), kode:(r[4]||'').toUpperCase(),
-      amt, company:(r[8]||'').toUpperCase(), isRetur,
+      amt, qty, company:(r[8]||'').toUpperCase(), isRetur,
     };
   }).filter(t=>t.dt);
 
   const rows=tx.filter(t=>Iso(t.dt)===ts&&!t.isRetur)
     .sort((a,b)=>a.inv.localeCompare(b.inv,undefined,{numeric:true}));
+
+  // Total qty keluar hari ini per kode barang, dipisah per company.
+  const qtyOutToday={};
+  rows.forEach(t=>{
+    if(!qtyOutToday[t.kode]) qtyOutToday[t.kode]={MKI:0,CFN:0};
+    if(t.company==='MKI'||t.company==='CFN') qtyOutToday[t.kode][t.company]+=t.qty;
+  });
 
   // Stock GD MKS: header 2 baris, data mulai baris index 2 (0-based).
   const stockByKode={};
@@ -65,7 +73,7 @@ async function load(){
     stockByKode[kode]={ mki:N(r[6]), cfn:N(r[7]), all:N(r[8]) };
   });
 
-  return {T,ts,rows,stockByKode};
+  return {T,ts,rows,stockByKode,qtyOutToday};
 }
 
 function draw(d){
@@ -74,11 +82,11 @@ function draw(d){
     {label:'NO INVOICE',w:110,get:t=>t.inv},
     {label:'CUSTOMER',w:200,get:t=>t.customer},
     {label:'KODE BARANG',w:110,get:t=>t.kode},
-    {label:'MKI TURNOVER',w:130,align:'right',get:t=>t.company==='MKI'?Rp(t.amt):'\u2013'},
-    {label:'CFN TURNOVER',w:130,align:'right',get:t=>t.company==='CFN'?Rp(t.amt):'\u2013'},
-    {label:'STOCK MKI',w:100,align:'right',get:(t,st)=>st?Num(st.mki):'\u2013'},
-    {label:'STOCK CFN',w:100,align:'right',get:(t,st)=>st?Num(st.cfn):'\u2013'},
-    {label:'STOCK ALL',w:120,align:'right',get:(t,st)=>st?Num(st.all):'\u2013'},
+    {label:'MKI TURNOVER',w:130,align:'right',get:t=>t.company==='MKI'?Num(t.qty):'\u2013'},
+    {label:'CFN TURNOVER',w:130,align:'right',get:t=>t.company==='CFN'?Num(t.qty):'\u2013'},
+    {label:'STOCK MKI',w:100,align:'right',get:(t,st,out)=>st?Num(st.mki-out.MKI):'\u2013'},
+    {label:'STOCK CFN',w:100,align:'right',get:(t,st,out)=>st?Num(st.cfn-out.CFN):'\u2013'},
+    {label:'STOCK ALL',w:120,align:'right',get:(t,st,out)=>st?Num((st.mki-out.MKI)+(st.cfn-out.CFN)):'\u2013'},
   ];
   const H=topH+headH+Math.max(d.rows.length,1)*rowH+footH+16;
   const cv=document.getElementById('cv'),cx=cv.getContext('2d');
@@ -116,10 +124,11 @@ function draw(d){
     d.rows.forEach((t,i)=>{
       if(i%2===1){cx.fillStyle='#efe9df';cx.fillRect(L,y,W-2*L,rowH);}
       const st=d.stockByKode[t.kode];
+      const out=d.qtyOutToday[t.kode]||{MKI:0,CFN:0};
       cx.fillStyle='#2a2520';cx.font='400 11.5px system-ui';
       x=L;
       cols.forEach(c=>{
-        let txt=String(c.get(t,st));
+        let txt=String(c.get(t,st,out));
         const maxW=c.w-14;
         if(cx.measureText(txt).width>maxW){
           while(txt.length>1 && cx.measureText(txt+'\u2026').width>maxW) txt=txt.slice(0,-1);
