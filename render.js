@@ -554,30 +554,29 @@ function renderDpDeliveryPanel(tx2026) {
 
 /* ----- Sub-section: PO GUDANG ----- */
 function renderDpPoGudangPanel(poItems) {
-  // Pisahkan menjadi 2 kelompok:
-  // 1. Stage kosong (belum ada info ATAU sudah ada surat jalan tapi belum Complete)
-  //    → "Barang Ditunggu / Dalam Proses"
-  // 2. Stage "Return" → "Barang Tidak Tersedia di Pusat"
-  const poTunggu  = poItems.filter(p => p.stage.toLowerCase() !== 'return' && p.statusBarang !== 'diterima');
-  const poReturn  = poItems.filter(p => p.stage.toLowerCase() === 'return');
+  const PO_PAGE_SIZE = 15;
 
-  const poTableRows = (rows) => rows.length
-    ? rows.map(p => {
-        const suratLabel = p.noSuratJalan || '&ndash;';
-        const ekspLabel  = p.statusEkspedisi || '&ndash;';
-        return `
-          <tr>
-            <td>${fmtDateShort(p.orderDate)}</td>
-            <td>${escapeHtml(p.noPO)}</td>
-            <td>${escapeHtml(p.company)}</td>
-            <td>${escapeHtml(p.kodeBarang)}</td>
-            <td>${fmtNum(p.qty)}</td>
-            <td>${escapeHtml(p.noSuratJalan) || '&ndash;'}</td>
-            <td>${escapeHtml(p.statusEkspedisi) || '&ndash;'}</td>
-          </tr>
-        `;
-      }).join('')
-    : `<tr><td colspan="7" class="empty-row">Tidak ada data pada periode ini.</td></tr>`;
+  const poTunggu = poItems.filter(p => p.stage.toLowerCase() !== 'return' && p.statusBarang !== 'diterima');
+  const poReturn = poItems.filter(p => p.stage.toLowerCase() === 'return');
+
+  // State pagination per tabel — terpisah supaya pindah halaman satu tabel
+  // tidak mereset halaman tabel yang lain.
+  let pageTunggu = 1;
+  let pageReturn = 1;
+
+  const rowHtml = (p, isTunggu) => `
+    <tr>
+      <td>${fmtDateShort(p.orderDate)}</td>
+      <td>${escapeHtml(p.noPO)}</td>
+      <td>${escapeHtml(p.company)}</td>
+      <td>${escapeHtml(p.kodeBarang)}</td>
+      <td>${fmtNum(p.qty)}</td>
+      <td>${isTunggu && !p.noSuratJalan
+        ? '<span style="color:var(--amber);font-weight:600;">BARANG DITUNGGU</span>'
+        : (p.noSuratJalan ? escapeHtml(p.noSuratJalan) : '&ndash;')}</td>
+      <td>${p.statusEkspedisi ? escapeHtml(p.statusEkspedisi) : '&ndash;'}</td>
+    </tr>
+  `;
 
   const html = `
     <div class="panel">
@@ -599,14 +598,13 @@ function renderDpPoGudangPanel(poItems) {
       <div class="table-scroll">
         <table class="data-table data-table-compact" id="dpPoTableTunggu">
           <thead>
-            <tr>
-              <th>Order Date</th><th>NO PO</th><th>Company</th><th>Kode Barang</th>
-              <th>Quantity</th><th>NO Surat Jalan</th><th>Status Ekspedisi</th>
-            </tr>
+            <tr><th>Order Date</th><th>NO PO</th><th>Company</th><th>Kode Barang</th>
+            <th>Quantity</th><th>NO Surat Jalan</th><th>Status Ekspedisi</th></tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
+      <div class="pagination" id="dpPoPaginationTunggu"></div>
 
       <h4 class="sub-heading" style="margin-top:28px;">
         &#9888; Return / Barang Tidak Tersedia di Pusat
@@ -615,66 +613,91 @@ function renderDpPoGudangPanel(poItems) {
       <div class="table-scroll">
         <table class="data-table data-table-compact" id="dpPoTableReturn">
           <thead>
-            <tr>
-              <th>Order Date</th><th>NO PO</th><th>Company</th><th>Kode Barang</th>
-              <th>Quantity</th><th>NO Surat Jalan</th><th>Status Ekspedisi</th>
-            </tr>
+            <tr><th>Order Date</th><th>NO PO</th><th>Company</th><th>Kode Barang</th>
+            <th>Quantity</th><th>NO Surat Jalan</th><th>Status Ekspedisi</th></tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
+      <div class="pagination" id="dpPoPaginationReturn"></div>
     </div>
   `;
   document.getElementById('dpPanel-po').innerHTML = html;
 
-  const render = () => {
+  const applyFilters = (rows) => {
     const state = dailyPerfState.po;
     const q = state.search.trim().toUpperCase();
-
-    const applyFilters = (rows) => {
-      let r = rows;
-      if (state.month !== 'all') {
-        const monthIdx = parseInt(state.month, 10);
-        r = r.filter(p => p.orderDate && p.orderDate.getMonth() === monthIdx);
-      }
-      if (q) r = r.filter(p => p.noPO.toUpperCase().includes(q) || p.kodeBarang.includes(q));
-      return [...r].sort((a, b) => (a.orderDate?.getTime() || 0) - (b.orderDate?.getTime() || 0));
-    };
-
-    const filteredTunggu = applyFilters(poTunggu);
-    const filteredReturn = applyFilters(poReturn);
-
-    document.getElementById('dpPoCountTunggu').textContent = `(${filteredTunggu.length} PO)`;
-    document.getElementById('dpPoCountReturn').textContent  = `(${filteredReturn.length} PO)`;
-
-    document.querySelector('#dpPoTableTunggu tbody').innerHTML = filteredTunggu.length
-      ? filteredTunggu.map(p => `
-          <tr>
-            <td>${fmtDateShort(p.orderDate)}</td>
-            <td>${escapeHtml(p.noPO)}</td>
-            <td>${escapeHtml(p.company)}</td>
-            <td>${escapeHtml(p.kodeBarang)}</td>
-            <td>${fmtNum(p.qty)}</td>
-            <td>${p.noSuratJalan ? escapeHtml(p.noSuratJalan) : '<span style="color:var(--amber);font-weight:600;">BARANG DITUNGGU</span>'}</td>
-            <td>${p.statusEkspedisi ? escapeHtml(p.statusEkspedisi) : '&ndash;'}</td>
-          </tr>
-        `).join('')
-      : `<tr><td colspan="7" class="empty-row">Tidak ada PO yang dalam proses pada periode ini.</td></tr>`;
-
-    document.querySelector('#dpPoTableReturn tbody').innerHTML = filteredReturn.length
-      ? filteredReturn.map(p => `
-          <tr>
-            <td>${fmtDateShort(p.orderDate)}</td>
-            <td>${escapeHtml(p.noPO)}</td>
-            <td>${escapeHtml(p.company)}</td>
-            <td>${escapeHtml(p.kodeBarang)}</td>
-            <td>${fmtNum(p.qty)}</td>
-            <td>${p.noSuratJalan ? escapeHtml(p.noSuratJalan) : '&ndash;'}</td>
-            <td>${p.statusEkspedisi ? escapeHtml(p.statusEkspedisi) : '&ndash;'}</td>
-          </tr>
-        `).join('')
-      : `<tr><td colspan="7" class="empty-row">Tidak ada PO yang return pada periode ini.</td></tr>`;
+    let r = rows;
+    if (state.month !== 'all') {
+      const monthIdx = parseInt(state.month, 10);
+      r = r.filter(p => p.orderDate && p.orderDate.getMonth() === monthIdx);
+    }
+    if (q) r = r.filter(p => p.noPO.toUpperCase().includes(q) || p.kodeBarang.includes(q));
+    return [...r].sort((a, b) => (a.orderDate?.getTime() || 0) - (b.orderDate?.getTime() || 0));
   };
+
+  // Helper render pagination lokal — tidak pakai renderDpPagination karena
+  // state page disimpan sebagai variabel lokal (bukan object.page), sehingga
+  // lebih mudah dikelola per tabel secara independen.
+  const renderPagBtns = (elId, currentPage, totalPages, onPage) => {
+    const el = document.getElementById(elId);
+    if (totalPages <= 1) { el.innerHTML = ''; return; }
+    const pages = [];
+    if (totalPages <= 7) { for (let i=1; i<=totalPages; i++) pages.push(i); }
+    else {
+      pages.push(1);
+      if (currentPage > 3) pages.push('...');
+      for (let i=Math.max(2,currentPage-1); i<=Math.min(totalPages-1,currentPage+1); i++) pages.push(i);
+      if (currentPage < totalPages-2) pages.push('...');
+      pages.push(totalPages);
+    }
+    el.innerHTML = `
+      <button class="page-btn page-nav" data-dir="prev" ${currentPage===1?'disabled':''} aria-label="Sebelumnya">&larr;</button>
+      ${pages.map(p => p==='...'
+        ? `<span class="page-ellipsis">&hellip;</span>`
+        : `<button class="page-btn ${p===currentPage?'active':''}" data-page="${p}">${p}</button>`
+      ).join('')}
+      <button class="page-btn page-nav" data-dir="next" ${currentPage===totalPages?'disabled':''} aria-label="Berikutnya">&rarr;</button>
+    `;
+    el.querySelectorAll('.page-btn[data-page]').forEach(btn =>
+      btn.addEventListener('click', () => onPage(parseInt(btn.dataset.page, 10)))
+    );
+    el.querySelectorAll('.page-btn[data-dir]').forEach(btn =>
+      btn.addEventListener('click', () => {
+        const dir = btn.dataset.dir;
+        if (dir==='prev' && currentPage>1) onPage(currentPage-1);
+        if (dir==='next' && currentPage<totalPages) onPage(currentPage+1);
+      })
+    );
+  };
+
+  const renderTunggu = () => {
+    const rows = applyFilters(poTunggu);
+    const totalPages = Math.max(1, Math.ceil(rows.length / PO_PAGE_SIZE));
+    if (pageTunggu > totalPages) pageTunggu = totalPages;
+    const shown = rows.slice((pageTunggu-1)*PO_PAGE_SIZE, pageTunggu*PO_PAGE_SIZE);
+    document.getElementById('dpPoCountTunggu').textContent =
+      `(${rows.length} PO${rows.length > PO_PAGE_SIZE ? `, hal. ${pageTunggu}/${totalPages}` : ''})`;
+    document.querySelector('#dpPoTableTunggu tbody').innerHTML = shown.length
+      ? shown.map(p => rowHtml(p, true)).join('')
+      : `<tr><td colspan="7" class="empty-row">Tidak ada PO yang dalam proses pada periode ini.</td></tr>`;
+    renderPagBtns('dpPoPaginationTunggu', pageTunggu, totalPages, (p) => { pageTunggu = p; renderTunggu(); });
+  };
+
+  const renderReturn = () => {
+    const rows = applyFilters(poReturn);
+    const totalPages = Math.max(1, Math.ceil(rows.length / PO_PAGE_SIZE));
+    if (pageReturn > totalPages) pageReturn = totalPages;
+    const shown = rows.slice((pageReturn-1)*PO_PAGE_SIZE, pageReturn*PO_PAGE_SIZE);
+    document.getElementById('dpPoCountReturn').textContent =
+      `(${rows.length} PO${rows.length > PO_PAGE_SIZE ? `, hal. ${pageReturn}/${totalPages}` : ''})`;
+    document.querySelector('#dpPoTableReturn tbody').innerHTML = shown.length
+      ? shown.map(p => rowHtml(p, false)).join('')
+      : `<tr><td colspan="7" class="empty-row">Tidak ada PO yang return pada periode ini.</td></tr>`;
+    renderPagBtns('dpPoPaginationReturn', pageReturn, totalPages, (p) => { pageReturn = p; renderReturn(); });
+  };
+
+  const render = () => { pageTunggu = 1; pageReturn = 1; renderTunggu(); renderReturn(); };
 
   render();
   document.getElementById('dpPoMonth').addEventListener('change', (e) => {
