@@ -447,15 +447,82 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
       </div>`;
 
     document.getElementById('dpKpiContent').innerHTML = `
+      <div class="wa-share-wrap"><button class="wa-share-btn" id="btnWaShare">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.374 0 0 5.373 0 12c0 2.117.554 4.103 1.523 5.83L.057 23.997l6.334-1.648A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-4.976-1.352l-.357-.211-3.68.957.984-3.57-.232-.368A9.818 9.818 0 012.182 12C2.182 6.566 6.566 2.182 12 2.182S21.818 6.566 21.818 12 17.434 21.818 12 21.818z"/></svg>
+        Bagikan via WhatsApp
+      </button></div>
       <div class="kpi-monitor-grid">
         ${cardSales}${cardRevenue}${cardInvoice}${cardOTD}${cardCollection}${cardWilayah}
       </div>`;
   };
 
   render();
+
+  // Tombol WA Share — generate pesan KPI harian dari data terkini
+  // dan buka wa.me dengan pesan yang sudah terisi otomatis.
+  const attachWaBtn = () => {
+    const btn = document.getElementById('btnWaShare');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const isAll = dailyPerfState.kpi.month === 'all';
+      const monthIdx = isAll ? TODAY.getMonth() : parseInt(dailyPerfState.kpi.month, 10);
+      const bulan = MONTH_NAMES_ID[monthIdx];
+      const todayStr = [TODAY.getFullYear(), String(TODAY.getMonth()+1).padStart(2,'0'), String(TODAY.getDate()).padStart(2,'0')].join('-');
+      const toIsoLocal = d => d ? [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-') : '';
+
+      const txMonth = tx2026.filter(t =>
+        t.orderDate && t.orderDate.getMonth() === monthIdx &&
+        (t.stage || '').toLowerCase() !== 'return'
+      );
+      const rev2026Month = rev2026.filter(r => r.paymentDate && r.paymentDate.getMonth() === monthIdx);
+
+      // Harian
+      const txToday  = txMonth.filter(t => toIsoLocal(t.orderDate) === todayStr);
+      const revToday = rev2026Month.filter(r => toIsoLocal(r.paymentDate) === todayStr);
+      const salesHari   = sum(txToday, t => t.amount);
+      const revHari     = sum(revToday, r => r.pelunasan);
+      const invoiceHari = uniqueCount(txToday, t => t.noInvoice);
+
+      // Bulanan
+      const salesBulan   = sum(txMonth, t => t.amount);
+      const revBulan     = sum(rev2026Month, r => r.pelunasan);
+      const invoiceBulan = uniqueCount(txMonth, t => t.noInvoice);
+      const monthData    = yoyMonths.find(mo => mo.monthIdx === monthIdx);
+      const targetSales  = monthData ? monthData.targetSalesRevenue : 0;
+      const pctSales     = targetSales > 0 ? ((salesBulan / targetSales) * 100).toFixed(1) : '-';
+
+      // OTD bulan ini
+      const txNoHC       = txMonth.filter(t => (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
+      const invTotal     = uniqueCount(txNoHC, t => t.noInvoice);
+      const invOTD       = uniqueCount(txNoHC.filter(t => (t.stage||'').toLowerCase()==='complete' && t.statusKirim==='Same Day'), t => t.noInvoice);
+      const otdPct       = invTotal > 0 ? ((invOTD / invTotal) * 100).toFixed(1) : '-';
+
+      const tanggal = TODAY.toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+      const pesan = `📊 *KINERJA HARIAN MKI MAKASSAR*\n` +
+        `📅 ${tanggal}\n\n` +
+        `*HARI INI:*\n` +
+        `💰 Sales: ${fmtRupiah(salesHari)}\n` +
+        `🏦 Revenue: ${fmtRupiah(revHari)}\n` +
+        `🧾 Invoice: ${invoiceHari} invoice\n\n` +
+        `*BULAN ${bulan.toUpperCase()}:*\n` +
+        `💰 Sales: ${fmtRupiah(salesBulan)}\n` +
+        `🏦 Revenue: ${fmtRupiah(revBulan)}\n` +
+        `🧾 Invoice: ${invoiceBulan} / 280 invoice\n` +
+        `📈 Capaian Sales: ${pctSales}% dari target\n` +
+        `🚚 OTD Accuracy: ${otdPct}% (target 80%)\n\n` +
+        `🔗 Dashboard: https://mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar/`;
+
+      const url = `https://wa.me/?text=${encodeURIComponent(pesan)}`;
+      window.open(url, '_blank');
+    });
+  };
+  attachWaBtn();
+
   kpiMonthEl.addEventListener('change', (e) => {
     dailyPerfState.kpi.month = e.target.value;
     render();
+    attachWaBtn();
   });
 }
 
@@ -1075,7 +1142,8 @@ function renderSalesTrendChart(s, mode) {
     data: { labels, datasets: [{
       label: 'Sales', data,
       borderColor: PALETTE.terra, backgroundColor: 'rgba(193,122,90,0.12)',
-      fill: true, tension: 0.35, pointRadius: 4, pointBackgroundColor: PALETTE.terra, borderWidth: 2.5,
+      fill: true, tension: 0.35, pointRadius: 6, pointHoverRadius: 9,
+      pointBackgroundColor: PALETTE.terra, borderWidth: 2.5, pointHitRadius: 20,
     }]},
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -1246,7 +1314,8 @@ function renderRevTrendChart(r, mode) {
     data: { labels, datasets: [{
       label: 'Revenue', data,
       borderColor: PALETTE.sage, backgroundColor: 'rgba(138,154,130,0.14)',
-      fill: true, tension: 0.35, pointRadius: 4, pointBackgroundColor: PALETTE.sage, borderWidth: 2.5,
+      fill: true, tension: 0.35, pointRadius: 6, pointHoverRadius: 9,
+      pointBackgroundColor: PALETTE.sage, borderWidth: 2.5, pointHitRadius: 20,
     }]},
     options: {
       responsive: true, maintainAspectRatio: false,
