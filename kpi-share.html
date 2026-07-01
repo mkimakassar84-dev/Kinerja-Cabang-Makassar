@@ -40,7 +40,8 @@ const fmtPct=v=>(v||0).toFixed(1)+'%';
 const fmtNum=v=>(v||0).toLocaleString('id-ID');
 const toNum=v=>parseFloat(String(v||'').replace(/[^0-9.-]/g,''))||0;
 const toIso=d=>d?[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'):'';
-function parseDate(s){if(!s)return null;const mo={jan:0,feb:1,mar:2,apr:3,mei:4,may:4,jun:5,jul:6,agu:7,aug:7,sep:8,okt:9,oct:9,nov:10,des:11,dec:11};const m1=s.match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);if(m1){const m=mo[m1[2].toLowerCase().substring(0,3)];if(m!==undefined)return new Date(+m1[3],m,+m1[1]);}const m2=s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);if(m2)return new Date(+m2[3],+m2[2]-1,+m2[1]);const m3=s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);if(m3)return new Date(+m3[1],+m3[2]-1,+m3[3]);return null;}
+function parseDate(s){if(!s)return null;const mo={jan:0,feb:1,mar:2,apr:3,mei:4,may:4,jun:5,jul:6,agu:7,aug:7,sep:8,okt:9,oct:9,nov:10,des:11,dec:11};// format: "1-Jul-2026" atau "2 Jan 2026"
+const m1=s.match(/(\d{1,2})[-\s]+([A-Za-z]+)[-\s]+(\d{4})/);if(m1){const m=mo[m1[2].toLowerCase().substring(0,3)];if(m!==undefined)return new Date(+m1[3],m,+m1[1]);}const m2=s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m2)return new Date(+m2[3],+m2[2]-1,+m2[1]);const m3=s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);if(m3)return new Date(+m3[1],+m3[2]-1,+m3[3]);return null;}
 function parseCSV(txt){const rows=[];let row=[],field='',inQ=false;for(let i=0;i<txt.length;i++){const c=txt[i];if(inQ){if(c==='"'&&txt[i+1]==='"'){field+='"';i++;}else if(c==='"')inQ=false;else field+=c;}else if(c==='"')inQ=true;else if(c===','){row.push(field.trim());field='';}else if(c==='\n'||c==='\r'){if(field||row.length){row.push(field.trim());rows.push(row);}row=[];field='';if(c==='\r'&&txt[i+1]==='\n')i++;}else field+=c;}if(field||row.length){row.push(field.trim());rows.push(row);}return rows;}
 const uniq=(arr,fn)=>new Set(arr.map(fn)).size;
 
@@ -146,15 +147,7 @@ function getCaption(d){
   const DAYS=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   const MONTHS=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
   const tgl=`${DAYS[d.TODAY.getDay()]}, ${d.TODAY.getDate()} ${MONTHS[d.mIdx]} ${d.TODAY.getFullYear()}`;
-  const pctSales=d.pctSales.toFixed(1),pctRev=d.pctRev.toFixed(1),otd=d.otdPct.toFixed(1);
-  const stSales=d.pctSales>=100?'✅ TARGET HIT':d.pctSales>=60?'🔄 ON PROGRESS':'❗ BELUM ACHIEVE';
-  const stOTD=d.otdPct>=80?'✅ TARGET HIT':d.otdPct>=60?'🔄 ON PROGRESS':'❗ BELUM ACHIEVE';
-  return `📊 *Report ${tgl}*\n\n` +
-    `💰 *Sales:* ${fmtRp(d.salesM)} (${pctSales}%) ${stSales}\n` +
-    `📈 *Revenue:* ${fmtRp(d.revM)} (${pctRev}%)\n` +
-    `🧾 *Invoice:* ${fmtNum(d.invM)} / 280\n` +
-    `🚚 *OTD:* ${otd}% ${stOTD}\n\n` +
-    `🔗 https://mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar/`;
+  return `📊 *Report ${tgl}*\n\nhttps://mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar/`;
 }
 
 async function main(){
