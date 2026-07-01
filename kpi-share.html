@@ -121,13 +121,27 @@ async function main(){
     document.getElementById('spinner').style.display='none';document.getElementById('status').style.display='none';
     const cv=document.getElementById('kpiCanvas');cv.style.display='block';document.getElementById('btnGroup').style.display='flex';
     const c=cap(data),fn='Report-MKI-'+data.ts+'.png';
-    const blob=()=>new Promise(r=>cv.toBlob(r,'image/png'));
-    document.getElementById('btnWA').addEventListener('click',async()=>{
-      if(navigator.share&&navigator.canShare){const b=await blob();const file=new File([b],fn,{type:'image/png'});
-        if(navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:'Report '+data.ts,text:c});return;}catch(e){if(e.name==='AbortError')return;}}}
+    // Pre-generate blob & File SEBELUM user menekan tombol, supaya saat
+    // navigator.share() dipanggil di dalam click handler tidak ada jeda
+    // async lain — ini krusial agar Safari/iOS tidak menolak permintaan share
+    // karena kehilangan konteks "user gesture".
+    const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
+    const file=new File([blob],fn,{type:'image/png'});
+    const canShareFile = !!(navigator.canShare && navigator.canShare({files:[file]}));
+    function fallbackShare(){
       const a=document.createElement('a');a.download=fn;a.href=cv.toDataURL('image/png');a.click();
       setTimeout(()=>window.open('https://wa.me/?text='+encodeURIComponent(c),'_blank'),800);
       const n=document.getElementById('note');n.textContent='Gambar disimpan. Kirim dari galeri ke WhatsApp.';n.style.display='block';
+    }
+    document.getElementById('btnWA').addEventListener('click',()=>{
+      if(navigator.share&&canShareFile){
+        navigator.share({files:[file],title:'Report '+data.ts,text:c}).catch(e=>{
+          if(e&&e.name==='AbortError')return;
+          fallbackShare();
+        });
+        return;
+      }
+      fallbackShare();
     });
     document.getElementById('btnSave').addEventListener('click',()=>{const a=document.createElement('a');a.download=fn;a.href=cv.toDataURL('image/png');a.click();});
   }catch(err){

@@ -167,6 +167,7 @@ function renderDailyPerformanceSection(m) {
       <button class="subtab-btn" data-tab="ar">Account Receivable</button>
       <button class="subtab-btn" data-tab="delivery">Delivery</button>
       <button class="subtab-btn" data-tab="po">PO Gudang</button>
+      <button class="subtab-btn" data-tab="logistik">Logistik</button>
     </div>
 
     <div class="subtab-panel active" id="dpPanel-kpi"></div>
@@ -175,6 +176,7 @@ function renderDailyPerformanceSection(m) {
     <div class="subtab-panel" id="dpPanel-ar"></div>
     <div class="subtab-panel" id="dpPanel-delivery"></div>
     <div class="subtab-panel" id="dpPanel-po"></div>
+    <div class="subtab-panel" id="dpPanel-logistik"></div>
   `;
   document.getElementById('s0').innerHTML = html;
 
@@ -193,6 +195,7 @@ function renderDailyPerformanceSection(m) {
   renderDpArPanel(m.ar.items);
   renderDpDeliveryPanel(tx2026);
   renderDpPoGudangPanel(m.poGudang.items);
+  renderDpLogistikPanel(tx2026, m.stock);
 }
 
 /* ----- Helper generik: kerangka panel filter bulan + search + tabel + pagination ----- */
@@ -729,9 +732,56 @@ function renderDpDeliveryPanel(tx2026) {
   const EXCLUDED_STAGES = ['complete', 'return'];
   const txPending = tx2026.filter(t => !EXCLUDED_STAGES.includes((t.stage || '').toLowerCase()));
 
+  // Delivery Harian: transaksi dengan Stage "Complete" pada tanggal berjalan (hari ini),
+  // diurutkan berdasarkan No Invoice.
+  const txDeliveredToday = tx2026
+    .filter(t => (t.stage || '').toLowerCase() === 'complete' && isSameLocalDay(t.orderDate))
+    .sort((a, b) => (a.noInvoice || '').localeCompare(b.noInvoice || '', undefined, { numeric: true }));
+  const todayLabel = TODAY.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
   const html = `
     <div class="panel">
+      <div class="panel-head">
+        <h3>Delivery Harian &mdash; Terkirim Hari Ini (${escapeHtml(todayLabel)})</h3>
+        <button class="wa-share-btn" id="btnWaShareDelivery">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.374 0 0 5.373 0 12c0 2.117.554 4.103 1.523 5.83L.057 23.997l6.334-1.648A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-4.976-1.352l-.357-.211-3.68.957.984-3.57-.232-.368A9.818 9.818 0 012.182 12C2.182 6.566 6.566 2.182 12 2.182S21.818 6.566 21.818 12 17.434 21.818 12 21.818z"/></svg>
+          Bagikan via WhatsApp
+        </button>
+      </div>
+      <p class="panel-note">${fmtNum(txDeliveredToday.length)} baris transaksi dengan Stage <strong>Complete</strong> pada tanggal berjalan, diurutkan berdasarkan No Invoice.</p>
+      <div class="table-scroll">
+        <table class="data-table data-table-compact">
+          <thead>
+            <tr>
+              <th>Order Date</th><th>No Invoice</th><th>Customer</th>
+              <th>Kode Barang</th><th>Qty</th><th>Amount</th><th>Status</th>
+              <th>Company</th><th>Koli</th><th>Status Ekspedisi</th><th>Lokasi</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${txDeliveredToday.length ? txDeliveredToday.map(t => `
+              <tr>
+                <td>${fmtDateShort(t.orderDate)}</td>
+                <td>${escapeHtml(t.noInvoice)}</td>
+                <td>${escapeHtml(t.customer)}</td>
+                <td>${escapeHtml(t.kodeBarang)}</td>
+                <td>${fmtNum(t.qty)}</td>
+                <td>${fmtRupiah(t.amount)}</td>
+                <td>${escapeHtml(t.statusKirim)}</td>
+                <td>${escapeHtml(t.company)}</td>
+                <td>${fmtNum(t.koli)}</td>
+                <td>${escapeHtml(t.statusEkspedisi)}</td>
+                <td>${escapeHtml(t.lokasi)}</td>
+              </tr>
+            `).join('') : `<tr><td colspan="11" class="empty-row">Belum ada transaksi terkirim (Stage Complete) hari ini.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
       <div class="panel-head daily-perf-controls">
+        <h3 style="width:100%;">Transaksi Belum Dikirim</h3>
         <div class="filter-field">
           <label for="dpDelMonth">Filter Bulan</label>
           ${dpMonthSelectHtml('dpDelMonth')}
@@ -746,10 +796,10 @@ function renderDpDeliveryPanel(tx2026) {
         <table class="data-table data-table-compact" id="dpDelTable">
           <thead>
             <tr>
-              <th>Order Date</th><th>No Invoice</th><th>Payment</th><th>Customer</th>
+              <th>Order Date</th><th>No Invoice</th><th>Customer</th>
               <th>Kode Barang</th><th>Qty</th><th>Amount</th><th>Status</th>
               <th>Company</th><th>Koli</th><th>Status Ekspedisi</th>
-              <th>Lokasi</th><th>Tgl Terkirim</th>
+              <th>Lokasi</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -759,6 +809,9 @@ function renderDpDeliveryPanel(tx2026) {
     </div>
   `;
   document.getElementById('dpPanel-delivery').innerHTML = html;
+
+  const waBtn = document.getElementById('btnWaShareDelivery');
+  if (waBtn) waBtn.addEventListener('click', () => window.open('delivery-share.html', '_blank'));
 
   const renderTable = () => {
     const state = dailyPerfState.delivery;
@@ -786,7 +839,6 @@ function renderDpDeliveryPanel(tx2026) {
         <tr>
           <td>${fmtDateShort(t.orderDate)}</td>
           <td>${escapeHtml(t.noInvoice)}</td>
-          <td>${escapeHtml(t.payment)}</td>
           <td>${escapeHtml(t.customer)}</td>
           <td>${escapeHtml(t.kodeBarang)}</td>
           <td>${fmtNum(t.qty)}</td>
@@ -796,10 +848,9 @@ function renderDpDeliveryPanel(tx2026) {
           <td>${fmtNum(t.koli)}</td>
           <td>${escapeHtml(t.statusEkspedisi)}</td>
           <td>${escapeHtml(t.lokasi)}</td>
-          <td>${fmtDateShort(t.tglTerkirim)}</td>
         </tr>
       `).join('')
-      : `<tr><td colspan="13" class="empty-row">Tidak ada transaksi pengiriman yang belum selesai pada periode ini.</td></tr>`;
+      : `<tr><td colspan="11" class="empty-row">Tidak ada transaksi pengiriman yang belum selesai pada periode ini.</td></tr>`;
 
     renderDpPagination('dpDelPagination', state, totalPages, renderTable);
   };
@@ -969,6 +1020,62 @@ function renderDpPoGudangPanel(poItems) {
   });
 }
 
+/* ----- Sub-section: LOGISTIK (kode barang keluar hari ini + sisa stock) ----- */
+function renderDpLogistikPanel(tx2026, stock) {
+  const stockByKode = {};
+  (stock.items || []).forEach(i => { stockByKode[i.kode] = i; });
+
+  const rows = tx2026
+    .filter(t => isSameLocalDay(t.orderDate) && !t.isRetur)
+    .sort((a, b) => (a.noInvoice || '').localeCompare(b.noInvoice || '', undefined, { numeric: true }));
+
+  const todayLabel = TODAY.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const html = `
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Logistik &mdash; Kode Barang Keluar Hari Ini (${escapeHtml(todayLabel)})</h3>
+        <button class="wa-share-btn" id="btnWaShareLogistik">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.374 0 0 5.373 0 12c0 2.117.554 4.103 1.523 5.83L.057 23.997l6.334-1.648A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-4.976-1.352l-.357-.211-3.68.957.984-3.57-.232-.368A9.818 9.818 0 012.182 12C2.182 6.566 6.566 2.182 12 2.182S21.818 6.566 21.818 12 17.434 21.818 12 21.818z"/></svg>
+          Bagikan via WhatsApp
+        </button>
+      </div>
+      <p class="panel-note">${fmtNum(rows.length)} baris kode barang keluar pada tanggal berjalan, beserta sisa stock gudang terkini per kode barang.</p>
+      <div class="table-scroll">
+        <table class="data-table data-table-compact">
+          <thead>
+            <tr>
+              <th>No Invoice</th><th>Nama Customer</th><th>Kode Barang</th>
+              <th>MKI Turnover</th><th>CFN Turnover</th>
+              <th>Sisa Stock MKI</th><th>Sisa Stock CFN</th><th>Sisa Stock All Company</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.length ? rows.map(t => {
+              const st = stockByKode[t.kodeBarang];
+              return `
+              <tr>
+                <td>${escapeHtml(t.noInvoice)}</td>
+                <td>${escapeHtml(t.customer)}</td>
+                <td>${escapeHtml(t.kodeBarang)}</td>
+                <td>${t.company === 'MKI' ? fmtRupiah(t.amount) : '&ndash;'}</td>
+                <td>${t.company === 'CFN' ? fmtRupiah(t.amount) : '&ndash;'}</td>
+                <td>${st ? fmtNum(st.stockMKI) : '&ndash;'}</td>
+                <td>${st ? fmtNum(st.stockCFN) : '&ndash;'}</td>
+                <td>${st ? fmtNum(st.stockTotal) : '&ndash;'}</td>
+              </tr>`;
+            }).join('') : `<tr><td colspan="8" class="empty-row">Belum ada kode barang keluar hari ini.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  document.getElementById('dpPanel-logistik').innerHTML = html;
+
+  const waBtn = document.getElementById('btnWaShareLogistik');
+  if (waBtn) waBtn.addEventListener('click', () => window.open('logistik-share.html', '_blank'));
+}
+
 /* ==========================================================================
    SECTION 01 — TREN SALES
    ========================================================================== */
@@ -1047,20 +1154,6 @@ function renderSalesSection(m) {
             </div>
           `).join('')}
         </div>
-      </div>
-      <h4 class="sub-heading">Produk Terlaris per Perusahaan</h4>
-      <div class="two-col">
-        ${byco.companies.map(c => `
-          <div>
-            <div class="mini-table-title">${c.company}</div>
-            <table class="data-table data-table-compact">
-              <thead><tr><th>Kode Barang</th><th>Sales</th><th>Qty</th></tr></thead>
-              <tbody>
-                ${c.topProducts.slice(0, 5).map(p => `<tr><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td></tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-        `).join('')}
       </div>
     </div>
   `;
@@ -1724,6 +1817,10 @@ function renderStockSection(m) {
 
     <div class="panel">
       <h3>Barang Tersedia di Gudang (Stock &gt; 0)</h3>
+      <div class="filter-field filter-field-grow" style="margin-bottom:12px;">
+        <label for="stockSearch">Cari Kode / Deskripsi Barang</label>
+        <input type="text" id="stockSearch" class="text-input" placeholder="Ketik kode atau deskripsi barang&hellip;" />
+      </div>
       <table class="data-table" id="tblStock"></table>
     </div>
 
@@ -1759,7 +1856,6 @@ function renderStockSection(m) {
               <div class="company-card-row"><span>Jumlah PO</span><strong>${fmtNum(d.count)}</strong></div>
               <div class="company-card-row"><span>Qty Dipesan</span><strong>${fmtNum(d.qty)} unit</strong></div>
               <div class="company-card-row"><span>Qty Diterima di Gudang</span><strong>${fmtNum(d.qtyDiterima)} unit</strong></div>
-              <div class="company-card-row"><span>Qty Diretur</span><strong>${fmtNum(d.qtyRetur)} unit</strong></div>
               <div class="company-card-row"><span>Qty Masih Ditunggu</span><strong>${fmtNum(d.qtyDitunggu)} unit</strong></div>
             </div>
           `).join('')}
@@ -1787,9 +1883,14 @@ function renderStockChart(st) {
 function renderStockTable(st) {
   const PAGE = 15;
   let page = 1;
-  const items = st.items.filter(i => i.stockTotal > 0).sort((a, b) => a.kode.localeCompare(b.kode));
+  let search = '';
+  const allItems = st.items.filter(i => i.stockTotal > 0).sort((a, b) => a.kode.localeCompare(b.kode));
 
   const render = () => {
+    const q = search.trim().toUpperCase();
+    const items = q
+      ? allItems.filter(i => i.kode.toUpperCase().includes(q) || (i.deskripsi || '').toUpperCase().includes(q))
+      : allItems;
     const total = items.length;
     const totalPages = Math.max(1, Math.ceil(total / PAGE));
     if (page > totalPages) page = totalPages;
@@ -1797,7 +1898,7 @@ function renderStockTable(st) {
     const pagHtml = makePagBtns('pagStock', page, totalPages, p => { page = p; render(); });
     document.getElementById('tblStock').outerHTML = `<table class="data-table" id="tblStock">
       <thead><tr><th>Kode Barang</th><th>Deskripsi</th><th>Stock MKI</th><th>Stock CFN</th><th>Total</th></tr></thead>
-      <tbody>${shown.map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.stockMKI)}</td><td>${fmtNum(i.stockCFN)}</td><td><strong>${fmtNum(i.stockTotal)}</strong></td></tr>`).join('')}</tbody>
+      <tbody>${shown.length ? shown.map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.stockMKI)}</td><td>${fmtNum(i.stockCFN)}</td><td><strong>${fmtNum(i.stockTotal)}</strong></td></tr>`).join('') : '<tr><td colspan="5" class="empty-row">Tidak ada barang yang cocok.</td></tr>'}</tbody>
     </table>`;
     const pagEl = document.getElementById('pagStock');
     if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagStock', p => { page = p; render(); }); }
@@ -1811,6 +1912,15 @@ function renderStockTable(st) {
     }
   };
   render();
+
+  const searchEl = document.getElementById('stockSearch');
+  if (searchEl) {
+    searchEl.addEventListener('input', (e) => {
+      search = e.target.value;
+      page = 1;
+      render();
+    });
+  }
 }
 
 function renderPoGudangChart(po) {
@@ -2151,6 +2261,16 @@ function renderCustFreqSection(m) {
     </div>
 
     <div class="panel">
+      <h3>Distribusi Customer berdasarkan Frekuensi Transaksi</h3>
+      <p class="panel-note">Pembagian jumlah customer unik dan total nominal pembelanjaan berdasarkan seberapa sering mereka bertransaksi sepanjang 2026.</p>
+      <div class="two-col">
+        <div class="chart-wrap chart-wrap-sm"><canvas id="chartFreqDist"></canvas></div>
+        <div class="chart-wrap chart-wrap-sm"><canvas id="chartFreqDistSales"></canvas></div>
+      </div>
+      <table class="data-table" id="tblFreqDist"></table>
+    </div>
+
+    <div class="panel">
       <div class="panel-head">
         <h3>Top 10 Customer Paling Sering Berbelanja</h3>
         <div class="toggle-group" id="custFreqMetricToggle">
@@ -2170,6 +2290,7 @@ function renderCustFreqSection(m) {
   `;
   document.getElementById('s9').innerHTML = html;
 
+  renderFreqDistCharts(cf.frequencyDistribution);
   renderTop10CustomerChart(cf, custFreqMetric);
   renderChurnedTable(cf);
 
@@ -2181,6 +2302,53 @@ function renderCustFreqSection(m) {
       renderTop10CustomerChart(cf, custFreqMetric);
     });
   });
+}
+
+function renderFreqDistCharts(dist) {
+  makeChart('chartFreqDist', {
+    type: 'doughnut',
+    data: {
+      labels: dist.map(d => d.label),
+      datasets: [{
+        data: dist.map(d => d.customerCount),
+        backgroundColor: [PALETTE.terra, PALETTE.amber, PALETTE.sage, PALETTE.slate, PALETTE.red],
+        borderWidth: 0,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '58%',
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtNum(ctx.parsed)} customer (${fmtPct(dist[ctx.dataIndex].pct)})` } },
+        title: { display: true, text: 'Jumlah Customer Unik', font: { size: 12.5, weight: '600' }, color: '#6a5a4a', padding: { bottom: 8 } },
+      },
+    },
+  });
+
+  makeChart('chartFreqDistSales', {
+    type: 'bar',
+    data: {
+      labels: dist.map(d => d.label),
+      datasets: [{ label: 'Total Sales', data: dist.map(d => d.totalSales), backgroundColor: PALETTE.terra, borderRadius: 4 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } },
+        title: { display: true, text: 'Total Nominal Pembelanjaan', font: { size: 12.5, weight: '600' }, color: '#6a5a4a', padding: { bottom: 8 } },
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } },
+        x: { grid: { display: false }, ticks: { font: { size: 10.5 } } },
+      },
+    },
+  });
+
+  document.getElementById('tblFreqDist').innerHTML = `
+    <thead><tr><th>Frekuensi Belanja</th><th>Jumlah Customer</th><th>Persentase</th><th>Total Nominal</th></tr></thead>
+    <tbody>${dist.map(d => `<tr><td>${escapeHtml(d.label)}</td><td>${fmtNum(d.customerCount)}</td><td>${fmtPct(d.pct)}</td><td>${fmtRupiah(d.totalSales)}</td></tr>`).join('')}</tbody>
+  `;
 }
 
 function renderTop10CustomerChart(cf, metric) {
@@ -2321,11 +2489,12 @@ function renderFOTrendChart(fo) {
     type: 'line',
     data: {
       labels: fo.monthly.map(x => MONTH_NAMES_SHORT_ID[x.monthIdx]),
-      datasets: [{ label: 'Sales FO 1-Core', data: fo.monthly.map(x => x.sales), borderColor: PALETTE.amber, backgroundColor: 'rgba(207,155,63,0.14)', fill: true, tension: 0.35, pointRadius: 4, pointBackgroundColor: PALETTE.amber, borderWidth: 2.5 }],
+      datasets: [{ label: 'Sales FO 1-Core', data: fo.monthly.map(x => x.sales), borderColor: PALETTE.amber, backgroundColor: 'rgba(207,155,63,0.14)', fill: true, tension: 0.35, pointRadius: 5, pointHoverRadius: 8, pointHitRadius: 22, pointBackgroundColor: PALETTE.amber, borderWidth: 2.5 }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } } },
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } } },
       scales: { y: { ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
     },
   });

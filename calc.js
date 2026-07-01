@@ -69,6 +69,16 @@ function fmtDateShort(d) {
   return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function toIsoLocal(d) {
+  if (!d) return '';
+  return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+}
+
+function isSameLocalDay(d, ref = TODAY) {
+  if (!d) return false;
+  return toIsoLocal(d) === toIsoLocal(ref);
+}
+
 // -------------------- Helper agregasi --------------------
 function sum(arr, fn) {
   return arr.reduce((acc, item) => acc + (fn ? fn(item) : item), 0);
@@ -782,9 +792,30 @@ function buildCustomerFrequency(transactions, asOfDate = TODAY) {
   const avgFrequency = byCustomer.length > 0 ? sum(byCustomer, c => c.invoiceUnik) / byCustomer.length : 0;
   const avgSalesPerCustomer = byCustomer.length > 0 ? sum(byCustomer, c => c.totalSales) / byCustomer.length : 0;
 
+  // Distribusi customer berdasarkan frekuensi transaksi (jumlah invoice unik):
+  // 1x, 2x, 3-5x, 5-10x, dan di atas 10x belanja.
+  const FREQ_BUCKETS = [
+    { key: 'b1',    label: '1x Belanja',        test: n => n === 1 },
+    { key: 'b2',    label: '2x Belanja',        test: n => n === 2 },
+    { key: 'b3_5',  label: '3-5x Belanja',      test: n => n >= 3 && n <= 5 },
+    { key: 'b5_10', label: '5-10x Belanja',     test: n => n > 5 && n <= 10 },
+    { key: 'b10p',  label: '>10x Belanja',      test: n => n > 10 },
+  ];
+  const totalCustomerForDist = byCustomer.length;
+  const frequencyDistribution = FREQ_BUCKETS.map(b => {
+    const custs = byCustomer.filter(c => b.test(c.invoiceUnik));
+    return {
+      key: b.key,
+      label: b.label,
+      customerCount: custs.length,
+      pct: totalCustomerForDist > 0 ? (custs.length / totalCustomerForDist) * 100 : 0,
+      totalSales: sum(custs, c => c.totalSales),
+    };
+  });
+
   return {
     byCustomer, top10ByFrequency, top10BySales, churnedCustomers,
-    totalCustomer: byCustomer.length, avgFrequency, avgSalesPerCustomer,
+    totalCustomer: byCustomer.length, avgFrequency, avgSalesPerCustomer, frequencyDistribution,
   };
 }
 
