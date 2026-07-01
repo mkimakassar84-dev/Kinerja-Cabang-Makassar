@@ -99,7 +99,7 @@ const DAILY_PERF_PAGE_SIZE = 20;
 // State per sub-tab, terpisah supaya filter/halaman tidak saling timpa
 // ketika berpindah tab.
 const dailyPerfState = {
-  kpi:      { month: String(TODAY.getMonth()) }, // default bulan berjalan
+  kpi:      { month: 'all' }, // default Semua Bulan
   sales:    { month: 'all', search: '', page: 1 },
   revenue:  { month: 'all', search: '', page: 1 },
   ar:       { month: 'all', search: '', page: 1 },
@@ -234,7 +234,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
   `;
   document.getElementById('dpPanel-kpi').innerHTML = html;
 
-  // Set default ke bulan berjalan
+  // Set default ke bulan berjalan; 'all' = semua bulan
   const kpiMonthEl = document.getElementById('dpKpiMonth');
   kpiMonthEl.value = dailyPerfState.kpi.month;
 
@@ -251,77 +251,79 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
   };
 
   const render = () => {
-    const monthIdx = parseInt(dailyPerfState.kpi.month, 10);
-    const monthLabel = MONTH_NAMES_ID[monthIdx];
+    const isAll = dailyPerfState.kpi.month === 'all';
+    const monthIdx = isAll ? -1 : parseInt(dailyPerfState.kpi.month, 10);
+    const monthLabel = isAll ? 'Semua Bulan' : MONTH_NAMES_ID[monthIdx];
 
-    // Filter transaksi bulan terpilih (exclude Return)
     const txMonth = tx2026.filter(t =>
-      t.orderDate && t.orderDate.getMonth() === monthIdx &&
+      t.orderDate &&
+      (isAll || t.orderDate.getMonth() === monthIdx) &&
       (t.stage || '').toLowerCase() !== 'return'
     );
-    const revMonth = rev2026.filter(r => r.paymentDate && r.paymentDate.getMonth() === monthIdx);
+    const revMonth = rev2026.filter(r =>
+      r.paymentDate && (isAll || r.paymentDate.getMonth() === monthIdx)
+    );
 
-    // Angka harian (TODAY)
-    const todayStr  = [TODAY.getFullYear(), String(TODAY.getMonth()+1).padStart(2,'0'), String(TODAY.getDate()).padStart(2,'0')].join('-');
+    const todayStr   = [TODAY.getFullYear(), String(TODAY.getMonth()+1).padStart(2,'0'), String(TODAY.getDate()).padStart(2,'0')].join('-');
     const toIsoLocal = d => d ? [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-') : '';
-    const txToday  = txMonth.filter(t => toIsoLocal(t.orderDate) === todayStr);
-    const revToday = revMonth.filter(r => toIsoLocal(r.paymentDate) === todayStr);
+    const txToday    = txMonth.filter(t => toIsoLocal(t.orderDate) === todayStr);
+    const revToday   = revMonth.filter(r => toIsoLocal(r.paymentDate) === todayStr);
     const todayLabel = TODAY.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' });
 
-    // ── 1. TOTAL SALES ──
+    // 1. SALES
     const totalSales  = sum(txMonth, t => t.amount);
     const dailySales  = sum(txToday, t => t.amount);
     const salesMKI    = sum(txMonth.filter(t => t.company === 'MKI'), t => t.amount);
     const salesCFN    = sum(txMonth.filter(t => t.company === 'CFN'), t => t.amount);
-    const monthData   = yoyMonths.find(mo => mo.monthIdx === monthIdx);
+    const monthData   = isAll ? null : yoyMonths.find(mo => mo.monthIdx === monthIdx);
     const targetSales = monthData ? monthData.targetSalesRevenue : 0;
     const pctSales    = targetSales > 0 ? (totalSales / targetSales) * 100 : 0;
 
-    // ── 2. TOTAL REVENUE ──
+    // 2. REVENUE
     const totalRevenue = sum(revMonth, r => r.pelunasan);
     const dailyRevenue = sum(revToday, r => r.pelunasan);
     const revMKI       = sum(revMonth.filter(r => r.company === 'MKI'), r => r.pelunasan);
     const revCFN       = sum(revMonth.filter(r => r.company === 'CFN'), r => r.pelunasan);
     const pctRevenue   = targetSales > 0 ? (totalRevenue / targetSales) * 100 : 0;
 
-    // ── 3. COLLECTION RATE ──
+    // 3. SALES TO REVENUE RATIO
     const collectionRate = totalSales > 0 ? (totalRevenue / totalSales) * 100 : 0;
 
-    // ── 4. OTD ACCURACY ──
-    // OTD = invoice (Stage Complete & Same Day)
-    //     ÷ total invoice (exclude HAND CARRY & Return)
-    // Penyebut mencakup SEMUA invoice yang seharusnya dikirim ekspedisi —
-    // termasuk yang belum Complete — sehingga yang belum diterima customer
-    // ikut menekan persentase OTD secara akurat.
+    // 4. OTD
     const txNoHC           = txMonth.filter(t => (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
     const invoiceUnikTotal = uniqueCount(txNoHC, t => t.noInvoice);
-    const invoiceOTD       = uniqueCount(
-      txNoHC.filter(t => (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'),
-      t => t.noInvoice
-    );
-    const otdPct    = invoiceUnikTotal > 0 ? (invoiceOTD / invoiceUnikTotal) * 100 : 0;
-    const otdTarget = 80;
-    // OTD harian
-    const txTodayNoHC  = txToday.filter(t => (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
-    const invTodayTotal = uniqueCount(txTodayNoHC, t => t.noInvoice);
-    const invTodayOTD   = uniqueCount(
-      txTodayNoHC.filter(t => (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'),
-      t => t.noInvoice
-    );
-    const otdPctToday = invTodayTotal > 0 ? (invTodayOTD / invTodayTotal) * 100 : null;
-    // Total Qty & Koli (exclude HAND CARRY & Return)
-    const totalQtyNoHC  = sum(txNoHC, t => t.qty);
-    const totalKoliNoHC = sum(txNoHC, t => t.koli);
+    const invoiceOTD       = uniqueCount(txNoHC.filter(t => (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'), t => t.noInvoice);
+    const otdPct           = invoiceUnikTotal > 0 ? (invoiceOTD / invoiceUnikTotal) * 100 : 0;
+    const otdTarget        = 80;
+    const txTodayNoHC      = txToday.filter(t => (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
+    const invTodayTotal    = uniqueCount(txTodayNoHC, t => t.noInvoice);
+    const invTodayOTD      = uniqueCount(txTodayNoHC.filter(t => (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'), t => t.noInvoice);
+    const otdPctToday      = invTodayTotal > 0 ? (invTodayOTD / invTodayTotal) * 100 : null;
+    const totalQtyNoHC     = sum(txNoHC, t => t.qty);
+    const totalKoliNoHC    = sum(txNoHC, t => t.koli);
 
-    // ── 5. TOTAL INVOICE ──
+    // 5. INVOICE
     const TARGET_INVOICE = 280;
     const invoiceUnikAll = uniqueCount(txMonth, t => t.noInvoice);
     const invoiceMKI     = uniqueCount(txMonth.filter(t => t.company === 'MKI'), t => t.noInvoice);
     const invoiceCFN     = uniqueCount(txMonth.filter(t => t.company === 'CFN'), t => t.noInvoice);
     const dailyInvoice   = uniqueCount(txToday, t => t.noInvoice);
-    const pctInvoice     = (invoiceUnikAll / TARGET_INVOICE) * 100;
+    const pctInvoice     = isAll ? null : (invoiceUnikAll / TARGET_INVOICE) * 100;
 
-    // ── Helper breakdown MKI/CFN (tanpa indikator target) ──
+    // 6. WILAYAH
+    const lokasiMap = {};
+    txMonth.forEach(t => {
+      const lok = (t.lokasi || '').trim();
+      if (!lok) return;
+      if (!lokasiMap[lok]) lokasiMap[lok] = new Set();
+      lokasiMap[lok].add(t.noInvoice);
+    });
+    const totalLokasiAktif = Object.keys(lokasiMap).length;
+    const top5Wilayah = Object.entries(lokasiMap)
+      .sort((a, b) => b[1].size - a[1].size)
+      .slice(0, 5)
+      .map(([lok, invSet]) => ({ lokasi: lok, invoiceUnik: invSet.size }));
+
     const companyRow = (label, valMki, valCfn, fmtFn) => `
       <div style="display:flex; justify-content:space-between; font-size:12.5px; margin-top:5px;">
         <span style="color:var(--ink-soft);">${escapeHtml(label)}</span>
@@ -332,77 +334,81 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         </span>
       </div>`;
 
+    const noTargetNote = '<div class="kmc-sub" style="margin-top:8px;">Target tersedia per bulan &mdash; pilih bulan spesifik</div>';
+
     const cardSales = `
       <div class="kpi-monitor-card">
-        <div class="kmc-label">Total Sales — ${escapeHtml(monthLabel)}</div>
+        <div class="kmc-label">Total Sales &mdash; ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtRupiah(totalSales)}</div>
         <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong>${fmtRupiah(dailySales)}</strong></div>
         ${companyRow('Breakdown', salesMKI, salesCFN, fmtRupiah)}
         ${targetSales > 0 ? `
           <div class="kmc-target" style="margin-top:10px;">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctSales)}</strong></div>
-          ${kpiBar(pctSales)}
-          ${kpiStatus(pctSales)}
-        ` : '<div class="kmc-sub" style="margin-top:8px;">Target tidak tersedia untuk bulan ini</div>'}
+          ${kpiBar(pctSales)}${kpiStatus(pctSales)}
+        ` : noTargetNote}
       </div>`;
 
     const cardRevenue = `
       <div class="kpi-monitor-card">
-        <div class="kmc-label">Total Revenue — ${escapeHtml(monthLabel)}</div>
+        <div class="kmc-label">Total Revenue &mdash; ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtRupiah(totalRevenue)}</div>
         <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong>${fmtRupiah(dailyRevenue)}</strong></div>
         ${companyRow('Breakdown', revMKI, revCFN, fmtRupiah)}
         ${targetSales > 0 ? `
           <div class="kmc-target" style="margin-top:10px;">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctRevenue)}</strong></div>
-          ${kpiBar(pctRevenue)}
-          ${kpiStatus(pctRevenue)}
-        ` : '<div class="kmc-sub" style="margin-top:8px;">Target tidak tersedia untuk bulan ini</div>'}
-      </div>`;
-
-    const cardCollection = `
-      <div class="kpi-monitor-card">
-        <div class="kmc-label">Collection Rate (Revenue ÷ Sales)</div>
-        <div class="kmc-value">${fmtPct(collectionRate)}</div>
-        <div class="kmc-sub">Seberapa banyak tagihan dari penjualan yang sudah terbayar</div>
-        <div class="kmc-target">Target: 100% &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(collectionRate)}</strong></div>
-        ${kpiBar(collectionRate)}
-        ${kpiStatus(collectionRate, 90, 60)}
-      </div>`;
-
-    const cardOTD = `
-      <div class="kpi-monitor-card">
-        <div class="kmc-label">OTD Accuracy — ${escapeHtml(monthLabel)}</div>
-        <div class="kmc-value">${fmtPct(otdPct)}</div>
-        <div class="kmc-sub">
-          Hari ini: <strong>${otdPctToday !== null ? fmtPct(otdPctToday) : '&ndash;'}</strong>
-          &nbsp;(${fmtNum(invTodayOTD)}/${fmtNum(invTodayTotal)} invoice)
-        </div>
-        <div class="kmc-sub" style="margin-top:2px;">Bulan ini: ${fmtNum(invoiceOTD)} Same Day Complete / ${fmtNum(invoiceUnikTotal)} total invoice (no HAND CARRY)</div>
-        <div class="kmc-sub" style="margin-top:2px;">Total Qty: <strong>${fmtNum(totalQtyNoHC)}</strong> &nbsp;|&nbsp; Total Koli: <strong>${fmtNum(totalKoliNoHC)}</strong></div>
-        <div class="kmc-target">Target: ${otdTarget}% &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(otdPct)}</strong></div>
-        ${kpiBar(otdPct, otdTarget, 60)}
-        ${kpiStatus(otdPct, otdTarget, 60)}
+          ${kpiBar(pctRevenue)}${kpiStatus(pctRevenue)}
+        ` : noTargetNote}
       </div>`;
 
     const cardInvoice = `
       <div class="kpi-monitor-card">
-        <div class="kmc-label">Total Invoice — ${escapeHtml(monthLabel)}</div>
+        <div class="kmc-label">Total Invoice &mdash; ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtNum(invoiceUnikAll)}</div>
         <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong>${fmtNum(dailyInvoice)} invoice</strong></div>
         ${companyRow('Breakdown', invoiceMKI, invoiceCFN, fmtNum)}
-        <div class="kmc-target" style="margin-top:10px;">Target: ${fmtNum(TARGET_INVOICE)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctInvoice)}</strong></div>
-        ${kpiBar(pctInvoice)}
-        ${kpiStatus(pctInvoice)}
+        ${pctInvoice !== null ? `
+          <div class="kmc-target" style="margin-top:10px;">Target: ${fmtNum(TARGET_INVOICE)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctInvoice)}</strong></div>
+          ${kpiBar(pctInvoice)}${kpiStatus(pctInvoice)}
+        ` : noTargetNote}
+      </div>`;
+
+    const cardOTD = `
+      <div class="kpi-monitor-card">
+        <div class="kmc-label">OTD Accuracy &mdash; ${escapeHtml(monthLabel)}</div>
+        <div class="kmc-value">${fmtPct(otdPct)}</div>
+        <div class="kmc-sub">Hari ini: <strong>${otdPctToday !== null ? fmtPct(otdPctToday) : '&ndash;'}</strong> &nbsp;(${fmtNum(invTodayOTD)}/${fmtNum(invTodayTotal)} invoice)</div>
+        <div class="kmc-sub" style="margin-top:2px;">${fmtNum(invoiceOTD)} Same Day Complete / ${fmtNum(invoiceUnikTotal)} total invoice (no HAND CARRY)</div>
+        <div class="kmc-sub" style="margin-top:2px;">Total Qty: <strong>${fmtNum(totalQtyNoHC)}</strong> &nbsp;|&nbsp; Total Koli: <strong>${fmtNum(totalKoliNoHC)}</strong></div>
+        <div class="kmc-target">Target: ${otdTarget}% &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(otdPct)}</strong></div>
+        ${kpiBar(otdPct, otdTarget, 60)}${kpiStatus(otdPct, otdTarget, 60)}
+      </div>`;
+
+    const cardCollection = `
+      <div class="kpi-monitor-card">
+        <div class="kmc-label">Sales to Revenue Ratio</div>
+        <div class="kmc-value">${fmtPct(collectionRate)}</div>
+        <div class="kmc-sub">Sales: ${fmtRupiah(totalSales)} &nbsp;|&nbsp; Revenue: ${fmtRupiah(totalRevenue)}</div>
+      </div>`;
+
+    const cardWilayah = `
+      <div class="kpi-monitor-card">
+        <div class="kmc-label">Performa Wilayah &mdash; ${escapeHtml(monthLabel)}</div>
+        <div class="kmc-value">${fmtNum(totalLokasiAktif)} <span style="font-size:16px; font-weight:400; color:var(--ink-soft);">area aktif</span></div>
+        <div class="kmc-sub">Coverage wilayah dengan minimal 1 invoice pada periode ini</div>
+        <div class="mini-table-title" style="margin-top:14px;">Top 5 Wilayah</div>
+        <table style="width:100%; font-size:12.5px; border-collapse:collapse; margin-top:4px;">
+          ${top5Wilayah.map((w, i) => `
+            <tr>
+              <td style="padding:3px 0; color:var(--ink-soft);">${i+1}. ${escapeHtml(w.lokasi)}</td>
+              <td style="padding:3px 0; text-align:right; font-weight:600;">${fmtNum(w.invoiceUnik)} invoice</td>
+            </tr>`).join('')}
+        </table>
       </div>`;
 
     document.getElementById('dpKpiContent').innerHTML = `
       <div class="kpi-monitor-grid">
-        ${cardSales}
-        ${cardRevenue}
-        ${cardCollection}
-        ${cardOTD}
-        ${cardInvoice}
-      </div>
-    `;
+        ${cardSales}${cardRevenue}${cardInvoice}${cardOTD}${cardCollection}${cardWilayah}
+      </div>`;
   };
 
   render();
@@ -411,6 +417,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     render();
   });
 }
+
 
 /* ----- Sub-section: SALES (Grand Data 2026, header lengkap) ----- */
 function renderDpSalesPanel(tx2026) {
