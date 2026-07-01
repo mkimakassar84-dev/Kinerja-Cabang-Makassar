@@ -288,18 +288,30 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     const collectionRate = totalSales > 0 ? (totalRevenue / totalSales) * 100 : 0;
 
     // ── 4. OTD ACCURACY ──
-    // OTD = invoice Stage "Complete" & Status "Same Day" ÷ total invoice Stage "Complete"
-    // (exclude HAND CARRY), menggunakan Stage Complete sebagai tolak ukur pengiriman selesai.
-    const txComplete      = txMonth.filter(t => (t.stage || '').toLowerCase() === 'complete' && (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
-    const invoiceComplete = uniqueCount(txComplete, t => t.noInvoice);
-    const invoiceOTD      = uniqueCount(txComplete.filter(t => t.statusKirim === 'Same Day'), t => t.noInvoice);
-    const otdPct          = invoiceComplete > 0 ? (invoiceOTD / invoiceComplete) * 100 : 0;
-    const otdTarget       = 80;
+    // OTD = invoice (Stage Complete & Same Day)
+    //     ÷ total invoice (exclude HAND CARRY & Return)
+    // Penyebut mencakup SEMUA invoice yang seharusnya dikirim ekspedisi —
+    // termasuk yang belum Complete — sehingga yang belum diterima customer
+    // ikut menekan persentase OTD secara akurat.
+    const txNoHC           = txMonth.filter(t => (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
+    const invoiceUnikTotal = uniqueCount(txNoHC, t => t.noInvoice);
+    const invoiceOTD       = uniqueCount(
+      txNoHC.filter(t => (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'),
+      t => t.noInvoice
+    );
+    const otdPct    = invoiceUnikTotal > 0 ? (invoiceOTD / invoiceUnikTotal) * 100 : 0;
+    const otdTarget = 80;
     // OTD harian
-    const txTodayComplete  = txToday.filter(t => (t.stage || '').toLowerCase() === 'complete' && (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
-    const invTodayComplete = uniqueCount(txTodayComplete, t => t.noInvoice);
-    const invTodayOTD      = uniqueCount(txTodayComplete.filter(t => t.statusKirim === 'Same Day'), t => t.noInvoice);
-    const otdPctToday      = invTodayComplete > 0 ? (invTodayOTD / invTodayComplete) * 100 : null;
+    const txTodayNoHC  = txToday.filter(t => (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
+    const invTodayTotal = uniqueCount(txTodayNoHC, t => t.noInvoice);
+    const invTodayOTD   = uniqueCount(
+      txTodayNoHC.filter(t => (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'),
+      t => t.noInvoice
+    );
+    const otdPctToday = invTodayTotal > 0 ? (invTodayOTD / invTodayTotal) * 100 : null;
+    // Total Qty & Koli (exclude HAND CARRY & Return)
+    const totalQtyNoHC  = sum(txNoHC, t => t.qty);
+    const totalKoliNoHC = sum(txNoHC, t => t.koli);
 
     // ── 5. TOTAL INVOICE ──
     const TARGET_INVOICE = 280;
@@ -362,9 +374,10 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         <div class="kmc-value">${fmtPct(otdPct)}</div>
         <div class="kmc-sub">
           Hari ini: <strong>${otdPctToday !== null ? fmtPct(otdPctToday) : '&ndash;'}</strong>
-          &nbsp;(${fmtNum(invTodayOTD)}/${fmtNum(invTodayComplete)} invoice)
+          &nbsp;(${fmtNum(invTodayOTD)}/${fmtNum(invTodayTotal)} invoice)
         </div>
-        <div class="kmc-sub" style="margin-top:2px;">Bulan ini: ${fmtNum(invoiceOTD)} Same Day / ${fmtNum(invoiceComplete)} invoice Complete (no HAND CARRY)</div>
+        <div class="kmc-sub" style="margin-top:2px;">Bulan ini: ${fmtNum(invoiceOTD)} Same Day Complete / ${fmtNum(invoiceUnikTotal)} total invoice (no HAND CARRY)</div>
+        <div class="kmc-sub" style="margin-top:2px;">Total Qty: <strong>${fmtNum(totalQtyNoHC)}</strong> &nbsp;|&nbsp; Total Koli: <strong>${fmtNum(totalKoliNoHC)}</strong></div>
         <div class="kmc-target">Target: ${otdTarget}% &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(otdPct)}</strong></div>
         ${kpiBar(otdPct, otdTarget, 60)}
         ${kpiStatus(otdPct, otdTarget, 60)}
