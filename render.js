@@ -554,9 +554,30 @@ function renderDpDeliveryPanel(tx2026) {
 
 /* ----- Sub-section: PO GUDANG ----- */
 function renderDpPoGudangPanel(poItems) {
-  // Filter: hanya PO yang Stage-nya bukan "Complete" (statusBarang !== 'diterima')
-  // — yaitu yang masih ditunggu atau dalam proses pengiriman ke gudang Makassar.
-  const poPending = poItems.filter(p => p.statusBarang !== 'diterima');
+  // Pisahkan menjadi 2 kelompok:
+  // 1. Stage kosong (belum ada info ATAU sudah ada surat jalan tapi belum Complete)
+  //    → "Barang Ditunggu / Dalam Proses"
+  // 2. Stage "Return" → "Barang Tidak Tersedia di Pusat"
+  const poTunggu  = poItems.filter(p => p.stage.toLowerCase() !== 'return' && p.statusBarang !== 'diterima');
+  const poReturn  = poItems.filter(p => p.stage.toLowerCase() === 'return');
+
+  const poTableRows = (rows) => rows.length
+    ? rows.map(p => {
+        const suratLabel = p.noSuratJalan || '&ndash;';
+        const ekspLabel  = p.statusEkspedisi || '&ndash;';
+        return `
+          <tr>
+            <td>${fmtDateShort(p.orderDate)}</td>
+            <td>${escapeHtml(p.noPO)}</td>
+            <td>${escapeHtml(p.company)}</td>
+            <td>${escapeHtml(p.kodeBarang)}</td>
+            <td>${fmtNum(p.qty)}</td>
+            <td>${escapeHtml(p.noSuratJalan) || '&ndash;'}</td>
+            <td>${escapeHtml(p.statusEkspedisi) || '&ndash;'}</td>
+          </tr>
+        `;
+      }).join('')
+    : `<tr><td colspan="7" class="empty-row">Tidak ada data pada periode ini.</td></tr>`;
 
   const html = `
     <div class="panel">
@@ -570,72 +591,97 @@ function renderDpPoGudangPanel(poItems) {
           <input type="text" id="dpPoSearch" class="text-input" placeholder="Ketik no PO atau kode barang&hellip;" />
         </div>
       </div>
-      <p class="panel-note" id="dpPoCount"></p>
+
+      <h4 class="sub-heading" style="margin-top:8px;">
+        &#9202; Barang Ditunggu / Dalam Proses
+        <span id="dpPoCountTunggu" class="panel-note" style="font-weight:400; margin-left:8px;"></span>
+      </h4>
       <div class="table-scroll">
-        <table class="data-table data-table-compact" id="dpPoTable">
+        <table class="data-table data-table-compact" id="dpPoTableTunggu">
           <thead>
             <tr>
               <th>Order Date</th><th>NO PO</th><th>Company</th><th>Kode Barang</th>
-              <th>Quantity</th><th>NO Surat Jalan</th><th>Status Ekspedisi</th><th>Stage</th>
+              <th>Quantity</th><th>NO Surat Jalan</th><th>Status Ekspedisi</th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
-      <div class="pagination" id="dpPoPagination"></div>
+
+      <h4 class="sub-heading" style="margin-top:28px;">
+        &#9888; Return / Barang Tidak Tersedia di Pusat
+        <span id="dpPoCountReturn" class="panel-note" style="font-weight:400; margin-left:8px;"></span>
+      </h4>
+      <div class="table-scroll">
+        <table class="data-table data-table-compact" id="dpPoTableReturn">
+          <thead>
+            <tr>
+              <th>Order Date</th><th>NO PO</th><th>Company</th><th>Kode Barang</th>
+              <th>Quantity</th><th>NO Surat Jalan</th><th>Status Ekspedisi</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
   `;
   document.getElementById('dpPanel-po').innerHTML = html;
 
-  const renderTable = () => {
+  const render = () => {
     const state = dailyPerfState.po;
-    let rows = poPending;
-    if (state.month !== 'all') {
-      const monthIdx = parseInt(state.month, 10);
-      rows = rows.filter(p => p.orderDate && p.orderDate.getMonth() === monthIdx);
-    }
     const q = state.search.trim().toUpperCase();
-    if (q) rows = rows.filter(p => p.noPO.toUpperCase().includes(q) || p.kodeBarang.includes(q));
-    rows = [...rows].sort((a, b) => (a.orderDate?.getTime() || 0) - (b.orderDate?.getTime() || 0));
 
-    const totalRows = rows.length;
-    const totalPages = Math.max(1, Math.ceil(totalRows / DAILY_PERF_PAGE_SIZE));
-    if (state.page > totalPages) state.page = totalPages;
-    if (state.page < 1) state.page = 1;
-    const startIdx = (state.page - 1) * DAILY_PERF_PAGE_SIZE;
-    const shown = rows.slice(startIdx, startIdx + DAILY_PERF_PAGE_SIZE);
+    const applyFilters = (rows) => {
+      let r = rows;
+      if (state.month !== 'all') {
+        const monthIdx = parseInt(state.month, 10);
+        r = r.filter(p => p.orderDate && p.orderDate.getMonth() === monthIdx);
+      }
+      if (q) r = r.filter(p => p.noPO.toUpperCase().includes(q) || p.kodeBarang.includes(q));
+      return [...r].sort((a, b) => (a.orderDate?.getTime() || 0) - (b.orderDate?.getTime() || 0));
+    };
 
-    document.getElementById('dpPoCount').innerHTML =
-      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> PO yang belum diterima pada ${dpPeriodLabel(state.month)}.`;
+    const filteredTunggu = applyFilters(poTunggu);
+    const filteredReturn = applyFilters(poReturn);
 
-    document.querySelector('#dpPoTable tbody').innerHTML = shown.length
-      ? shown.map(p => {
-          // Stage kosong = barang masih ditunggu, belum ada surat jalan dari pusat
-          const stageLabel = p.stage ? escapeHtml(p.stage) : '<span style="color:var(--amber);font-weight:600;">BARANG DITUNGGU</span>';
-          return `
-            <tr>
-              <td>${fmtDateShort(p.orderDate)}</td>
-              <td>${escapeHtml(p.noPO)}</td>
-              <td>${escapeHtml(p.company)}</td>
-              <td>${escapeHtml(p.kodeBarang)}</td>
-              <td>${fmtNum(p.qty)}</td>
-              <td>${escapeHtml(p.noSuratJalan)}</td>
-              <td>${escapeHtml(p.statusEkspedisi)}</td>
-              <td>${stageLabel}</td>
-            </tr>
-          `;
-        }).join('')
-      : `<tr><td colspan="8" class="empty-row">Semua PO sudah diterima di gudang pada periode ini.</td></tr>`;
+    document.getElementById('dpPoCountTunggu').textContent = `(${filteredTunggu.length} PO)`;
+    document.getElementById('dpPoCountReturn').textContent  = `(${filteredReturn.length} PO)`;
 
-    renderDpPagination('dpPoPagination', state, totalPages, renderTable);
+    document.querySelector('#dpPoTableTunggu tbody').innerHTML = filteredTunggu.length
+      ? filteredTunggu.map(p => `
+          <tr>
+            <td>${fmtDateShort(p.orderDate)}</td>
+            <td>${escapeHtml(p.noPO)}</td>
+            <td>${escapeHtml(p.company)}</td>
+            <td>${escapeHtml(p.kodeBarang)}</td>
+            <td>${fmtNum(p.qty)}</td>
+            <td>${p.noSuratJalan ? escapeHtml(p.noSuratJalan) : '<span style="color:var(--amber);font-weight:600;">BARANG DITUNGGU</span>'}</td>
+            <td>${p.statusEkspedisi ? escapeHtml(p.statusEkspedisi) : '&ndash;'}</td>
+          </tr>
+        `).join('')
+      : `<tr><td colspan="7" class="empty-row">Tidak ada PO yang dalam proses pada periode ini.</td></tr>`;
+
+    document.querySelector('#dpPoTableReturn tbody').innerHTML = filteredReturn.length
+      ? filteredReturn.map(p => `
+          <tr>
+            <td>${fmtDateShort(p.orderDate)}</td>
+            <td>${escapeHtml(p.noPO)}</td>
+            <td>${escapeHtml(p.company)}</td>
+            <td>${escapeHtml(p.kodeBarang)}</td>
+            <td>${fmtNum(p.qty)}</td>
+            <td>${p.noSuratJalan ? escapeHtml(p.noSuratJalan) : '&ndash;'}</td>
+            <td>${p.statusEkspedisi ? escapeHtml(p.statusEkspedisi) : '&ndash;'}</td>
+          </tr>
+        `).join('')
+      : `<tr><td colspan="7" class="empty-row">Tidak ada PO yang return pada periode ini.</td></tr>`;
   };
 
-  renderTable();
+  render();
   document.getElementById('dpPoMonth').addEventListener('change', (e) => {
-    dailyPerfState.po.month = e.target.value; dailyPerfState.po.page = 1; renderTable();
+    dailyPerfState.po.month = e.target.value; render();
   });
   document.getElementById('dpPoSearch').addEventListener('input', (e) => {
-    dailyPerfState.po.search = e.target.value; dailyPerfState.po.page = 1; renderTable();
+    dailyPerfState.po.search = e.target.value; render();
   });
 }
 
