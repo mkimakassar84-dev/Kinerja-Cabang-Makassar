@@ -456,6 +456,13 @@ function renderDpArPanel(arItems) {
 
 /* ----- Sub-section: DELIVERY (Grand Data 2026, fokus status pengiriman) ----- */
 function renderDpDeliveryPanel(tx2026) {
+  // Filter otomatis: hanya transaksi yang Stage-nya bukan "Complete" dan
+  // bukan "Return" — yaitu yang masih dalam proses pengiriman atau belum
+  // diterima customer. Angka (1-25) dan nilai seperti "Cut Off"/"Same Day"
+  // yang belum "Complete" tetap ditampilkan.
+  const EXCLUDED_STAGES = ['complete', 'return'];
+  const txPending = tx2026.filter(t => !EXCLUDED_STAGES.includes((t.stage || '').toLowerCase()));
+
   const html = `
     <div class="panel">
       <div class="panel-head daily-perf-controls">
@@ -473,8 +480,10 @@ function renderDpDeliveryPanel(tx2026) {
         <table class="data-table data-table-compact" id="dpDelTable">
           <thead>
             <tr>
-              <th>Order Date</th><th>No Invoice</th><th>Customer</th><th>Status</th>
-              <th>Status Ekspedisi</th><th>Lokasi</th><th>Tgl Terkirim</th>
+              <th>Order Date</th><th>No Invoice</th><th>Payment</th><th>Customer</th>
+              <th>Kode Barang</th><th>Qty</th><th>Amount</th><th>Status</th>
+              <th>Company</th><th>Koli</th><th>Stage</th><th>Status Ekspedisi</th>
+              <th>Lokasi</th><th>Tgl Terkirim</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -487,7 +496,7 @@ function renderDpDeliveryPanel(tx2026) {
 
   const renderTable = () => {
     const state = dailyPerfState.delivery;
-    let rows = tx2026;
+    let rows = txPending;
     if (state.month !== 'all') {
       const monthIdx = parseInt(state.month, 10);
       rows = rows.filter(t => t.orderDate && t.orderDate.getMonth() === monthIdx);
@@ -504,21 +513,28 @@ function renderDpDeliveryPanel(tx2026) {
     const shown = rows.slice(startIdx, startIdx + DAILY_PERF_PAGE_SIZE);
 
     document.getElementById('dpDelCount').innerHTML =
-      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${dpPeriodLabel(state.month)}.`;
+      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pengiriman belum selesai pada ${dpPeriodLabel(state.month)}.`;
 
     document.querySelector('#dpDelTable tbody').innerHTML = shown.length
       ? shown.map(t => `
         <tr>
           <td>${fmtDateShort(t.orderDate)}</td>
           <td>${escapeHtml(t.noInvoice)}</td>
+          <td>${escapeHtml(t.payment)}</td>
           <td>${escapeHtml(t.customer)}</td>
+          <td>${escapeHtml(t.kodeBarang)}</td>
+          <td>${fmtNum(t.qty)}</td>
+          <td>${fmtRupiah(t.amount)}</td>
           <td>${escapeHtml(t.statusKirim)}</td>
+          <td>${escapeHtml(t.company)}</td>
+          <td>${fmtNum(t.koli)}</td>
+          <td>${escapeHtml(t.stage)}</td>
           <td>${escapeHtml(t.statusEkspedisi)}</td>
           <td>${escapeHtml(t.lokasi)}</td>
           <td>${fmtDateShort(t.tglTerkirim)}</td>
         </tr>
       `).join('')
-      : `<tr><td colspan="7" class="empty-row">Tidak ada transaksi yang cocok dengan filter ini.</td></tr>`;
+      : `<tr><td colspan="14" class="empty-row">Tidak ada transaksi pengiriman yang belum selesai pada periode ini.</td></tr>`;
 
     renderDpPagination('dpDelPagination', state, totalPages, renderTable);
   };
