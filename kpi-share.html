@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KPI Harian MKI Makassar</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#1a1209;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:16px;}
+#status{color:#fff;font-size:15px;text-align:center;opacity:.8;}
+#spinner{width:40px;height:40px;border:3px solid rgba(255,255,255,.2);border-top-color:#c17a5a;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+canvas{display:none;border-radius:12px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.5);}
+#btnDownload{display:none;background:#25D366;color:#fff;border:none;border-radius:10px;padding:14px 32px;font-size:16px;font-weight:700;cursor:pointer;}
+#note{display:none;color:rgba(255,255,255,.55);font-size:12px;text-align:center;max-width:320px;line-height:1.5;}
+#errMsg{display:none;color:#ff6b6b;font-size:14px;text-align:center;max-width:320px;}
+</style>
+</head>
+<body>
+<div id="spinner"></div>
+<div id="status">Mengambil data terkini dari Google Sheets…</div>
+<canvas id="kpiCanvas" width="1080" height="1080"></canvas>
+<button id="btnDownload">⬇ Simpan Gambar untuk WA</button>
+<div id="note">Simpan gambar lalu kirim ke grup WhatsApp tim sebagai foto. Data selalu fresh setiap halaman dibuka.</div>
+<div id="errMsg"></div>
+<script>
+const SHEET_ID='1_uou6JDGV-Tm80oALMrduuj9ZIVWM1r9ppuQsYq7_qo';
+const fmtRp=v=>{if(!v||v===0)return'Rp0';if(v>=1e9)return'Rp'+(v/1e9).toFixed(2).replace('.',',')+' M';if(v>=1e6)return'Rp'+Math.round(v/1e6)+' Jt';return'Rp'+v.toLocaleString('id-ID');};
+const fmtPct=v=>(v||0).toFixed(1)+'%';
+const fmtNum=v=>(v||0).toLocaleString('id-ID');
+const toNum=v=>parseFloat(String(v||'').replace(/[^0-9.-]/g,''))||0;
+const toIso=d=>d?[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'):'';
+function parseDate(s){if(!s)return null;const mo={jan:0,feb:1,mar:2,apr:3,mei:4,may:4,jun:5,jul:6,agu:7,aug:7,sep:8,okt:9,oct:9,nov:10,des:11,dec:11};const m1=s.match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);if(m1){const m=mo[m1[2].toLowerCase().substring(0,3)];if(m!==undefined)return new Date(+m1[3],m,+m1[1]);}const m2=s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);if(m2)return new Date(+m2[3],+m2[2]-1,+m2[1]);const m3=s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);if(m3)return new Date(+m3[1],+m3[2]-1,+m3[3]);return null;}
+function parseCSV(txt){const rows=[];let row=[],field='',inQ=false;for(let i=0;i<txt.length;i++){const c=txt[i];if(inQ){if(c==='"'&&txt[i+1]==='"'){field+='"';i++;}else if(c==='"')inQ=false;else field+=c;}else if(c==='"')inQ=true;else if(c===','){row.push(field.trim());field='';}else if(c==='\n'||c==='\r'){if(field||row.length){row.push(field.trim());rows.push(row);}row=[];field='';if(c==='\r'&&txt[i+1]==='\n')i++;}else field+=c;}if(field||row.length){row.push(field.trim());rows.push(row);}return rows;}
+const uniq=(arr,fn)=>new Set(arr.map(fn)).size;
+function setStatus(m){document.getElementById('status').textContent=m;}
+function showError(m){document.getElementById('spinner').style.display='none';document.getElementById('status').style.display='none';const e=document.getElementById('errMsg');e.style.display='block';e.textContent=m;}
+
+async function loadData(){
+  const fetch2=gid=>fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}&_=${Date.now()}`).then(r=>r.ok?r.text():Promise.reject('fetch err '+gid));
+  setStatus('Mengambil data Grand Data…');
+  const [gTxt,rTxt,sTxt]=await Promise.all([fetch2('1703817529'),fetch2('1062237088'),fetch2('1234708655')]);
+  const gRows=parseCSV(gTxt),rRows=parseCSV(rTxt),sRows=parseCSV(sTxt);
+  const h=gRows[0];
+  const iDate=h.findIndex(x=>x==='Order Date'),iInv=h.findIndex(x=>x.includes('Invoice')),iAmt=h.findIndex(x=>x==='Amount'),iStage=h.findIndex(x=>x==='Stage'),iEksp=h.findIndex(x=>x.includes('Ekspedisi')),iStat=h.findIndex(x=>x==='Status'),iComp=h.findIndex(x=>x==='Company');
+  const TODAY=new Date(),todayStr=toIso(TODAY),mIdx=TODAY.getMonth();
+  const tx=gRows.slice(1).map(r=>({date:parseDate(r[iDate]),noInv:r[iInv],amount:toNum(r[iAmt]),stage:(r[iStage]||'').toLowerCase(),eksp:(r[iEksp]||'').toUpperCase(),status:r[iStat]||'',co:r[iComp]||''})).filter(t=>t.date);
+  const txM=tx.filter(t=>t.date.getMonth()===mIdx&&t.stage!=='return'),txD=txM.filter(t=>toIso(t.date)===todayStr);
+  const salesM=txM.reduce((s,t)=>s+t.amount,0),salesD=txD.reduce((s,t)=>s+t.amount,0);
+  const salesMKI=txM.filter(t=>t.co==='MKI').reduce((s,t)=>s+t.amount,0),salesCFN=txM.filter(t=>t.co==='CFN').reduce((s,t)=>s+t.amount,0);
+  const invM=uniq(txM,t=>t.noInv),invD=uniq(txD,t=>t.noInv),invMKI=uniq(txM.filter(t=>t.co==='MKI'),t=>t.noInv),invCFN=uniq(txM.filter(t=>t.co==='CFN'),t=>t.noInv);
+  const txNoHC=txM.filter(t=>t.eksp!=='HAND CARRY'),invTot=uniq(txNoHC,t=>t.noInv),invOTD=uniq(txNoHC.filter(t=>t.stage==='complete'&&t.status==='Same Day'),t=>t.noInv);
+  const otdPct=invTot>0?(invOTD/invTot)*100:0;
+  const txDNoHC=txD.filter(t=>t.eksp!=='HAND CARRY'),invDTot=uniq(txDNoHC,t=>t.noInv),invDOTD=uniq(txDNoHC.filter(t=>t.stage==='complete'&&t.status==='Same Day'),t=>t.noInv);
+  const otdDay=invDTot>0?(invDOTD/invDTot)*100:null;
+  const rh=rRows[0];
+  const iRD=rh.findIndex(x=>x.includes('Date')),iRP=rh.findIndex(x=>x.toLowerCase().includes('pelunasan')),iRC=rh.findIndex(x=>x.toLowerCase().includes('company'));
+  const rv=rRows.slice(1).map(r=>({date:parseDate(r[iRD]),pel:toNum(r[iRP]),co:r[iRC]||''})).filter(r=>r.date);
+  const revM=rv.filter(r=>r.date.getMonth()===mIdx).reduce((s,r)=>s+r.pel,0),revD=rv.filter(r=>toIso(r.date)===todayStr).reduce((s,r)=>s+r.pel,0);
+  const revMKI=rv.filter(r=>r.date.getMonth()===mIdx&&r.co==='MKI').reduce((s,r)=>s+r.pel,0),revCFN=rv.filter(r=>r.date.getMonth()===mIdx&&r.co==='CFN').reduce((s,r)=>s+r.pel,0);
+  const MN=['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'];
+  let targetSales=0;
+  for(const row of sRows.slice(1)){if((row[0]||'').toUpperCase().includes(MN[mIdx].substring(0,3))){targetSales=toNum(row[45]);break;}}
+  const pctSales=targetSales>0?(salesM/targetSales)*100:0,pctRev=targetSales>0?(revM/targetSales)*100:0,collection=salesM>0?(revM/salesM)*100:0;
+  return {TODAY,todayStr,mIdx,salesM,salesD,salesMKI,salesCFN,targetSales,pctSales,invM,invD,invMKI,invCFN,revM,revD,revMKI,revCFN,pctRev,otdPct,otdDay,invOTD,invTot,collection};
+}
+
+function drawCanvas(d){
+  const cv=document.getElementById('kpiCanvas'),ctx=cv.getContext('2d'),W=1080,H=1080;
+  ctx.fillStyle='#f8f5f0';ctx.fillRect(0,0,W,H);
+  const hg=ctx.createLinearGradient(0,0,W,0);hg.addColorStop(0,'#c17a5a');hg.addColorStop(1,'#a85d3f');ctx.fillStyle=hg;ctx.fillRect(0,0,W,110);
+  ctx.fillStyle='rgba(255,255,255,.65)';ctx.font='600 21px system-ui,sans-serif';ctx.fillText('MKI \u2014 CABANG MAKASSAR',44,38);
+  ctx.fillStyle='#fff';ctx.font='bold 30px system-ui,sans-serif';ctx.fillText('Dashboard Kinerja Bisnis MKI Makassar 2026',44,78);
+  const DAYS=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'],MONTHS=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  ctx.fillStyle='rgba(255,255,255,.7)';ctx.font='400 19px system-ui,sans-serif';ctx.textAlign='right';
+  ctx.fillText(`${DAYS[d.TODAY.getDay()]}, ${d.TODAY.getDate()} ${MONTHS[d.mIdx]} ${d.TODAY.getFullYear()}`,W-44,68);ctx.textAlign='left';
+
+  function card(x,y,w,h2,o){
+    ctx.save();ctx.fillStyle='#fff';ctx.strokeStyle='#e0d8cc';ctx.lineWidth=1;
+    ctx.beginPath();ctx.roundRect(x,y,w,h2,13);ctx.fill();ctx.stroke();ctx.restore();
+    ctx.fillStyle='#9a7a5a';ctx.font='bold 16px system-ui,sans-serif';ctx.fillText(o.label,x+26,y+38);
+    ctx.fillStyle=o.vc||'#2a2520';ctx.font=`bold ${o.fs||48}px system-ui,sans-serif`;ctx.fillText(o.val,x+26,y+96);
+    if(o.sub1){ctx.fillStyle='#7a6a5a';ctx.font='400 18px system-ui,sans-serif';ctx.fillText(o.sub1,x+26,y+126);}
+    if(o.mki!==undefined){
+      ctx.fillStyle='#c17a5a';ctx.font='bold 17px system-ui,sans-serif';ctx.fillText('MKI '+o.mki,x+26,y+154);
+      ctx.fillStyle='#7a9872';ctx.fillText('CFN '+o.cfn,x+26+210,y+154);
+    }
+    if(o.pct!==undefined){
+      const bx=x+26,by=y+(o.by||168),bw=w-52,bh=8;
+      ctx.fillStyle='#e8e0d4';ctx.beginPath();ctx.roundRect(bx,by,bw,bh,4);ctx.fill();
+      const fc=Math.min(o.pct/100,1)*bw;
+      ctx.fillStyle=o.pct>=100?'#4d8a5c':o.pct>=60?'#d4a843':'#c17a5a';ctx.beginPath();ctx.roundRect(bx,by,fc,bh,4);ctx.fill();
+      const st=o.pct>=100?'\u2713 TARGET HIT':o.pct>=60?'\u25b2 ON PROGRESS':'\u26a0 BELUM ACHIEVE';
+      const bc=o.pct>=100?'#dceede':o.pct>=60?'#fef3cd':'#f3dad6',tc=o.pct>=100?'#4d6b46':o.pct>=60?'#856404':'#8c3c30';
+      ctx.font='bold 14px system-ui,sans-serif';const bwl=ctx.measureText(st).width+22;
+      ctx.fillStyle=bc;ctx.beginPath();ctx.roundRect(bx,by+12,bwl,26,5);ctx.fill();
+      ctx.fillStyle=tc;ctx.fillText(st,bx+11,by+29);
+    }
+    if(o.sub2){ctx.fillStyle='#7a6a5a';ctx.font='400 16px system-ui,sans-serif';ctx.fillText(o.sub2,x+26,y+(o.sy||196));}
+  }
+
+  const CW=488,CH=248,GAP=24,L=40,T=128;
+  card(L,T,CW,CH,{label:'TOTAL SALES',val:fmtRp(d.salesM),sub1:'Hari ini: '+fmtRp(d.salesD),mki:fmtRp(d.salesMKI),cfn:fmtRp(d.salesCFN),pct:d.pctSales,by:168});
+  card(L+CW+GAP,T,CW,CH,{label:'TOTAL REVENUE',val:fmtRp(d.revM),sub1:'Hari ini: '+fmtRp(d.revD),mki:fmtRp(d.revMKI),cfn:fmtRp(d.revCFN),pct:d.pctRev,by:168});
+  const T2=T+CH+GAP;
+  card(L,T2,CW,CH,{label:'TOTAL INVOICE',val:fmtNum(d.invM),fs:58,sub1:'Hari ini: '+fmtNum(d.invD)+' invoice',mki:fmtNum(d.invMKI),cfn:fmtNum(d.invCFN),pct:d.invM>0?(d.invM/280)*100:0,by:168});
+  card(L+CW+GAP,T2,CW,CH,{label:'OTD ACCURACY',val:fmtPct(d.otdPct),fs:58,vc:d.otdPct>=80?'#4d8a5c':d.otdPct>=60?'#d4a843':'#c17a5a',sub1:'Hari ini: '+(d.otdDay!==null?fmtPct(d.otdDay):'\u2014'),sub2:fmtNum(d.invOTD)+' Same Day / '+fmtNum(d.invTot)+' invoice (no HC)',sy:160,pct:d.otdPct,by:172});
+  const T3=T2+CH+GAP;
+  card(L,T3,CW,CH-30,{label:'SALES TO REVENUE RATIO',val:fmtPct(d.collection),fs:54,sub1:'Sales: '+fmtRp(d.salesM)+'   Rev: '+fmtRp(d.revM)});
+  if(d.targetSales>0) card(L+CW+GAP,T3,CW,CH-30,{label:'TARGET SALES BULANAN',val:fmtRp(d.targetSales),fs:40,sub1:'Capaian: '+fmtPct(d.pctSales)+' dari target'});
+
+  ctx.fillStyle='#efe8df';ctx.fillRect(0,H-64,W,64);
+  ctx.fillStyle='#a08060';ctx.font='400 16px system-ui,sans-serif';
+  ctx.fillText('Diperbarui: '+new Date().toLocaleString('id-ID'),44,H-26);
+  ctx.fillStyle='#25D366';ctx.beginPath();ctx.roundRect(W-188,H-52,148,36,7);ctx.fill();
+  ctx.fillStyle='#fff';ctx.font='bold 16px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText('MKI Makassar',W-114,H-28);ctx.textAlign='left';
+}
+
+async function main(){
+  try{
+    const data=await loadData();
+    setStatus('Membuat gambar KPI…');
+    drawCanvas(data);
+    document.getElementById('spinner').style.display='none';
+    document.getElementById('status').style.display='none';
+    const cv=document.getElementById('kpiCanvas');cv.style.display='block';
+    const btn=document.getElementById('btnDownload'),note=document.getElementById('note');
+    btn.style.display='block';note.style.display='block';
+    const dl=()=>{const a=document.createElement('a');a.download='KPI-MKI-'+data.todayStr+'.png';a.href=cv.toDataURL('image/png');a.click();};
+    if(!/Android|iPhone|iPad/i.test(navigator.userAgent)) dl();
+    btn.addEventListener('click',dl);
+  }catch(err){showError('Gagal memuat data: '+err.message+'. Pastikan koneksi aktif dan refresh.');console.error(err);}
+}
+main();
+</script>
+</body>
+</html>

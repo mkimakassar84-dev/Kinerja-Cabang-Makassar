@@ -458,63 +458,13 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
 
   render();
 
-  // Tombol WA Share — generate pesan KPI harian dari data terkini
-  // dan buka wa.me dengan pesan yang sudah terisi otomatis.
   const attachWaBtn = () => {
     const btn = document.getElementById('btnWaShare');
     if (!btn) return;
     btn.addEventListener('click', () => {
-      const isAll = dailyPerfState.kpi.month === 'all';
-      const monthIdx = isAll ? TODAY.getMonth() : parseInt(dailyPerfState.kpi.month, 10);
-      const bulan = MONTH_NAMES_ID[monthIdx];
-      const todayStr = [TODAY.getFullYear(), String(TODAY.getMonth()+1).padStart(2,'0'), String(TODAY.getDate()).padStart(2,'0')].join('-');
-      const toIsoLocal = d => d ? [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-') : '';
-
-      const txMonth = tx2026.filter(t =>
-        t.orderDate && t.orderDate.getMonth() === monthIdx &&
-        (t.stage || '').toLowerCase() !== 'return'
-      );
-      const rev2026Month = rev2026.filter(r => r.paymentDate && r.paymentDate.getMonth() === monthIdx);
-
-      // Harian
-      const txToday  = txMonth.filter(t => toIsoLocal(t.orderDate) === todayStr);
-      const revToday = rev2026Month.filter(r => toIsoLocal(r.paymentDate) === todayStr);
-      const salesHari   = sum(txToday, t => t.amount);
-      const revHari     = sum(revToday, r => r.pelunasan);
-      const invoiceHari = uniqueCount(txToday, t => t.noInvoice);
-
-      // Bulanan
-      const salesBulan   = sum(txMonth, t => t.amount);
-      const revBulan     = sum(rev2026Month, r => r.pelunasan);
-      const invoiceBulan = uniqueCount(txMonth, t => t.noInvoice);
-      const monthData    = yoyMonths.find(mo => mo.monthIdx === monthIdx);
-      const targetSales  = monthData ? monthData.targetSalesRevenue : 0;
-      const pctSales     = targetSales > 0 ? ((salesBulan / targetSales) * 100).toFixed(1) : '-';
-
-      // OTD bulan ini
-      const txNoHC       = txMonth.filter(t => (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
-      const invTotal     = uniqueCount(txNoHC, t => t.noInvoice);
-      const invOTD       = uniqueCount(txNoHC.filter(t => (t.stage||'').toLowerCase()==='complete' && t.statusKirim==='Same Day'), t => t.noInvoice);
-      const otdPct       = invTotal > 0 ? ((invOTD / invTotal) * 100).toFixed(1) : '-';
-
-      const tanggal = TODAY.toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-
-      const pesan = `📊 *KINERJA HARIAN MKI MAKASSAR*\n` +
-        `📅 ${tanggal}\n\n` +
-        `*HARI INI:*\n` +
-        `💰 Sales: ${fmtRupiah(salesHari)}\n` +
-        `🏦 Revenue: ${fmtRupiah(revHari)}\n` +
-        `🧾 Invoice: ${invoiceHari} invoice\n\n` +
-        `*BULAN ${bulan.toUpperCase()}:*\n` +
-        `💰 Sales: ${fmtRupiah(salesBulan)}\n` +
-        `🏦 Revenue: ${fmtRupiah(revBulan)}\n` +
-        `🧾 Invoice: ${invoiceBulan} / 280 invoice\n` +
-        `📈 Capaian Sales: ${pctSales}% dari target\n` +
-        `🚚 OTD Accuracy: ${otdPct}% (target 80%)\n\n` +
-        `🔗 Dashboard: https://mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar/`;
-
-      const url = `https://wa.me/?text=${encodeURIComponent(pesan)}`;
-      window.open(url, '_blank');
+      // Buka halaman kpi-share.html yang generate gambar KPI real-time via Canvas.
+      // User simpan gambar → kirim ke grup WA sebagai foto (bukan link).
+      window.open('kpi-share.html', '_blank');
     });
   };
   attachWaBtn();
