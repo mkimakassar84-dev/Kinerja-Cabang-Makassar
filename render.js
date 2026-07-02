@@ -2598,11 +2598,11 @@ function renderFOByKodeChart(fo, kodeFilter) {
     datasets = fo.byKode.map((k, idx) => ({
       label: k.kode, data: k.monthly.map(m => m.sales),
       borderColor: [PALETTE.terra, PALETTE.sage, PALETTE.amber, PALETTE.slate, PALETTE.red][idx % 5],
-      backgroundColor: 'transparent', tension: 0.3, pointRadius: 3, borderWidth: 2,
+      backgroundColor: 'transparent', tension: 0.3, pointRadius: 4, pointHoverRadius: 7, pointHitRadius: 18, borderWidth: 2,
     }));
   } else {
     const k = fo.byKode.find(x => x.kode === kodeFilter);
-    datasets = [{ label: k.kode, data: k.monthly.map(m => m.sales), borderColor: PALETTE.terra, backgroundColor: 'rgba(193,122,90,0.12)', fill: true, tension: 0.35, pointRadius: 4, borderWidth: 2.5 }];
+    datasets = [{ label: k.kode, data: k.monthly.map(m => m.sales), borderColor: PALETTE.terra, backgroundColor: 'rgba(193,122,90,0.12)', fill: true, tension: 0.35, pointRadius: 5, pointHoverRadius: 8, pointHitRadius: 22, borderWidth: 2.5 }];
   }
 
   makeChart('chartFOByKode', {
@@ -2610,7 +2610,10 @@ function renderFOByKodeChart(fo, kodeFilter) {
     data: { labels: MONTH_NAMES_SHORT_ID, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtRupiah(ctx.parsed.y)}` } } },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtRupiah(ctx.parsed.y)}` } },
+      },
       scales: { y: { ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
     },
   });
