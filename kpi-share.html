@@ -80,7 +80,7 @@ async function load(){
 }
 function draw(d){
   const W=1080,GAP=24,L=40,CW=488,T1=118;
-  const CH1=346,CH2=336,CH3=302; // tinggi row1 (Sales/Revenue), row2 (Invoice/OTD), row3 (Ratio/Wilayah)
+  const CH1=360,CH2=344,CH3=302; // tinggi row1 (Sales/Revenue), row2 (Invoice/OTD), row3 (Ratio/Wilayah)
   const T2=T1+CH1+GAP,T3=T2+CH2+GAP,H=T3+CH3+40+56;
   const cv=document.getElementById('kpiCanvas'),cx=cv.getContext('2d');
   cv.height=H;
@@ -101,18 +101,18 @@ function draw(d){
   function dailyBox(x,y,w,opt){
     const hasTarget=opt.targetPerDay!==undefined;
     const hasBreak=!!opt.breakdown;
-    const h=(hasTarget?20:0)+24+(hasBreak?30:0)+28;
+    const h=18+(hasTarget?22:0)+30+(hasBreak?42:0)+18;
     cx.fillStyle='#e2e6ea';cx.fillRect(x,y,w,h);cx.strokeStyle='#b9c2cc';cx.lineWidth=1;cx.strokeRect(x,y,w,h);
-    let yy=y+18;
+    let yy=y+22;
     cx.fillStyle='#6b7787';cx.font='bold 11px system-ui';cx.fillText('TARGET HARIAN',x+14,yy);
-    yy+=6;
-    if(hasTarget){yy+=16;cx.fillStyle='#5c574f';cx.font='400 13px system-ui';cx.fillText('Target/hari: '+opt.targetPerDay,x+14,yy);}
-    yy+=22;
+    yy+=4;
+    if(hasTarget){yy+=18;cx.fillStyle='#5c574f';cx.font='400 13px system-ui';cx.fillText('Target/hari: '+opt.targetPerDay,x+14,yy);}
+    yy+=24;
     const ok=opt.achieved;const s=ok?'\u2713 DAILY ACHIEVED':'\u2715 DAILY NOT ACHIEVED';cx.font='bold 12px system-ui';const bw=cx.measureText(s).width+18;
-    cx.fillStyle=ok?'#dceede':'#f3dad6';cx.fillRect(x+14,yy-14,bw,22);cx.fillStyle=ok?'#4d6b46':'#8c3c30';cx.fillText(s,x+23,yy+1);
+    cx.fillStyle=ok?'#dceede':'#f3dad6';cx.fillRect(x+14,yy-15,bw,22);cx.fillStyle=ok?'#4d6b46':'#8c3c30';cx.fillText(s,x+23,yy+1);
     if(hasBreak){
-      yy+=20;cx.strokeStyle='#b9c2cc';cx.beginPath();cx.moveTo(x+14,yy);cx.lineTo(x+w-14,yy);cx.stroke();
-      yy+=20;cx.fillStyle='#5c574f';cx.font='400 12px system-ui';cx.fillText('Breakdown Hari Ini',x+14,yy);
+      yy+=22;cx.strokeStyle='#b9c2cc';cx.beginPath();cx.moveTo(x+14,yy);cx.lineTo(x+w-14,yy);cx.stroke();
+      yy+=22;cx.fillStyle='#5c574f';cx.font='400 12px system-ui';cx.fillText('Breakdown Hari Ini',x+14,yy);
       cx.fillStyle='#c17a5a';cx.font='bold 12px system-ui';cx.textAlign='right';cx.fillText('MKI '+opt.breakdown[0]+'   CFN '+opt.breakdown[1],x+w-14,yy);cx.textAlign='left';
     }
     return h;
