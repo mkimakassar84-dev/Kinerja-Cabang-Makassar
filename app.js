@@ -4,7 +4,7 @@
    mengikuti perubahan terbaru di Google Sheets tanpa perlu deploy ulang.
    ========================================================================== */
 
-const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 menit
+const AUTO_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 menit
 
 async function initDashboard() {
   try {
