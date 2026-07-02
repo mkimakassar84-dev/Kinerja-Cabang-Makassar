@@ -130,7 +130,7 @@ function draw(d){
 function cap(d){
   const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-  return '\ud83d\udce6 *Delivery Harian '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.rows.length)+' invoice terkirim hari ini\n\nhttps://mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar/';
+  return '\ud83d\udce6 *Delivery Harian '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.rows.length)+' invoice terkirim hari ini';
 }
 
 async function main(){

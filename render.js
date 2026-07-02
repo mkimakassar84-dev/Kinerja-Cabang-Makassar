@@ -162,21 +162,21 @@ function renderDailyPerformanceSection(m) {
 
     <div class="subtab-bar" id="dailyPerfTabBar">
       <button class="subtab-btn active" data-tab="kpi">KPI Monitoring</button>
+      <button class="subtab-btn" data-tab="delivery">Delivery</button>
+      <button class="subtab-btn" data-tab="logistik">Turnover Gudang</button>
       <button class="subtab-btn" data-tab="sales">Sales</button>
       <button class="subtab-btn" data-tab="revenue">Revenue</button>
       <button class="subtab-btn" data-tab="ar">Account Receivable</button>
-      <button class="subtab-btn" data-tab="delivery">Delivery</button>
       <button class="subtab-btn" data-tab="po">PO Gudang</button>
-      <button class="subtab-btn" data-tab="logistik">Logistik</button>
     </div>
 
     <div class="subtab-panel active" id="dpPanel-kpi"></div>
+    <div class="subtab-panel" id="dpPanel-delivery"></div>
+    <div class="subtab-panel" id="dpPanel-logistik"></div>
     <div class="subtab-panel" id="dpPanel-sales"></div>
     <div class="subtab-panel" id="dpPanel-revenue"></div>
     <div class="subtab-panel" id="dpPanel-ar"></div>
-    <div class="subtab-panel" id="dpPanel-delivery"></div>
     <div class="subtab-panel" id="dpPanel-po"></div>
-    <div class="subtab-panel" id="dpPanel-logistik"></div>
   `;
   document.getElementById('s0').innerHTML = html;
 
@@ -1043,7 +1043,7 @@ function renderDpLogistikPanel(tx2026, stock) {
   const html = `
     <div class="panel">
       <div class="panel-head">
-        <h3>Logistik &mdash; Kode Barang Keluar Hari Ini (${escapeHtml(todayLabel)})</h3>
+        <h3>Turnover Gudang &mdash; Kode Barang Keluar Hari Ini (${escapeHtml(todayLabel)})</h3>
         <button class="wa-share-btn" id="btnWaShareLogistik">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.374 0 0 5.373 0 12c0 2.117.554 4.103 1.523 5.83L.057 23.997l6.334-1.648A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-4.976-1.352l-.357-.211-3.68.957.984-3.57-.232-.368A9.818 9.818 0 012.182 12C2.182 6.566 6.566 2.182 12 2.182S21.818 6.566 21.818 12 17.434 21.818 12 21.818z"/></svg>
           Bagikan via WhatsApp

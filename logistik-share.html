@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Logistik Harian MKI Makassar</title>
+<title>Turnover Gudang Harian MKI Makassar</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:#1a1209;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:16px;}
@@ -97,7 +97,7 @@ function draw(d){
   const hg=cx.createLinearGradient(0,0,W,0);hg.addColorStop(0,'#c17a5a');hg.addColorStop(1,'#a85d3f');
   cx.fillStyle=hg;cx.fillRect(0,0,W,106);
   cx.fillStyle='rgba(255,255,255,.65)';cx.font='600 20px system-ui';cx.fillText('MKI \u2014 CABANG MAKASSAR',44,34);
-  cx.fillStyle='#fff';cx.font='bold 26px system-ui';cx.fillText('Logistik \u2014 Kode Barang Keluar Hari Ini',44,72);
+  cx.fillStyle='#fff';cx.font='bold 26px system-ui';cx.fillText('Turnover Gudang \u2014 Kode Barang Keluar Hari Ini',44,72);
   cx.fillStyle='rgba(255,255,255,.75)';cx.font='400 16px system-ui';cx.textAlign='right';
   cx.fillText(DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear(),W-44,62);cx.textAlign='left';
 
@@ -151,7 +151,7 @@ function draw(d){
 function cap(d){
   const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-  return '\ud83d\udce6 *Logistik Harian '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.rows.length)+' kode barang keluar hari ini\n\nhttps://mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar/';
+  return '\ud83d\udce6 *Turnover Gudang Harian '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.rows.length)+' kode barang keluar hari ini';
 }
 
 async function main(){
@@ -162,7 +162,7 @@ async function main(){
     document.getElementById('spinner').style.display='none';
     document.getElementById('status').style.display='none';
     const cv=document.getElementById('cv');cv.style.display='block';document.getElementById('btnGroup').style.display='flex';
-    const c=cap(data),fn='Logistik-MKI-'+data.ts+'.png';
+    const c=cap(data),fn='TurnoverGudang-MKI-'+data.ts+'.png';
     const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
     const file=new File([blob],fn,{type:'image/png'});
     const canShareFile=!!(navigator.canShare&&navigator.canShare({files:[file]}));
@@ -173,7 +173,7 @@ async function main(){
     }
     document.getElementById('btnWA').addEventListener('click',()=>{
       if(navigator.share&&canShareFile){
-        navigator.share({files:[file],title:'Logistik Harian '+data.ts,text:c}).catch(e=>{
+        navigator.share({files:[file],title:'Turnover Gudang Harian '+data.ts,text:c}).catch(e=>{
           if(e&&e.name==='AbortError')return;
           fallbackShare();
         });
