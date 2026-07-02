@@ -1029,15 +1029,6 @@ function renderDpLogistikPanel(tx2026, stock) {
     .filter(t => isSameLocalDay(t.orderDate) && !t.isRetur)
     .sort((a, b) => (a.noInvoice || '').localeCompare(b.noInvoice || '', undefined, { numeric: true }));
 
-  // Total qty keluar hari ini per kode barang, dipisah per company — dipakai
-  // untuk mengurangi sisa stock (stock di sheet belum tentu ter-update
-  // real-time untuk pengeluaran hari ini).
-  const qtyOutToday = {};
-  rows.forEach(t => {
-    if (!qtyOutToday[t.kodeBarang]) qtyOutToday[t.kodeBarang] = { MKI: 0, CFN: 0 };
-    if (t.company === 'MKI' || t.company === 'CFN') qtyOutToday[t.kodeBarang][t.company] += t.qty;
-  });
-
   const todayLabel = TODAY.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 
   const html = `
@@ -1049,7 +1040,7 @@ function renderDpLogistikPanel(tx2026, stock) {
           Bagikan via WhatsApp
         </button>
       </div>
-      <p class="panel-note">${fmtNum(rows.length)} baris kode barang keluar pada tanggal berjalan. MKI/CFN Turnover dalam quantity unit; Sisa Stock sudah dikurangi total quantity keluar hari ini per company.</p>
+      <p class="panel-note">${fmtNum(rows.length)} baris kode barang keluar pada tanggal berjalan. MKI/CFN Turnover dalam quantity unit; Sisa Stock adalah stock gudang terkini (sudah otomatis bersih dari turnover hari ini sesuai sheet Stock GD MKS).</p>
       <div class="table-scroll">
         <table class="data-table data-table-compact">
           <thead>
@@ -1062,10 +1053,9 @@ function renderDpLogistikPanel(tx2026, stock) {
           <tbody>
             ${rows.length ? rows.map(t => {
               const st = stockByKode[t.kodeBarang];
-              const out = qtyOutToday[t.kodeBarang] || { MKI: 0, CFN: 0 };
-              const sisaMKI = st ? st.stockMKI - out.MKI : null;
-              const sisaCFN = st ? st.stockCFN - out.CFN : null;
-              const sisaAll = st ? sisaMKI + sisaCFN : null;
+              const sisaMKI = st ? st.stockMKI : null;
+              const sisaCFN = st ? st.stockCFN : null;
+              const sisaAll = st ? st.stockTotal : null;
               return `
               <tr>
                 <td>${escapeHtml(t.noInvoice)}</td>
