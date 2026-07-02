@@ -74,9 +74,9 @@ async function load(){
 function draw(d){
   const W=1080,L=40,rowH=30,headH=30,topH=132,footH=56;
   const cols=[
-    {label:'NO INVOICE',w:110,get:t=>t.inv},
-    {label:'CUSTOMER',w:200,get:t=>t.customer},
-    {label:'KODE BARANG',w:110,get:t=>t.kode},
+    {label:'NO INVOICE',w:180,get:t=>t.inv},
+    {label:'CUSTOMER',w:140,get:t=>t.customer},
+    {label:'KODE BARANG',w:100,get:t=>t.kode},
     {label:'MKI TURNOVER',w:130,align:'right',get:t=>t.company==='MKI'?Num(t.qty):'\u2013'},
     {label:'CFN TURNOVER',w:130,align:'right',get:t=>t.company==='CFN'?Num(t.qty):'\u2013'},
     {label:'STOCK MKI',w:100,align:'right',get:(t,st)=>st?Num(st.mki):'\u2013'},
