@@ -47,7 +47,7 @@ async function load(){
   const gR=csv(gT),rR=csv(rT),sR=csv(sT);
   const T=new Date(),ts=Iso(T),mi=T.getMonth();
   const tx=gR.slice(1).map(r=>({dt:pDate(r[0]),inv:r[1],amt:N(r[6]),qty:N(r[5]),kol:N(r[9]),stg:(r[10]||'').toLowerCase(),eks:(r[11]||'').toUpperCase(),sts:r[7]||'',co:r[8]||'',lok:(r[12]||'').trim()})).filter(t=>t.dt);
-  const tM=tx.filter(t=>t.dt.getMonth()===mi&&t.stg!=='return'),tD=tM.filter(t=>Iso(t.dt)===ts);
+  const tM=tx.filter(t=>t.dt.getMonth()===mi),tD=tM.filter(t=>Iso(t.dt)===ts);
   const sM=S(tM,t=>t.amt),sD=S(tD,t=>t.amt);
   const sMKI=S(tM.filter(t=>t.co==='MKI'),t=>t.amt),sCFN=S(tM.filter(t=>t.co==='CFN'),t=>t.amt);
   const sDMKI=S(tD.filter(t=>t.co==='MKI'),t=>t.amt),sDCFN=S(tD.filter(t=>t.co==='CFN'),t=>t.amt);

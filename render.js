@@ -318,10 +318,13 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     const monthIdx = isAll ? -1 : parseInt(dailyPerfState.kpi.month, 10);
     const monthLabel = isAll ? 'Semua Bulan' : MONTH_NAMES_ID[monthIdx];
 
+    // txMonth TIDAK mengecualikan invoice retur — disamakan dengan metodologi
+    // Section 02 (Tren Penjualan), di mana invoice retur (nomor invoice
+    // berawalan "R-" atau Amount negatif) tetap masuk hitungan sehingga
+    // otomatis berfungsi sebagai nilai pengurang terhadap Sales/Qty/Invoice.
     const txMonth = tx2026.filter(t =>
       t.orderDate &&
-      (isAll || t.orderDate.getMonth() === monthIdx) &&
-      (t.stage || '').toLowerCase() !== 'return'
+      (isAll || t.orderDate.getMonth() === monthIdx)
     );
     const revMonth = rev2026.filter(r =>
       r.paymentDate && (isAll || r.paymentDate.getMonth() === monthIdx)
