@@ -467,11 +467,19 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         ${kpiBar(otdPct, otdTarget, 60)}${kpiStatus(otdPct, otdTarget, 60)}
       </div>`;
 
+    // Sales to Revenue Ratio HARI INI (tanpa target, murni angka)
+    const dailyCollectionRate = dailySales > 0 ? (dailyRevenue / dailySales) * 100 : null;
+
     const cardCollection = `
       <div class="kpi-monitor-card">
         <div class="kmc-label">Sales to Revenue Ratio</div>
         <div class="kmc-value">${fmtPct(collectionRate)}</div>
         <div class="kmc-sub">Sales: ${fmtRupiah(totalSales)} &nbsp;|&nbsp; Revenue: ${fmtRupiah(totalRevenue)}</div>
+        <div class="kmc-daily-ratio">
+          <div class="kmc-pace-label">HARI INI (${escapeHtml(todayLabel)})</div>
+          <div class="kmc-daily-ratio-value">${dailyCollectionRate !== null ? fmtPct(dailyCollectionRate) : '&ndash;'}</div>
+          <div class="kmc-sub">Sales: ${fmtRupiah(dailySales)} &nbsp;|&nbsp; Revenue: ${fmtRupiah(dailyRevenue)}</div>
+        </div>
       </div>`;
 
     const cardWilayah = `
