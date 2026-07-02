@@ -413,7 +413,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
       <div class="kpi-monitor-card">
         <div class="kmc-label">Total Sales &mdash; ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtRupiah(totalSales)}</div>
-        <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong>${fmtRupiah(dailySales)}</strong></div>
+        <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong class="kmc-today-value">${fmtRupiah(dailySales)}</strong></div>
         ${companyRow('Breakdown', salesMKI, salesCFN, fmtRupiah)}
         ${targetSales > 0 ? `
           <div class="kmc-target" style="margin-top:10px;">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctSales)}</strong></div>
@@ -426,7 +426,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
       <div class="kpi-monitor-card">
         <div class="kmc-label">Total Revenue &mdash; ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtRupiah(totalRevenue)}</div>
-        <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong>${fmtRupiah(dailyRevenue)}</strong></div>
+        <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong class="kmc-today-value">${fmtRupiah(dailyRevenue)}</strong></div>
         ${companyRow('Breakdown', revMKI, revCFN, fmtRupiah)}
         ${targetSales > 0 ? `
           <div class="kmc-target" style="margin-top:10px;">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctRevenue)}</strong></div>
@@ -439,7 +439,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
       <div class="kpi-monitor-card">
         <div class="kmc-label">Total Invoice &mdash; ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtNum(invoiceUnikAll)}</div>
-        <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong>${fmtNum(dailyInvoice)} invoice</strong></div>
+        <div class="kmc-sub">Hari ini (${escapeHtml(todayLabel)}): <strong class="kmc-today-value">${fmtNum(dailyInvoice)} invoice</strong></div>
         ${companyRow('Breakdown', invoiceMKI, invoiceCFN, fmtNum)}
         ${pctInvoice !== null ? `
           <div class="kmc-target" style="margin-top:10px;">Target: ${fmtNum(TARGET_INVOICE)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctInvoice)}</strong></div>
@@ -452,7 +452,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
       <div class="kpi-monitor-card">
         <div class="kmc-label">OTD Accuracy &mdash; ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtPct(otdPct)}</div>
-        <div class="kmc-sub">Hari ini: <strong>${otdPctToday !== null ? fmtPct(otdPctToday) : '&ndash;'}</strong> &nbsp;(${fmtNum(invTodayOTD)}/${fmtNum(invTodayTotal)} invoice)</div>
+        <div class="kmc-sub">Hari ini: <strong class="kmc-today-value">${otdPctToday !== null ? fmtPct(otdPctToday) : '&ndash;'}</strong> &nbsp;(${fmtNum(invTodayOTD)}/${fmtNum(invTodayTotal)} invoice)</div>
         ${invTodayTotal >= 3 ? `
           <div class="kmc-daily">
             <div class="kmc-pace-label">TARGET HARIAN</div>
