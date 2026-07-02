@@ -516,7 +516,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     btn.addEventListener('click', () => {
       // Buka halaman kpi-share.html yang generate gambar KPI real-time via Canvas.
       // User simpan gambar → kirim ke grup WA sebagai foto (bukan link).
-      window.open('kpi-share.html', '_blank');
+      window.open('kpi-share.html?_=' + Date.now(), '_blank');
     });
   };
   attachWaBtn();
@@ -860,7 +860,7 @@ function renderDpDeliveryPanel(tx2026) {
   document.getElementById('dpPanel-delivery').innerHTML = html;
 
   const waBtn = document.getElementById('btnWaShareDelivery');
-  if (waBtn) waBtn.addEventListener('click', () => window.open('delivery-share.html', '_blank'));
+  if (waBtn) waBtn.addEventListener('click', () => window.open('delivery-share.html?_=' + Date.now(), '_blank'));
 
   const renderTable = () => {
     const state = dailyPerfState.delivery;
@@ -1125,7 +1125,7 @@ function renderDpLogistikPanel(tx2026, stock) {
   document.getElementById('dpPanel-logistik').innerHTML = html;
 
   const waBtn = document.getElementById('btnWaShareLogistik');
-  if (waBtn) waBtn.addEventListener('click', () => window.open('logistik-share.html', '_blank'));
+  if (waBtn) waBtn.addEventListener('click', () => window.open('logistik-share.html?_=' + Date.now(), '_blank'));
 }
 
 /* ==========================================================================
@@ -2010,8 +2010,9 @@ function renderStockTable(st) {
       const params = new URLSearchParams();
       if (company !== 'all') params.set('company', company);
       if (search.trim()) params.set('q', search.trim());
+      params.set('_', Date.now());
       const qs = params.toString();
-      window.open('stock-share.html' + (qs ? '?' + qs : ''), '_blank');
+      window.open('stock-share.html?' + qs, '_blank');
     });
   }
 }

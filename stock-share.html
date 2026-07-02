@@ -66,8 +66,9 @@ function fullLinkUrl(){
   const p=new URLSearchParams();
   if(filterCompany) p.set('company',filterCompany);
   if(filterQ) p.set('q',filterQ);
+  p.set('_',Date.now());
   const qs=p.toString();
-  return new URL('stock-full.html'+(qs?'?'+qs:''), window.location.href).toString();
+  return new URL('stock-full.html?'+qs, window.location.href).toString();
 }
 
 function draw(d){
