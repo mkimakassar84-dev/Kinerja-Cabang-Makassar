@@ -25,6 +25,7 @@ canvas{display:none;border-radius:12px;max-width:100%;box-shadow:0 8px 32px rgba
 <div class="btn-group" id="btnGroup">
 <button id="btnWA">📲 Kirim ke WhatsApp</button>
 <button id="btnSave">Simpan ke Galeri</button>
+<a id="linkFull" href="#" target="_blank" style="display:none;color:#f0c9a8;font-size:13px;text-decoration:underline;text-align:center;">📄 Buka data lengkap (semua kode barang)</a>
 </div>
 <div id="note"></div>
 <div id="errMsg"></div>
@@ -61,7 +62,19 @@ async function load(){
   return {T,items};
 }
 
+function fullLinkUrl(){
+  const p=new URLSearchParams();
+  if(filterCompany) p.set('company',filterCompany);
+  if(filterQ) p.set('q',filterQ);
+  const qs=p.toString();
+  return new URL('stock-full.html'+(qs?'?'+qs:''), window.location.href).toString();
+}
+
 function draw(d){
+  const THUMB_LIMIT=10;
+  const isThumb = d.items.length>THUMB_LIMIT;
+  const shownItems = isThumb ? d.items.slice(0,8) : d.items;
+
   const W=1080,L=40,rowH=30,headH=30,topH=132,footH=56;
   const cols=[
     {label:'KODE BARANG',w:140,get:i=>i.kode},
@@ -70,7 +83,8 @@ function draw(d){
     {label:'STOCK CFN',w:120,align:'right',get:i=>Num(i.cfn)},
     {label:'TOTAL',w:140,align:'right',get:i=>Num(i.total)},
   ];
-  const H=topH+headH+Math.max(d.items.length,1)*rowH+footH+16;
+  const extraRow = isThumb ? 1 : 0; // baris "+N kode barang lainnya..."
+  const H=topH+headH+Math.max(shownItems.length+extraRow,1)*rowH+footH+16;
   const cv=document.getElementById('cv'),cx=cv.getContext('2d');
   cv.height=H;
   const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
@@ -87,6 +101,7 @@ function draw(d){
   cx.fillStyle='#5a4a3a';cx.font='bold 14px system-ui';
   let noteText=Num(d.items.length)+' kode barang dengan stock tersedia';
   if(filterQ) noteText+=' \u2014 pencarian: "'+filterQ+'"';
+  if(isThumb) noteText+=' \u2014 pratinjau 8 teratas, lengkap di link';
   cx.fillText(noteText,44,128);
 
   let y=topH;
@@ -101,12 +116,12 @@ function draw(d){
   cx.textAlign='left';
   y+=headH;
 
-  if(d.items.length===0){
+  if(shownItems.length===0){
     cx.fillStyle='#9a8a72';cx.font='italic 13px system-ui';
     cx.fillText('Tidak ada barang yang cocok dengan filter.',L+8,y+20);
     y+=rowH;
   } else {
-    d.items.forEach((i,idx)=>{
+    shownItems.forEach((i,idx)=>{
       if(idx%2===1){cx.fillStyle='#efe9df';cx.fillRect(L,y,W-2*L,rowH);}
       cx.fillStyle='#2a2520';cx.font='400 11.5px system-ui';
       x=L;
@@ -126,28 +141,47 @@ function draw(d){
     });
   }
 
+  if(isThumb){
+    const remaining=d.items.length-shownItems.length;
+    cx.fillStyle='#f3e6de';cx.fillRect(L,y,W-2*L,rowH);
+    cx.fillStyle='#a85d3f';cx.font='italic 600 12px system-ui';
+    cx.fillText('+ '+Num(remaining)+' kode barang lainnya \u2014 lihat data lengkap di link pada pesan ini \u2193',L+8,y+19);
+    y+=rowH;
+  }
+
   cx.fillStyle='#efe8df';cx.fillRect(0,H-footH,W,footH);
   cx.fillStyle='#a08060';cx.font='400 13px system-ui';
   cx.fillText('mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar  \u2022  '+new Date().toLocaleString('id-ID'),44,H-20);
+
+  return {isThumb};
 }
 
-function cap(d){
+function cap(d, isThumb){
   const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
   const titleSuffix = filterCompany ? ' '+filterCompany : '';
-  return '\ud83d\udce6 *Laporan Stock Gudang'+titleSuffix+' '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.items.length)+' kode barang dengan stock tersedia';
+  let txt='\ud83d\udce6 *Laporan Stock Gudang'+titleSuffix+' '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.items.length)+' kode barang dengan stock tersedia';
+  if(isThumb){
+    txt+='\n\n\ud83d\udcc4 Data lengkap (semua '+Num(d.items.length)+' kode barang, dikelompokkan per company):\n'+fullLinkUrl();
+  }
+  return txt;
 }
 
 async function main(){
   try{
     const data=await load();
     document.getElementById('status').textContent='Membuat gambar\u2026';
-    draw(data);
+    const {isThumb}=draw(data);
     document.getElementById('spinner').style.display='none';
     document.getElementById('status').style.display='none';
     const cv=document.getElementById('cv');cv.style.display='block';document.getElementById('btnGroup').style.display='flex';
+    if(isThumb){
+      const linkEl=document.getElementById('linkFull');
+      linkEl.href=fullLinkUrl();
+      linkEl.style.display='block';
+    }
     const ts=[data.T.getFullYear(),String(data.T.getMonth()+1).padStart(2,'0'),String(data.T.getDate()).padStart(2,'0')].join('-');
-    const c=cap(data),fn='Stock-MKI-'+(filterCompany||'All')+'-'+ts+'.png';
+    const c=cap(data,isThumb),fn='Stock-MKI-'+(filterCompany||'All')+'-'+ts+(isThumb?'-preview':'')+'.png';
     const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
     const file=new File([blob],fn,{type:'image/png'});
     const canShareFile=!!(navigator.canShare&&navigator.canShare({files:[file]}));

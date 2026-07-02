@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan Lengkap Stock Gudang — MKI Cabang Makassar</title>
+<style>
+:root{
+  --paper:#fdfbf7; --cream:#f5efe4; --ink:#3a3530; --ink-soft:#6a5f52;
+  --line:#e5ddcf; --terra:#c17a5a; --terra-dim:#f3e6de; --sage:#8a9a7e;
+  --shadow:0 2px 10px rgba(58,53,48,.06);
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  font-family:'Segoe UI', system-ui, sans-serif; background:var(--cream); color:var(--ink);
+  padding:20px 16px 60px; line-height:1.5;
+}
+.wrap{max-width:900px; margin:0 auto;}
+header{
+  background:linear-gradient(135deg,#c17a5a,#a85d3f); color:#fff; border-radius:14px;
+  padding:22px 24px; margin-bottom:20px; box-shadow:var(--shadow);
+}
+header .eyebrow{font-size:12px; letter-spacing:.08em; text-transform:uppercase; opacity:.7; margin-bottom:6px;}
+header h1{font-size:22px; font-weight:700; margin-bottom:8px;}
+header .meta{font-size:13px; opacity:.85;}
+.summary-bar{
+  display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px;
+}
+.summary-card{
+  flex:1; min-width:140px; background:var(--paper); border:1px solid var(--line); border-radius:12px;
+  padding:14px 16px; box-shadow:var(--shadow);
+}
+.summary-card .label{font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px;}
+.summary-card .value{font-size:19px; font-weight:700;}
+.search-box{margin-bottom:18px;}
+.search-box input{
+  width:100%; padding:11px 14px; border:1px solid var(--line); border-radius:10px; font-size:14px;
+  background:var(--paper); color:var(--ink);
+}
+.search-box input:focus{outline:none; border-color:var(--terra);}
+.company-section{
+  background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px 20px 8px;
+  margin-bottom:18px; box-shadow:var(--shadow);
+}
+.company-section h2{
+  font-size:15px; font-weight:700; margin-bottom:2px; display:flex; align-items:center; gap:8px;
+}
+.badge{
+  display:inline-block; font-size:11px; font-weight:700; padding:2px 9px; border-radius:20px;
+  background:var(--terra-dim); color:var(--terra);
+}
+.badge-cfn{background:#eaf0e6; color:var(--sage);}
+.company-section .sub{font-size:12px; color:var(--ink-soft); margin-bottom:12px;}
+table{width:100%; border-collapse:collapse; font-size:13px;}
+th{
+  text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-soft);
+  padding:8px 8px; border-bottom:2px solid var(--line); position:sticky; top:0; background:var(--paper);
+}
+th.num, td.num{text-align:right;}
+td{padding:9px 8px; border-bottom:1px solid var(--line);}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--cream);}
+.empty{padding:24px 8px; text-align:center; color:var(--ink-soft); font-style:italic; font-size:13px;}
+footer{text-align:center; font-size:11.5px; color:var(--ink-soft); margin-top:24px;}
+#status{text-align:center; padding:60px 20px; color:var(--ink-soft);}
+.spinner{
+  width:36px; height:36px; border:3px solid var(--line); border-top-color:var(--terra); border-radius:50%;
+  animation:spin .8s linear infinite; margin:0 auto 14px;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+#content{display:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="status">
+    <div class="spinner"></div>
+    <div>Mengambil data stock terkini&hellip;</div>
+  </div>
+  <div id="content">
+    <header>
+      <div class="eyebrow">MKI &mdash; Cabang Makassar</div>
+      <h1 id="pageTitle">Laporan Lengkap Stock Gudang</h1>
+      <div class="meta" id="pageMeta"></div>
+    </header>
+    <div class="summary-bar" id="summaryBar"></div>
+    <div class="search-box">
+      <input type="text" id="liveSearch" placeholder="Cari kode atau deskripsi barang&hellip;" />
+    </div>
+    <div id="sections"></div>
+    <footer>mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar &bull; Data langsung dari Google Sheets</footer>
+  </div>
+</div>
+<script>
+const SID='1_uou6JDGV-Tm80oALMrduuj9ZIVWM1r9ppuQsYq7_qo';
+const Num=v=>(v||0).toLocaleString('id-ID');
+const N=v=>parseFloat(String(v||'').replace(/[^0-9.-]/g,''))||0;
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function csv(t){const rows=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'&&t[i+1]==='"'){f+='"';i++;}else if(c==='"')q=false;else f+=c;}else if(c==='"')q=true;else if(c===','){row.push(f.trim());f='';}else if(c==='\n'||c==='\r'){if(f||row.length){row.push(f.trim());rows.push(row);}row=[];f='';if(c==='\r'&&t[i+1]==='\n')i++;}else f+=c;}if(f||row.length){row.push(f.trim());rows.push(row);}return rows;}
+
+const params=new URLSearchParams(window.location.search);
+const filterCompany=(params.get('company')||'').toUpperCase();
+const filterQ=(params.get('q')||'').toUpperCase();
+
+let allItems=[];
+
+async function load(){
+  const r=await fetch('https://docs.google.com/spreadsheets/d/'+SID+'/export?format=csv&gid=507949843&_='+Date.now());
+  if(!r.ok) throw new Error('Gagal mengambil data sheet');
+  const rows=csv(await r.text());
+  allItems=rows.slice(2).map(row=>{
+    const kode=(row[1]||'').toUpperCase().trim();
+    const deskripsi=row[2]||'';
+    return { kode, deskripsi, mki:N(row[6]), cfn:N(row[7]), total:N(row[8]) };
+  }).filter(i=>i.kode && i.total>0);
+
+  if(filterQ) allItems=allItems.filter(i=>i.kode.includes(filterQ)||i.deskripsi.toUpperCase().includes(filterQ));
+  allItems.sort((a,b)=>a.kode.localeCompare(b.kode));
+}
+
+function renderTable(items, cols){
+  if(!items.length) return '<div class="empty">Tidak ada barang yang cocok.</div>';
+  return `<table><thead><tr>${cols.map(c=>`<th class="${c.num?'num':''}">${c.label}</th>`).join('')}</tr></thead>
+    <tbody>${items.map(i=>`<tr>${cols.map(c=>`<td class="${c.num?'num':''}">${c.num?Num(c.get(i)):esc(c.get(i))}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+
+function render(){
+  const q=(document.getElementById('liveSearch').value||'').toUpperCase();
+  const items=q ? allItems.filter(i=>i.kode.includes(q)||i.deskripsi.toUpperCase().includes(q)) : allItems;
+
+  const showMKI = filterCompany!=='CFN';
+  const showCFN = filterCompany!=='MKI';
+  const itemsMKI = items.filter(i=>i.mki>0);
+  const itemsCFN = items.filter(i=>i.cfn>0);
+
+  const totalMKI = itemsMKI.reduce((s,i)=>s+i.mki,0);
+  const totalCFN = itemsCFN.reduce((s,i)=>s+i.cfn,0);
+
+  document.getElementById('pageTitle').textContent = 'Laporan Lengkap Stock Gudang' + (filterCompany ? ' — '+filterCompany : '');
+  document.getElementById('pageMeta').textContent = new Date().toLocaleString('id-ID', {dateStyle:'full', timeStyle:'short'});
+
+  const summaryCards = [];
+  if(showMKI) summaryCards.push(`<div class="summary-card"><div class="label">Kode Barang MKI</div><div class="value">${Num(itemsMKI.length)}</div></div>
+    <div class="summary-card"><div class="label">Total Unit MKI</div><div class="value">${Num(totalMKI)}</div></div>`);
+  if(showCFN) summaryCards.push(`<div class="summary-card"><div class="label">Kode Barang CFN</div><div class="value">${Num(itemsCFN.length)}</div></div>
+    <div class="summary-card"><div class="label">Total Unit CFN</div><div class="value">${Num(totalCFN)}</div></div>`);
+  document.getElementById('summaryBar').innerHTML = summaryCards.join('');
+
+  const cols = [
+    {label:'Kode Barang', get:i=>i.kode},
+    {label:'Deskripsi', get:i=>i.deskripsi},
+    {label:'Stock', get:i=>filterCompany==='CFN'?i.cfn:i.mki, num:true},
+  ];
+
+  let sectionsHtml = '';
+  if(showMKI){
+    sectionsHtml += `<div class="company-section">
+      <h2><span class="badge">MKI</span> Stock Barang MKI</h2>
+      <div class="sub">${Num(itemsMKI.length)} kode barang &bull; total ${Num(totalMKI)} unit</div>
+      ${renderTable(itemsMKI, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Stock MKI',get:i=>i.mki,num:true}])}
+    </div>`;
+  }
+  if(showCFN){
+    sectionsHtml += `<div class="company-section">
+      <h2><span class="badge badge-cfn">CFN</span> Stock Barang CFN</h2>
+      <div class="sub">${Num(itemsCFN.length)} kode barang &bull; total ${Num(totalCFN)} unit</div>
+      ${renderTable(itemsCFN, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Stock CFN',get:i=>i.cfn,num:true}])}
+    </div>`;
+  }
+  document.getElementById('sections').innerHTML = sectionsHtml;
+}
+
+async function main(){
+  try{
+    await load();
+    document.getElementById('status').style.display='none';
+    document.getElementById('content').style.display='block';
+    render();
+    document.getElementById('liveSearch').addEventListener('input', render);
+  }catch(err){
+    document.getElementById('status').innerHTML = '<div style="color:#c0392b;">Gagal memuat data: '+esc(err.message)+'</div>';
+    console.error(err);
+  }
+}
+main();
+</script>
+</body>
+</html>
