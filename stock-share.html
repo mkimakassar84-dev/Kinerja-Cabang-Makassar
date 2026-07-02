@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan Stock Gudang MKI Makassar</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#1a1209;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:16px;}
+#status{color:#fff;font-size:15px;text-align:center;opacity:.8;}
+#spinner{width:44px;height:44px;border:3px solid rgba(255,255,255,.2);border-top-color:#c17a5a;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+canvas{display:none;border-radius:12px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.5);}
+.btn-group{display:none;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:360px;}
+#btnWA{background:#25D366;color:#fff;border:none;border-radius:12px;padding:16px 0;font-size:18px;font-weight:700;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;}
+#btnSave{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:12px 0;font-size:14px;cursor:pointer;width:100%;}
+#note{color:rgba(255,255,255,.45);font-size:12px;text-align:center;max-width:320px;line-height:1.6;display:none;}
+#errMsg{display:none;color:#ff6b6b;font-size:14px;text-align:center;max-width:320px;}
+</style>
+</head>
+<body>
+<div id="spinner"></div>
+<div id="status">Mengambil data terkini…</div>
+<canvas id="cv" width="1080" height="600"></canvas>
+<div class="btn-group" id="btnGroup">
+<button id="btnWA">📲 Kirim ke WhatsApp</button>
+<button id="btnSave">Simpan ke Galeri</button>
+</div>
+<div id="note"></div>
+<div id="errMsg"></div>
+<script>
+const SID='1_uou6JDGV-Tm80oALMrduuj9ZIVWM1r9ppuQsYq7_qo';
+const Num=v=>(v||0).toLocaleString('id-ID');
+const N=v=>parseFloat(String(v||'').replace(/[^0-9.-]/g,''))||0;
+function csv(t){const rows=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'&&t[i+1]==='"'){f+='"';i++;}else if(c==='"')q=false;else f+=c;}else if(c==='"')q=true;else if(c===','){row.push(f.trim());f='';}else if(c==='\n'||c==='\r'){if(f||row.length){row.push(f.trim());rows.push(row);}row=[];f='';if(c==='\r'&&t[i+1]==='\n')i++;}else f+=c;}if(f||row.length){row.push(f.trim());rows.push(row);}return rows;}
+
+const params=new URLSearchParams(window.location.search);
+const filterCompany=(params.get('company')||'').toUpperCase(); // '', 'MKI', atau 'CFN'
+const filterQ=(params.get('q')||'').toUpperCase();
+
+async function load(){
+  const g=id=>fetch('https://docs.google.com/spreadsheets/d/'+SID+'/export?format=csv&gid='+id+'&_='+Date.now()).then(r=>r.ok?r.text():Promise.reject(id));
+  document.getElementById('status').textContent='Mengambil data\u2026';
+  const sT=await g('507949843');
+  const sR=csv(sT);
+  const T=new Date();
+
+  // Stock GD MKS: header 2 baris, data mulai baris index 2 (0-based).
+  let items=sR.slice(2).map(r=>{
+    const kode=(r[1]||'').toUpperCase().trim();
+    const deskripsi=r[2]||'';
+    return { kode, deskripsi, mki:N(r[6]), cfn:N(r[7]), total:N(r[8]) };
+  }).filter(i=>i.kode && i.total>0);
+
+  if(filterCompany==='MKI') items=items.filter(i=>i.mki>0);
+  else if(filterCompany==='CFN') items=items.filter(i=>i.cfn>0);
+  if(filterQ) items=items.filter(i=>i.kode.includes(filterQ)||i.deskripsi.toUpperCase().includes(filterQ));
+
+  items.sort((a,b)=>a.kode.localeCompare(b.kode));
+
+  return {T,items};
+}
+
+function draw(d){
+  const W=1080,L=40,rowH=30,headH=30,topH=132,footH=56;
+  const cols=[
+    {label:'KODE BARANG',w:140,get:i=>i.kode},
+    {label:'DESKRIPSI',w:480,get:i=>i.deskripsi},
+    {label:'STOCK MKI',w:120,align:'right',get:i=>Num(i.mki)},
+    {label:'STOCK CFN',w:120,align:'right',get:i=>Num(i.cfn)},
+    {label:'TOTAL',w:140,align:'right',get:i=>Num(i.total)},
+  ];
+  const H=topH+headH+Math.max(d.items.length,1)*rowH+footH+16;
+  const cv=document.getElementById('cv'),cx=cv.getContext('2d');
+  cv.height=H;
+  const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  cx.fillStyle='#f8f5f0';cx.fillRect(0,0,W,H);
+  const hg=cx.createLinearGradient(0,0,W,0);hg.addColorStop(0,'#c17a5a');hg.addColorStop(1,'#a85d3f');
+  cx.fillStyle=hg;cx.fillRect(0,0,W,106);
+  cx.fillStyle='rgba(255,255,255,.65)';cx.font='600 20px system-ui';cx.fillText('MKI \u2014 CABANG MAKASSAR',44,34);
+  const titleSuffix = filterCompany ? ' \u2014 '+filterCompany : '';
+  cx.fillStyle='#fff';cx.font='bold 26px system-ui';cx.fillText('Laporan Stock Gudang'+titleSuffix,44,72);
+  cx.fillStyle='rgba(255,255,255,.75)';cx.font='400 16px system-ui';cx.textAlign='right';
+  cx.fillText(DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear(),W-44,62);cx.textAlign='left';
+
+  cx.fillStyle='#5a4a3a';cx.font='bold 14px system-ui';
+  let noteText=Num(d.items.length)+' kode barang dengan stock tersedia';
+  if(filterQ) noteText+=' \u2014 pencarian: "'+filterQ+'"';
+  cx.fillText(noteText,44,128);
+
+  let y=topH;
+  cx.fillStyle='#efe4d6';cx.fillRect(L,y,W-2*L,headH);
+  cx.font='bold 11px system-ui';cx.fillStyle='#7a6248';
+  let x=L;
+  cols.forEach(c=>{
+    cx.textAlign=c.align||'left';
+    cx.fillText(c.label, c.align==='right'? x+c.w-8 : x+8, y+19);
+    x+=c.w;
+  });
+  cx.textAlign='left';
+  y+=headH;
+
+  if(d.items.length===0){
+    cx.fillStyle='#9a8a72';cx.font='italic 13px system-ui';
+    cx.fillText('Tidak ada barang yang cocok dengan filter.',L+8,y+20);
+    y+=rowH;
+  } else {
+    d.items.forEach((i,idx)=>{
+      if(idx%2===1){cx.fillStyle='#efe9df';cx.fillRect(L,y,W-2*L,rowH);}
+      cx.fillStyle='#2a2520';cx.font='400 11.5px system-ui';
+      x=L;
+      cols.forEach(c=>{
+        let txt=String(c.get(i));
+        const maxW=c.w-14;
+        if(cx.measureText(txt).width>maxW){
+          while(txt.length>1 && cx.measureText(txt+'\u2026').width>maxW) txt=txt.slice(0,-1);
+          txt+='\u2026';
+        }
+        cx.textAlign=c.align||'left';
+        cx.fillText(txt, c.align==='right'? x+c.w-8 : x+8, y+19);
+        x+=c.w;
+      });
+      cx.textAlign='left';
+      y+=rowH;
+    });
+  }
+
+  cx.fillStyle='#efe8df';cx.fillRect(0,H-footH,W,footH);
+  cx.fillStyle='#a08060';cx.font='400 13px system-ui';
+  cx.fillText('mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar  \u2022  '+new Date().toLocaleString('id-ID'),44,H-20);
+}
+
+function cap(d){
+  const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const titleSuffix = filterCompany ? ' '+filterCompany : '';
+  return '\ud83d\udce6 *Laporan Stock Gudang'+titleSuffix+' '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.items.length)+' kode barang dengan stock tersedia';
+}
+
+async function main(){
+  try{
+    const data=await load();
+    document.getElementById('status').textContent='Membuat gambar\u2026';
+    draw(data);
+    document.getElementById('spinner').style.display='none';
+    document.getElementById('status').style.display='none';
+    const cv=document.getElementById('cv');cv.style.display='block';document.getElementById('btnGroup').style.display='flex';
+    const ts=[data.T.getFullYear(),String(data.T.getMonth()+1).padStart(2,'0'),String(data.T.getDate()).padStart(2,'0')].join('-');
+    const c=cap(data),fn='Stock-MKI-'+(filterCompany||'All')+'-'+ts+'.png';
+    const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
+    const file=new File([blob],fn,{type:'image/png'});
+    const canShareFile=!!(navigator.canShare&&navigator.canShare({files:[file]}));
+    function fallbackShare(){
+      const a=document.createElement('a');a.download=fn;a.href=cv.toDataURL('image/png');a.click();
+      setTimeout(()=>window.open('https://wa.me/?text='+encodeURIComponent(c),'_blank'),800);
+      const n=document.getElementById('note');n.textContent='Gambar disimpan. Kirim dari galeri ke WhatsApp.';n.style.display='block';
+    }
+    document.getElementById('btnWA').addEventListener('click',()=>{
+      if(navigator.share&&canShareFile){
+        navigator.share({files:[file],title:'Laporan Stock '+ts,text:c}).catch(e=>{
+          if(e&&e.name==='AbortError')return;
+          fallbackShare();
+        });
+        return;
+      }
+      fallbackShare();
+    });
+    document.getElementById('btnSave').addEventListener('click',()=>{const a=document.createElement('a');a.download=fn;a.href=cv.toDataURL('image/png');a.click();});
+  }catch(err){
+    document.getElementById('spinner').style.display='none';document.getElementById('status').style.display='none';
+    const e=document.getElementById('errMsg');e.style.display='block';e.textContent='Gagal: '+err.message;console.error(err);
+  }
+}
+main();
+</script>
+</body>
+</html>

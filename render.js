@@ -1829,10 +1829,26 @@ function renderStockSection(m) {
     </div>
 
     <div class="panel">
-      <h3>Barang Tersedia di Gudang (Stock &gt; 0)</h3>
-      <div class="filter-field filter-field-grow" style="margin-bottom:12px;">
-        <label for="stockSearch">Cari Kode / Deskripsi Barang</label>
-        <input type="text" id="stockSearch" class="text-input" placeholder="Ketik kode atau deskripsi barang&hellip;" />
+      <div class="panel-head">
+        <h3>Barang Tersedia di Gudang (Stock &gt; 0)</h3>
+        <button class="wa-share-btn" id="btnWaShareStock">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.374 0 0 5.373 0 12c0 2.117.554 4.103 1.523 5.83L.057 23.997l6.334-1.648A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-4.976-1.352l-.357-.211-3.68.957.984-3.57-.232-.368A9.818 9.818 0 012.182 12C2.182 6.566 6.566 2.182 12 2.182S21.818 6.566 21.818 12 17.434 21.818 12 21.818z"/></svg>
+          Bagikan via WhatsApp
+        </button>
+      </div>
+      <div class="panel-head daily-perf-controls" style="margin-bottom:12px;">
+        <div class="filter-field">
+          <label for="stockCompanyToggle">Filter Company</label>
+          <div class="toggle-group" id="stockCompanyToggle">
+            <button class="toggle-btn active" data-company="all">Semua</button>
+            <button class="toggle-btn" data-company="MKI">MKI</button>
+            <button class="toggle-btn" data-company="CFN">CFN</button>
+          </div>
+        </div>
+        <div class="filter-field filter-field-grow">
+          <label for="stockSearch">Cari Kode / Deskripsi Barang</label>
+          <input type="text" id="stockSearch" class="text-input" placeholder="Ketik kode atau deskripsi barang&hellip;" />
+        </div>
       </div>
       <table class="data-table" id="tblStock"></table>
     </div>
@@ -1897,13 +1913,15 @@ function renderStockTable(st) {
   const PAGE = 15;
   let page = 1;
   let search = '';
+  let company = 'all';
   const allItems = st.items.filter(i => i.stockTotal > 0).sort((a, b) => a.kode.localeCompare(b.kode));
 
   const render = () => {
     const q = search.trim().toUpperCase();
-    const items = q
-      ? allItems.filter(i => i.kode.toUpperCase().includes(q) || (i.deskripsi || '').toUpperCase().includes(q))
-      : allItems;
+    let items = allItems;
+    if (company === 'MKI') items = items.filter(i => i.stockMKI > 0);
+    else if (company === 'CFN') items = items.filter(i => i.stockCFN > 0);
+    if (q) items = items.filter(i => i.kode.toUpperCase().includes(q) || (i.deskripsi || '').toUpperCase().includes(q));
     const total = items.length;
     const totalPages = Math.max(1, Math.ceil(total / PAGE));
     if (page > totalPages) page = totalPages;
@@ -1932,6 +1950,29 @@ function renderStockTable(st) {
       search = e.target.value;
       page = 1;
       render();
+    });
+  }
+
+  const companyToggle = document.getElementById('stockCompanyToggle');
+  if (companyToggle) {
+    companyToggle.addEventListener('click', (e) => {
+      const btn = e.target.closest('.toggle-btn');
+      if (!btn) return;
+      company = btn.dataset.company;
+      page = 1;
+      companyToggle.querySelectorAll('.toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
+      render();
+    });
+  }
+
+  const waBtn = document.getElementById('btnWaShareStock');
+  if (waBtn) {
+    waBtn.addEventListener('click', () => {
+      const params = new URLSearchParams();
+      if (company !== 'all') params.set('company', company);
+      if (search.trim()) params.set('q', search.trim());
+      const qs = params.toString();
+      window.open('stock-share.html' + (qs ? '?' + qs : ''), '_blank');
     });
   }
 }
