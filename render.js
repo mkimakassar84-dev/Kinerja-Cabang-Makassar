@@ -294,6 +294,29 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     return `<span class="kmc-status kmc-status-miss">&#9888; BELUM ACHIEVE</span>`;
   };
 
+  // Indikator pace harian: membandingkan capaian sejauh ini dengan target
+  // yang SEHARUSNYA sudah tercapai di hari berjalan (bukan target sebulan
+  // penuh) — supaya di awal bulan tidak terlihat seolah "ketinggalan jauh"
+  // padahal pace-nya sudah sesuai/lebih. Hanya relevan saat bulan yang
+  // dipilih adalah bulan berjalan (current month), karena "hari ke-berapa"
+  // cuma bermakna untuk bulan yang sedang berjalan.
+  const paceIndicatorHtml = (metricTarget, actualToDate, isCurrentMonthCtx, daysInMonthCtx, dayOfMonthCtx, fmtFn) => {
+    if (!isCurrentMonthCtx || !(metricTarget > 0)) return '';
+    const dailyTarget = metricTarget / daysInMonthCtx;
+    const targetToDate = dailyTarget * dayOfMonthCtx;
+    if (!(targetToDate > 0)) return '';
+    const pacePct = (actualToDate / targetToDate) * 100;
+    const statusCls = pacePct >= 100 ? 'kmc-status-hit' : pacePct >= 80 ? 'kmc-status-warn' : 'kmc-status-miss';
+    const arrow = pacePct >= 100 ? '&#8593;' : '&#8595;';
+    const label = pacePct >= 100 ? 'DI ATAS PACE' : 'DI BAWAH PACE';
+    return `
+      <div class="kmc-pace">
+        <div class="kmc-pace-label">PACE HARIAN (hari ke-${dayOfMonthCtx} dari ${daysInMonthCtx})</div>
+        <div class="kmc-sub">Target/hari: <strong>${fmtFn(dailyTarget)}</strong> &nbsp;&bull;&nbsp; s.d. hari ini: <strong>${fmtFn(targetToDate)}</strong></div>
+        <span class="kmc-status ${statusCls}">${arrow} ${fmtPct(pacePct)} ${label}</span>
+      </div>`;
+  };
+
   const render = () => {
     const isAll = dailyPerfState.kpi.month === 'all';
     const monthIdx = isAll ? -1 : parseInt(dailyPerfState.kpi.month, 10);
@@ -313,6 +336,11 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     const txToday    = txMonth.filter(t => toIsoLocal(t.orderDate) === todayStr);
     const revToday   = revMonth.filter(r => toIsoLocal(r.paymentDate) === todayStr);
     const todayLabel = TODAY.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' });
+
+    // Konteks pace harian: hanya berlaku kalau bulan yang dipilih adalah bulan berjalan.
+    const isCurrentMonth = !isAll && monthIdx === TODAY.getMonth();
+    const dayOfMonth     = TODAY.getDate();
+    const daysInMonth    = new Date(TODAY.getFullYear(), monthIdx + 1, 0).getDate();
 
     // 1. SALES
     const totalSales  = sum(txMonth, t => t.amount);
@@ -389,6 +417,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         ${targetSales > 0 ? `
           <div class="kmc-target" style="margin-top:10px;">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctSales)}</strong></div>
           ${kpiBar(pctSales)}${kpiStatus(pctSales)}
+          ${paceIndicatorHtml(targetSales, totalSales, isCurrentMonth, daysInMonth, dayOfMonth, fmtRupiah)}
         ` : noTargetNote}
       </div>`;
 
@@ -401,6 +430,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         ${targetSales > 0 ? `
           <div class="kmc-target" style="margin-top:10px;">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctRevenue)}</strong></div>
           ${kpiBar(pctRevenue)}${kpiStatus(pctRevenue)}
+          ${paceIndicatorHtml(targetSales, totalRevenue, isCurrentMonth, daysInMonth, dayOfMonth, fmtRupiah)}
         ` : noTargetNote}
       </div>`;
 
@@ -413,6 +443,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         ${pctInvoice !== null ? `
           <div class="kmc-target" style="margin-top:10px;">Target: ${fmtNum(TARGET_INVOICE)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctInvoice)}</strong></div>
           ${kpiBar(pctInvoice)}${kpiStatus(pctInvoice)}
+          ${paceIndicatorHtml(TARGET_INVOICE, invoiceUnikAll, isCurrentMonth, daysInMonth, dayOfMonth, fmtNum)}
         ` : noTargetNote}
       </div>`;
 
@@ -421,7 +452,12 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         <div class="kmc-label">OTD Accuracy &mdash; ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtPct(otdPct)}</div>
         <div class="kmc-sub">Hari ini: <strong>${otdPctToday !== null ? fmtPct(otdPctToday) : '&ndash;'}</strong> &nbsp;(${fmtNum(invTodayOTD)}/${fmtNum(invTodayTotal)} invoice)</div>
-        <div class="kmc-sub" style="margin-top:2px;">${fmtNum(invoiceOTD)} Same Day Complete / ${fmtNum(invoiceUnikTotal)} total invoice (no HAND CARRY)</div>
+        ${invTodayTotal >= 3 ? `
+          <span class="kmc-status ${otdPctToday >= otdTarget ? 'kmc-status-hit' : 'kmc-status-miss'}">
+            ${otdPctToday >= otdTarget ? '&#10003;' : '&#9888;'} ${otdPctToday >= otdTarget ? 'CAPAI TARGET HARIAN' : 'DI BAWAH TARGET HARIAN'} ${otdTarget}%
+          </span>
+        ` : invTodayTotal > 0 ? `<div class="kmc-sub" style="font-style:italic; margin-top:6px;">Invoice hari ini masih sedikit (${fmtNum(invTodayTotal)}) &mdash; persentase belum representatif</div>` : ''}
+        <div class="kmc-sub" style="margin-top:8px;">${fmtNum(invoiceOTD)} Same Day Complete / ${fmtNum(invoiceUnikTotal)} total invoice (no HAND CARRY)</div>
         <div class="kmc-sub" style="margin-top:2px;">Total Qty: <strong>${fmtNum(totalQtyNoHC)}</strong> &nbsp;|&nbsp; Total Koli: <strong>${fmtNum(totalKoliNoHC)}</strong></div>
         <div class="kmc-target">Target: ${otdTarget}% &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(otdPct)}</strong></div>
         ${kpiBar(otdPct, otdTarget, 60)}${kpiStatus(otdPct, otdTarget, 60)}
