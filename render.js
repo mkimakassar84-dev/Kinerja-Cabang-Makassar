@@ -360,18 +360,16 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     // 3. SALES TO REVENUE RATIO
     const collectionRate = totalSales > 0 ? (totalRevenue / totalSales) * 100 : 0;
 
-    // 4. OTD
-    const txNoHC           = txMonth.filter(t => (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
-    const invoiceUnikTotal = uniqueCount(txNoHC, t => t.noInvoice);
-    const invoiceOTD       = uniqueCount(txNoHC.filter(t => (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'), t => t.noInvoice);
+    // 4. OTD — dihitung dari SEMUA invoice, termasuk Hand Carry.
+    const invoiceUnikTotal = uniqueCount(txMonth, t => t.noInvoice);
+    const invoiceOTD       = uniqueCount(txMonth.filter(t => (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'), t => t.noInvoice);
     const otdPct           = invoiceUnikTotal > 0 ? (invoiceOTD / invoiceUnikTotal) * 100 : 0;
     const otdTarget        = 80;
-    const txTodayNoHC      = txToday.filter(t => (t.statusEkspedisi || '').toUpperCase() !== 'HAND CARRY');
-    const invTodayTotal    = uniqueCount(txTodayNoHC, t => t.noInvoice);
-    const invTodayOTD      = uniqueCount(txTodayNoHC.filter(t => (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'), t => t.noInvoice);
+    const invTodayTotal    = uniqueCount(txToday, t => t.noInvoice);
+    const invTodayOTD      = uniqueCount(txToday.filter(t => (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'), t => t.noInvoice);
     const otdPctToday      = invTodayTotal > 0 ? (invTodayOTD / invTodayTotal) * 100 : null;
-    const totalQtyNoHC     = sum(txNoHC, t => t.qty);
-    const totalKoliNoHC    = sum(txNoHC, t => t.koli);
+    const totalQtyNoHC     = sum(txMonth, t => t.qty);
+    const totalKoliNoHC    = sum(txMonth, t => t.koli);
 
     // 5. INVOICE
     const TARGET_INVOICE = 280;
@@ -461,7 +459,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
             </span>
           </div>
         ` : invTodayTotal > 0 ? `<div class="kmc-sub" style="font-style:italic; margin-top:6px;">Invoice hari ini masih sedikit (${fmtNum(invTodayTotal)}) &mdash; persentase belum representatif</div>` : ''}
-        <div class="kmc-sub" style="margin-top:8px;">${fmtNum(invoiceOTD)} Same Day Complete / ${fmtNum(invoiceUnikTotal)} total invoice (no HAND CARRY)</div>
+        <div class="kmc-sub" style="margin-top:8px;">${fmtNum(invoiceOTD)} Same Day Complete / ${fmtNum(invoiceUnikTotal)} total invoice (termasuk Hand Carry)</div>
         <div class="kmc-sub" style="margin-top:2px;">Total Qty: <strong>${fmtNum(totalQtyNoHC)}</strong> &nbsp;|&nbsp; Total Koli: <strong>${fmtNum(totalKoliNoHC)}</strong></div>
         <div class="kmc-target">Target: ${otdTarget}% &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(otdPct)}</strong></div>
         ${kpiBar(otdPct, otdTarget, 60)}${kpiStatus(otdPct, otdTarget, 60)}
