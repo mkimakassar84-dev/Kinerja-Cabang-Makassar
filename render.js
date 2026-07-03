@@ -455,6 +455,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         <div class="kmc-sub" style="margin-top:2px;">Total Qty: <strong>${fmtNum(totalQtyNoHC)}</strong> &nbsp;|&nbsp; Total Koli: <strong>${fmtNum(totalKoliNoHC)}</strong></div>
         <div class="kmc-target">Target: ${otdTarget}% &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(otdPct)}</strong></div>
         ${kpiBar(otdPct, otdTarget, 60)}${kpiStatus(otdPct, otdTarget, 60)}
+        ${!isAll ? `
         <div class="kmc-daily">
           <div class="kmc-pace-label">TARGET HARIAN</div>
           <div class="kmc-sub">Hari ini: <strong class="kmc-today-value">${invTodayTotal > 0 ? fmtPct(otdPctToday) : '&ndash;'}</strong> &nbsp;(${fmtNum(invTodayOTD)}/${fmtNum(invTodayTotal)} invoice)</div>
@@ -463,6 +464,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
             : `<div class="kmc-sub" style="font-style:italic; margin-top:4px;">Belum ada invoice hari ini</div>`
           }
         </div>
+        ` : ''}
       </div>`;
 
     // Sales to Revenue Ratio HARI INI (tanpa target, murni angka)
