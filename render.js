@@ -451,6 +451,10 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
       <div class="kpi-monitor-card">
         <div class="kmc-label">OTD Accuracy &mdash; ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtPct(otdPct)}</div>
+        <div class="kmc-sub" style="margin-top:8px;">${fmtNum(invoiceOTD)} Same Day Complete / ${fmtNum(invoiceUnikTotal)} total invoice (termasuk Hand Carry)</div>
+        <div class="kmc-sub" style="margin-top:2px;">Total Qty: <strong>${fmtNum(totalQtyNoHC)}</strong> &nbsp;|&nbsp; Total Koli: <strong>${fmtNum(totalKoliNoHC)}</strong></div>
+        <div class="kmc-target">Target: ${otdTarget}% &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(otdPct)}</strong></div>
+        ${kpiBar(otdPct, otdTarget, 60)}${kpiStatus(otdPct, otdTarget, 60)}
         <div class="kmc-daily">
           <div class="kmc-pace-label">TARGET HARIAN</div>
           <div class="kmc-sub">Hari ini: <strong class="kmc-today-value">${invTodayTotal > 0 ? fmtPct(otdPctToday) : '&ndash;'}</strong> &nbsp;(${fmtNum(invTodayOTD)}/${fmtNum(invTodayTotal)} invoice)</div>
@@ -459,10 +463,6 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
             : `<div class="kmc-sub" style="font-style:italic; margin-top:4px;">Belum ada invoice hari ini</div>`
           }
         </div>
-        <div class="kmc-sub" style="margin-top:8px;">${fmtNum(invoiceOTD)} Same Day Complete / ${fmtNum(invoiceUnikTotal)} total invoice (termasuk Hand Carry)</div>
-        <div class="kmc-sub" style="margin-top:2px;">Total Qty: <strong>${fmtNum(totalQtyNoHC)}</strong> &nbsp;|&nbsp; Total Koli: <strong>${fmtNum(totalKoliNoHC)}</strong></div>
-        <div class="kmc-target">Target: ${otdTarget}% &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(otdPct)}</strong></div>
-        ${kpiBar(otdPct, otdTarget, 60)}${kpiStatus(otdPct, otdTarget, 60)}
       </div>`;
 
     // Sales to Revenue Ratio HARI INI (tanpa target, murni angka)
@@ -1146,7 +1146,7 @@ function renderSalesSection(m) {
     <div class="kpi-grid">
       <div class="kpi-card">
         <div class="kpi-label">Total Sales 2026 (s.d. hari ini)</div>
-        <div class="kpi-value">${fmtRupiah(ic.totalSales)}</div>
+        <div class="kpi-value kpi-value-rupiah">${fmtRupiah(ic.totalSales)}</div>
         <div class="kpi-sub">${fmtNum(ic.totalQty)} unit terjual</div>
       </div>
       <div class="kpi-card">
@@ -1321,7 +1321,7 @@ function renderRevenueSection(m) {
     <div class="kpi-grid">
       <div class="kpi-card">
         <div class="kpi-label">Total Revenue 2026 (s.d. hari ini)</div>
-        <div class="kpi-value">${fmtRupiah(r.total)}</div>
+        <div class="kpi-value kpi-value-rupiah">${fmtRupiah(r.total)}</div>
         <div class="kpi-sub">Pelunasan diterima</div>
       </div>
       <div class="kpi-card">
@@ -1491,11 +1491,11 @@ function renderRatioSection(m) {
     <div class="kpi-grid kpi-grid-3">
       <div class="kpi-card">
         <div class="kpi-label">Total Sales 2026</div>
-        <div class="kpi-value">${fmtRupiah(ratio.totalSales)}</div>
+        <div class="kpi-value kpi-value-rupiah">${fmtRupiah(ratio.totalSales)}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Total Revenue 2026</div>
-        <div class="kpi-value">${fmtRupiah(ratio.totalRevenue)}</div>
+        <div class="kpi-value kpi-value-rupiah">${fmtRupiah(ratio.totalRevenue)}</div>
       </div>
       <div class="kpi-card kpi-card-accent">
         <div class="kpi-label">Rasio Revenue / Sales</div>
@@ -2098,9 +2098,9 @@ function renderDeliverySection(m) {
         <div class="kpi-sub">${fmtNum(d.deliveryStatus.cutOff.count)} transaksi</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Total Koli Terkirim</div>
-        <div class="kpi-value">${fmtNum(d.totalKoli)}</div>
-        <div class="kpi-sub">${fmtNum(d.totalQty)} unit barang</div>
+        <div class="kpi-label">Total Unit Terkirim</div>
+        <div class="kpi-value">${fmtNum(d.totalQty)}</div>
+        <div class="kpi-sub">${fmtNum(d.totalKoli)} koli</div>
       </div>
     </div>
 
