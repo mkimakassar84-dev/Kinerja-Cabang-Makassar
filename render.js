@@ -309,7 +309,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         <span class="kmc-status ${achieved ? 'kmc-status-hit' : 'kmc-status-miss'}">${achieved ? '&#10003; DAILY ACHIEVED' : '&#10005; DAILY NOT ACHIEVED'}</span>
         <div class="kmc-daily-breakdown">
           <span class="kmc-daily-breakdown-label">Breakdown Hari Ini</span>
-          <span><span class="kmc-daily-mki">MKI ${fmtFn(todayMKI)}</span>&nbsp;&nbsp;<span class="kmc-daily-cfn">CFN ${fmtFn(todayCFN)}</span></span>
+          <span class="kmc-daily-breakdown-vals"><span class="kmc-daily-mki">MKI ${fmtFn(todayMKI)}</span>&nbsp;&nbsp;<span class="kmc-daily-cfn">CFN ${fmtFn(todayCFN)}</span></span>
         </div>
       </div>`;
   };
@@ -400,9 +400,9 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
       .map(([lok, invSet]) => ({ lokasi: lok, invoiceUnik: invSet.size }));
 
     const companyRow = (label, valMki, valCfn, fmtFn) => `
-      <div style="display:flex; justify-content:space-between; font-size:12.5px; margin-top:5px;">
-        <span style="color:var(--ink-soft);">${escapeHtml(label)}</span>
-        <span>
+      <div class="kmc-company-row">
+        <span class="kmc-company-row-label">${escapeHtml(label)}</span>
+        <span class="kmc-company-row-vals">
           <span style="color:var(--terra); font-weight:600;">MKI ${fmtFn(valMki)}</span>
           &nbsp;&nbsp;
           <span style="color:var(--sage); font-weight:600;">CFN ${fmtFn(valCfn)}</span>
