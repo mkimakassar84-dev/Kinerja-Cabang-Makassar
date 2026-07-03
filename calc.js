@@ -443,22 +443,26 @@ function buildTopProducts(transactions, topN = 15) {
    POIN 6 — STOCK GUDANG & PO GUDANG
    ========================================================================== */
 function buildStock(stockRows, transactions) {
-  // Header asli sheet hanya terbaca untuk kolom A-C (Jenis Barang, Kode Barang,
-  // Deskripsi) karena baris 1 berisi tanggal merged-cell sehingga label kolom
-  // D ke kanan (Turnover, Total Stock by Company) tidak terbaca gviz sebagai
-  // nama kolom. Maka kolom stock diakses berdasarkan index posisi (__row),
-  // sesuai struktur asli: A=0 Jenis, B=1 Kode, C=2 Deskripsi, D=3 MKI Turnover,
-  // E=4 CFN Turnover, F=5 MKI&CFN Turnover, G=6 Stock MKI, H=7 Stock CFN, I=8 Stock MKI&CFN.
+  // Header sheet Stock GD MKS direstrukturisasi 3-Jul-2026. Baris 1 berisi
+  // tanggal merged-cell sehingga label kolom tidak terbaca gviz sebagai nama
+  // kolom. Maka kolom stock diakses berdasarkan index posisi (__row), sesuai
+  // struktur baru: A=0 Kode Barang, B=1 Deskripsi, C=2 Harga Satuan,
+  // D=3 Nilai Stock GD, E=4 MKI Turnover, F=5 CFN Turnover, G=6 MKI&CFN Turnover,
+  // H=7 Stock MKI, I=8 Stock CFN, J=9 Stock MKI&CFN, K=10 (kosong/spacer),
+  // L=11 GD MKI (base stock), M=12 GD CFN (base stock).
   const items = stockRows
     .map(r => {
       const row = r.__row || [];
+      const harga = toNumber(row[2]);
+      const stockTotal = toNumber(row[9]);
       return {
-        jenis: toStr(row[0]),
-        kode: toStr(row[1]).toUpperCase(),
-        deskripsi: toStr(row[2]),
-        stockMKI: toNumber(row[6]),
-        stockCFN: toNumber(row[7]),
-        stockTotal: toNumber(row[8]),
+        kode: toStr(row[0]).toUpperCase(),
+        deskripsi: toStr(row[1]),
+        harga,
+        nilaiStockGD: toNumber(row[3]) || (harga * stockTotal),
+        stockMKI: toNumber(row[7]),
+        stockCFN: toNumber(row[8]),
+        stockTotal,
       };
     })
     .filter(r => r.kode);
@@ -466,6 +470,7 @@ function buildStock(stockRows, transactions) {
   const totalStockMKI = sum(items, i => i.stockMKI);
   const totalStockCFN = sum(items, i => i.stockCFN);
   const totalStockAll = sum(items, i => i.stockTotal);
+  const totalNilaiStockGD = sum(items, i => i.nilaiStockGD);
 
   const tx2026 = filterYear(transactions, CURRENT_YEAR);
   const salesByKode = new Map();
@@ -479,7 +484,7 @@ function buildStock(stockRows, transactions) {
     .map(i => ({ ...i, qtyTerjual: salesByKode.get(i.kode) }));
 
   return {
-    items, totalStockMKI, totalStockCFN, totalStockAll,
+    items, totalStockMKI, totalStockCFN, totalStockAll, totalNilaiStockGD,
     itemCount: items.length,
     stockTidakTerjual, stockTerjualDibawah5,
   };

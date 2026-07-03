@@ -32,6 +32,7 @@ canvas{display:none;border-radius:12px;max-width:100%;box-shadow:0 8px 32px rgba
 <script>
 const SID='1_uou6JDGV-Tm80oALMrduuj9ZIVWM1r9ppuQsYq7_qo';
 const Num=v=>(v||0).toLocaleString('id-ID');
+const Rp=v=>v?'Rp'+Math.round(v).toLocaleString('id-ID'):'Rp0';
 const N=v=>parseFloat(String(v||'').replace(/[^0-9.-]/g,''))||0;
 function csv(t){const rows=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'&&t[i+1]==='"'){f+='"';i++;}else if(c==='"')q=false;else f+=c;}else if(c==='"')q=true;else if(c===','){row.push(f.trim());f='';}else if(c==='\n'||c==='\r'){if(f||row.length){row.push(f.trim());rows.push(row);}row=[];f='';if(c==='\r'&&t[i+1]==='\n')i++;}else f+=c;}if(f||row.length){row.push(f.trim());rows.push(row);}return rows;}
 
@@ -47,10 +48,14 @@ async function load(){
   const T=new Date();
 
   // Stock GD MKS: header 2 baris, data mulai baris index 2 (0-based).
+  // Struktur kolom (sejak 3-Jul-2026): A=Kode, B=Deskripsi, C=Harga Satuan,
+  // D=Nilai Stock GD, E=MKI Turnover, F=CFN Turnover, G=MKI&CFN Turnover,
+  // H=Stock MKI, I=Stock CFN, J=Stock MKI&CFN.
   let items=sR.slice(2).map(r=>{
-    const kode=(r[1]||'').toUpperCase().trim();
-    const deskripsi=r[2]||'';
-    return { kode, deskripsi, mki:N(r[6]), cfn:N(r[7]), total:N(r[8]) };
+    const kode=(r[0]||'').toUpperCase().trim();
+    const deskripsi=r[1]||'';
+    const harga=N(r[2]);
+    return { kode, deskripsi, harga, mki:N(r[7]), cfn:N(r[8]), total:N(r[9]) };
   }).filter(i=>i.kode && i.total>0);
 
   if(filterCompany==='MKI') items=items.filter(i=>i.mki>0);
@@ -78,11 +83,13 @@ function draw(d){
 
   const W=1080,L=40,rowH=30,headH=30,topH=132,footH=56;
   const cols=[
-    {label:'KODE BARANG',w:140,get:i=>i.kode},
-    {label:'DESKRIPSI',w:480,get:i=>i.deskripsi},
-    {label:'STOCK MKI',w:120,align:'right',get:i=>Num(i.mki)},
-    {label:'STOCK CFN',w:120,align:'right',get:i=>Num(i.cfn)},
-    {label:'TOTAL',w:140,align:'right',get:i=>Num(i.total)},
+    {label:'KODE BARANG',w:110,get:i=>i.kode},
+    {label:'DESKRIPSI',w:320,get:i=>i.deskripsi},
+    {label:'HARGA',w:110,align:'right',get:i=>Rp(i.harga)},
+    {label:'STOCK MKI',w:90,align:'right',get:i=>Num(i.mki)},
+    {label:'STOCK CFN',w:90,align:'right',get:i=>Num(i.cfn)},
+    {label:'TOTAL',w:90,align:'right',get:i=>Num(i.total)},
+    {label:'NILAI STOCK',w:190,align:'right',get:i=>Rp(i.harga*i.total)},
   ];
   const extraRow = isThumb ? 1 : 0; // baris "+N kode barang lainnya..."
   const H=topH+headH+Math.max(shownItems.length+extraRow,1)*rowH+footH+16;
@@ -99,8 +106,9 @@ function draw(d){
   cx.fillStyle='rgba(255,255,255,.75)';cx.font='400 16px system-ui';cx.textAlign='right';
   cx.fillText(DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear(),W-44,62);cx.textAlign='left';
 
+  const totalNilai=d.items.reduce((s,i)=>s+i.harga*i.total,0);
   cx.fillStyle='#5a4a3a';cx.font='bold 14px system-ui';
-  let noteText=Num(d.items.length)+' kode barang dengan stock tersedia';
+  let noteText=Num(d.items.length)+' kode barang dengan stock tersedia \u2014 total nilai '+Rp(totalNilai);
   if(filterQ) noteText+=' \u2014 pencarian: "'+filterQ+'"';
   if(isThumb) noteText+=' \u2014 pratinjau 8 teratas, lengkap di link';
   cx.fillText(noteText,44,128);
@@ -161,7 +169,8 @@ function cap(d, isThumb){
   const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
   const titleSuffix = filterCompany ? ' '+filterCompany : '';
-  let txt='\ud83d\udce6 *Laporan Stock Gudang'+titleSuffix+' '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.items.length)+' kode barang dengan stock tersedia';
+  const totalNilai=d.items.reduce((s,i)=>s+i.harga*i.total,0);
+  let txt='\ud83d\udce6 *Laporan Stock Gudang'+titleSuffix+' '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.items.length)+' kode barang dengan stock tersedia\n\ud83d\udcb0 Total nilai stock: '+Rp(totalNilai);
   if(isThumb){
     txt+='\n\n\ud83d\udcc4 Data lengkap (semua '+Num(d.items.length)+' kode barang, dikelompokkan per company):\n'+fullLinkUrl();
   }

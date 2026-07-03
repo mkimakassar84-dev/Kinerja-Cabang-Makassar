@@ -59,13 +59,16 @@ async function load(){
     .sort((a,b)=>a.inv.localeCompare(b.inv,undefined,{numeric:true}));
 
   // Stock GD MKS: header 2 baris, data mulai baris index 2 (0-based).
-  // Kolom G/H/I (index 6/7/8) sudah otomatis bersih (net) dari turnover
-  // hari ini oleh sheet itu sendiri — jadi TIDAK perlu dikurangi lagi.
+  // Struktur kolom (sejak 3-Jul-2026): A=Kode, B=Deskripsi, C=Harga Satuan,
+  // D=Nilai Stock GD, E=MKI Turnover, F=CFN Turnover, G=MKI&CFN Turnover,
+  // H=Stock MKI, I=Stock CFN, J=Stock MKI&CFN. Kolom H/I/J sudah otomatis
+  // bersih (net) dari turnover hari ini oleh sheet itu sendiri — jadi TIDAK
+  // perlu dikurangi lagi.
   const stockByKode={};
   sR.slice(2).forEach(r=>{
-    const kode=(r[1]||'').toUpperCase().trim();
+    const kode=(r[0]||'').toUpperCase().trim();
     if(!kode) return;
-    stockByKode[kode]={ mki:N(r[6]), cfn:N(r[7]), all:N(r[8]) };
+    stockByKode[kode]={ mki:N(r[7]), cfn:N(r[8]), all:N(r[9]) };
   });
 
   return {T,ts,rows,stockByKode};

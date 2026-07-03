@@ -1875,6 +1875,11 @@ function renderStockSection(m) {
         <div class="kpi-value">${fmtNum(st.stockTidakTerjual.length)}</div>
         <div class="kpi-sub">Ada stock, belum pernah terjual 2026</div>
       </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Nilai Stock Gudang</div>
+        <div class="kpi-value">${fmtRupiah(st.totalNilaiStockGD)}</div>
+        <div class="kpi-sub">Harga satuan &times; total stock MKI &amp; CFN</div>
+      </div>
     </div>
 
     <div class="panel">
@@ -1982,8 +1987,8 @@ function renderStockTable(st) {
     const shown = items.slice((page-1)*PAGE, page*PAGE);
     const pagHtml = makePagBtns('pagStock', page, totalPages, p => { page = p; render(); });
     document.getElementById('tblStock').outerHTML = `<table class="data-table" id="tblStock">
-      <thead><tr><th>Kode Barang</th><th>Deskripsi</th><th>Stock MKI</th><th>Stock CFN</th><th>Total</th></tr></thead>
-      <tbody>${shown.length ? shown.map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.stockMKI)}</td><td>${fmtNum(i.stockCFN)}</td><td><strong>${fmtNum(i.stockTotal)}</strong></td></tr>`).join('') : '<tr><td colspan="5" class="empty-row">Tidak ada barang yang cocok.</td></tr>'}</tbody>
+      <thead><tr><th>Kode Barang</th><th>Deskripsi</th><th>Harga Satuan</th><th>Stock MKI</th><th>Stock CFN</th><th>Total</th><th>Nilai Stock</th></tr></thead>
+      <tbody>${shown.length ? shown.map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtRupiah(i.harga)}</td><td>${fmtNum(i.stockMKI)}</td><td>${fmtNum(i.stockCFN)}</td><td><strong>${fmtNum(i.stockTotal)}</strong></td><td>${fmtRupiah(i.nilaiStockGD)}</td></tr>`).join('') : '<tr><td colspan="7" class="empty-row">Tidak ada barang yang cocok.</td></tr>'}</tbody>
     </table>`;
     const pagEl = document.getElementById('pagStock');
     if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagStock', p => { page = p; render(); }); }
