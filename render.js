@@ -454,11 +454,9 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         <div class="kmc-daily">
           <div class="kmc-pace-label">TARGET HARIAN</div>
           <div class="kmc-sub">Hari ini: <strong class="kmc-today-value">${invTodayTotal > 0 ? fmtPct(otdPctToday) : '&ndash;'}</strong> &nbsp;(${fmtNum(invTodayOTD)}/${fmtNum(invTodayTotal)} invoice)</div>
-          ${invTodayTotal >= 3
+          ${invTodayTotal >= 1
             ? `<span class="kmc-status ${otdPctToday >= otdTarget ? 'kmc-status-hit' : 'kmc-status-miss'}">${otdPctToday >= otdTarget ? '&#10003;' : '&#10005;'} ${otdPctToday >= otdTarget ? 'DAILY ACHIEVED' : 'DAILY NOT ACHIEVED'} (target ${otdTarget}%)</span>`
-            : invTodayTotal > 0
-              ? `<div class="kmc-sub" style="font-style:italic; margin-top:4px;">Masih sedikit &mdash; persentase belum representatif</div>`
-              : `<div class="kmc-sub" style="font-style:italic; margin-top:4px;">Belum ada invoice hari ini</div>`
+            : `<div class="kmc-sub" style="font-style:italic; margin-top:4px;">Belum ada invoice hari ini</div>`
           }
         </div>
         <div class="kmc-sub" style="margin-top:8px;">${fmtNum(invoiceOTD)} Same Day Complete / ${fmtNum(invoiceUnikTotal)} total invoice (termasuk Hand Carry)</div>
