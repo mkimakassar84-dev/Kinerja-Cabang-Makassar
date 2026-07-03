@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PO Gudang — Barang Ditunggu MKI Makassar</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#1a1209;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:16px;}
+#status{color:#fff;font-size:15px;text-align:center;opacity:.8;}
+#spinner{width:44px;height:44px;border:3px solid rgba(255,255,255,.2);border-top-color:#c17a5a;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+canvas{display:none;border-radius:12px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.5);}
+.btn-group{display:none;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:360px;}
+#btnWA{background:#25D366;color:#fff;border:none;border-radius:12px;padding:16px 0;font-size:18px;font-weight:700;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;}
+#btnSave{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:12px 0;font-size:14px;cursor:pointer;width:100%;}
+#note{color:rgba(255,255,255,.45);font-size:12px;text-align:center;max-width:320px;line-height:1.6;display:none;}
+#errMsg{display:none;color:#ff6b6b;font-size:14px;text-align:center;max-width:320px;}
+#linkFull{display:none;color:#f0c9a8;font-size:13px;text-decoration:underline;text-align:center;}
+</style>
+</head>
+<body>
+<div id="spinner"></div>
+<div id="status">Mengambil data terkini…</div>
+<canvas id="cv" width="1080" height="600"></canvas>
+<div class="btn-group" id="btnGroup">
+<button id="btnWA">📲 Kirim ke WhatsApp</button>
+<button id="btnSave">Simpan ke Galeri</button>
+<a id="linkFull" href="#" target="_blank">📄 Buka data lengkap (semua PO)</a>
+</div>
+<div id="note"></div>
+<div id="errMsg"></div>
+<script>
+const SID='1_uou6JDGV-Tm80oALMrduuj9ZIVWM1r9ppuQsYq7_qo';
+const Num=v=>(v||0).toLocaleString('id-ID');
+const N=v=>parseFloat(String(v||'').replace(/[^0-9.-]/g,''))||0;
+function esc(s){return String(s||'');}
+function pDate(s){if(!s)return null;const mo={jan:0,feb:1,mar:2,apr:3,mei:4,may:4,jun:5,jul:6,agu:7,aug:7,sep:8,okt:9,oct:9,nov:10,des:11,dec:11};let m=s.match(/(\d{1,2})[-\s]+([A-Za-z]+)[-\s]+(\d{4})/);if(m){const k=mo[m[2].toLowerCase().slice(0,3)];if(k!==undefined)return new Date(+m[3],k,+m[1]);}m=s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);m=s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return new Date(+m[1],+m[2]-1,+m[3]);return null;}
+function csv(t){const rows=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'&&t[i+1]==='"'){f+='"';i++;}else if(c==='"')q=false;else f+=c;}else if(c==='"')q=true;else if(c===','){row.push(f.trim());f='';}else if(c==='\n'||c==='\r'){if(f||row.length){row.push(f.trim());rows.push(row);}row=[];f='';if(c==='\r'&&t[i+1]==='\n')i++;}else f+=c;}if(f||row.length){row.push(f.trim());rows.push(row);}return rows;}
+
+const params=new URLSearchParams(window.location.search);
+const filterMonth=params.get('month'); // '0'..'11' atau null (semua bulan)
+const filterQ=(params.get('q')||'').toUpperCase();
+
+function fullLinkUrl(){
+  const p=new URLSearchParams();
+  if(filterMonth!==null) p.set('month',filterMonth);
+  if(filterQ) p.set('q',filterQ);
+  p.set('_',Date.now());
+  return new URL('po-gudang-full.html?'+p.toString(), window.location.href).toString();
+}
+
+async function load(){
+  const r=await fetch('https://docs.google.com/spreadsheets/d/'+SID+'/export?format=csv&gid=2047354384&_='+Date.now());
+  if(!r.ok) throw new Error('Gagal mengambil data sheet');
+  const rows=csv(await r.text());
+  // Kolom: 0 NO, 1 Order Date, 2 NO PO, 3 COMPANY, 4 Kode Barang, 5 Quantity,
+  // 6 NO Surat Jalan, 7 Status (Ekspedisi), 8 Stage, 9 Qty Diterima, 10 Tgl Masuk GD.
+  let items=rows.slice(1).map(row=>{
+    const orderDate=pDate(row[1]);
+    const noPO=row[2]||'';
+    const company=(row[3]||'').toUpperCase();
+    const kodeBarang=(row[4]||'').toUpperCase();
+    const qty=N(row[5]);
+    const noSuratJalan=row[6]||'';
+    const statusEkspedisi=row[7]||'';
+    const stage=row[8]||'';
+    let statusBarang;
+    const stg=stage.toLowerCase();
+    if(stg==='complete') statusBarang='diterima';
+    else if(stg==='return') statusBarang='retur';
+    else if(!stage&&!noSuratJalan&&!statusEkspedisi) statusBarang='ditunggu';
+    else statusBarang='lainnya';
+    return {orderDate,noPO,company,kodeBarang,qty,noSuratJalan,statusEkspedisi,stage,statusBarang};
+  }).filter(p=>p.orderDate);
+
+  // "Barang Ditunggu / Dalam Proses": semua PO yang bukan return dan belum diterima.
+  items=items.filter(p=>p.stage.toLowerCase()!=='return'&&p.statusBarang!=='diterima');
+
+  if(filterMonth!==null){
+    const mi=parseInt(filterMonth,10);
+    items=items.filter(p=>p.orderDate.getMonth()===mi);
+  }
+  if(filterQ){
+    items=items.filter(p=>p.noPO.toUpperCase().includes(filterQ)||p.kodeBarang.includes(filterQ));
+  }
+  items.sort((a,b)=>(a.orderDate?.getTime()||0)-(b.orderDate?.getTime()||0));
+
+  const T=new Date();
+  return {T,items};
+}
+
+function draw(d){
+  const THUMB_LIMIT=10;
+  const isThumb=d.items.length>THUMB_LIMIT;
+  const shownItems=isThumb?d.items.slice(0,8):d.items;
+
+  const W=1080,L=40,rowH=30,headH=30,topH=132,footH=56;
+  const cols=[
+    {label:'ORDER DATE',w:90,get:p=>p.orderDate.toLocaleDateString('id-ID',{day:'2-digit',month:'short'})},
+    {label:'NO PO',w:160,get:p=>p.noPO},
+    {label:'COMPANY',w:70,get:p=>p.company},
+    {label:'KODE BARANG',w:110,get:p=>p.kodeBarang},
+    {label:'QTY',w:60,align:'right',get:p=>Num(p.qty)},
+    {label:'NO SURAT JALAN',w:330,get:p=>p.noSuratJalan?p.noSuratJalan:'BARANG DITUNGGU'},
+    {label:'STATUS EKSPEDISI',w:180,get:p=>p.statusEkspedisi||'\u2013'},
+  ];
+  const extraRow=isThumb?1:0;
+  const H=topH+headH+Math.max(shownItems.length+extraRow,1)*rowH+footH+16;
+  const cv=document.getElementById('cv'),cx=cv.getContext('2d');
+  cv.height=H;
+  const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  cx.fillStyle='#f8f5f0';cx.fillRect(0,0,W,H);
+  const hg=cx.createLinearGradient(0,0,W,0);hg.addColorStop(0,'#c17a5a');hg.addColorStop(1,'#a85d3f');
+  cx.fillStyle=hg;cx.fillRect(0,0,W,106);
+  cx.fillStyle='rgba(255,255,255,.65)';cx.font='600 20px system-ui';cx.fillText('MKI \u2014 CABANG MAKASSAR',44,34);
+  cx.fillStyle='#fff';cx.font='bold 26px system-ui';cx.fillText('PO Gudang \u2014 Barang Ditunggu / Dalam Proses',44,72);
+  cx.fillStyle='rgba(255,255,255,.75)';cx.font='400 16px system-ui';cx.textAlign='right';
+  cx.fillText(DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear(),W-44,62);cx.textAlign='left';
+
+  cx.fillStyle='#5a4a3a';cx.font='bold 14px system-ui';
+  let noteText=Num(d.items.length)+' PO masih ditunggu / dalam proses';
+  if(filterMonth!==null) noteText+=' \u2014 bulan: '+MO[parseInt(filterMonth,10)];
+  if(filterQ) noteText+=' \u2014 pencarian: "'+filterQ+'"';
+  if(isThumb) noteText+=' \u2014 pratinjau 8 teratas, lengkap di link';
+  cx.fillText(noteText,44,128);
+
+  let y=topH;
+  cx.fillStyle='#efe4d6';cx.fillRect(L,y,W-2*L,headH);
+  cx.font='bold 11px system-ui';cx.fillStyle='#7a6248';
+  let x=L;
+  cols.forEach(c=>{
+    cx.textAlign=c.align||'left';
+    cx.fillText(c.label, c.align==='right'? x+c.w-8 : x+8, y+19);
+    x+=c.w;
+  });
+  cx.textAlign='left';
+  y+=headH;
+
+  if(shownItems.length===0){
+    cx.fillStyle='#9a8a72';cx.font='italic 13px system-ui';
+    cx.fillText('Tidak ada PO yang ditunggu / dalam proses pada periode ini.',L+8,y+20);
+    y+=rowH;
+  } else {
+    shownItems.forEach((p,i)=>{
+      if(i%2===1){cx.fillStyle='#efe9df';cx.fillRect(L,y,W-2*L,rowH);}
+      const isMenunggu=!p.noSuratJalan;
+      cx.fillStyle='#2a2520';cx.font='400 11.5px system-ui';
+      x=L;
+      cols.forEach(c=>{
+        let txt=String(c.get(p));
+        const isSJCol=c.label==='NO SURAT JALAN';
+        if(isSJCol&&isMenunggu){cx.fillStyle='#a85d1d';cx.font='700 11.5px system-ui';}
+        else{cx.fillStyle='#2a2520';cx.font='400 11.5px system-ui';}
+        const maxW=c.w-14;
+        if(cx.measureText(txt).width>maxW){
+          while(txt.length>1 && cx.measureText(txt+'\u2026').width>maxW) txt=txt.slice(0,-1);
+          txt+='\u2026';
+        }
+        cx.textAlign=c.align||'left';
+        cx.fillText(txt, c.align==='right'? x+c.w-8 : x+8, y+19);
+        x+=c.w;
+      });
+      cx.textAlign='left';
+      y+=rowH;
+    });
+  }
+
+  if(isThumb){
+    const remaining=d.items.length-shownItems.length;
+    cx.fillStyle='#f3e6de';cx.fillRect(L,y,W-2*L,rowH);
+    cx.fillStyle='#a85d3f';cx.font='italic 600 12px system-ui';
+    cx.fillText('+ '+Num(remaining)+' PO lainnya \u2014 lihat data lengkap di link pada pesan ini \u2193',L+8,y+19);
+    y+=rowH;
+  }
+
+  cx.fillStyle='#efe8df';cx.fillRect(0,H-footH,W,footH);
+  cx.fillStyle='#a08060';cx.font='400 13px system-ui';
+  cx.fillText('mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar  \u2022  '+new Date().toLocaleString('id-ID'),44,H-20);
+
+  return {isThumb};
+}
+
+function cap(d,isThumb){
+  const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  let txt='\ud83d\udce6 *PO Gudang \u2014 Barang Ditunggu '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.items.length)+' PO masih ditunggu / dalam proses';
+  if(isThumb){
+    txt+='\n\n\ud83d\udcc4 Data lengkap (semua '+Num(d.items.length)+' PO):\n'+fullLinkUrl();
+  }
+  return txt;
+}
+
+async function main(){
+  try{
+    const data=await load();
+    document.getElementById('status').textContent='Membuat gambar\u2026';
+    const {isThumb}=draw(data);
+    document.getElementById('spinner').style.display='none';
+    document.getElementById('status').style.display='none';
+    const cv=document.getElementById('cv');cv.style.display='block';document.getElementById('btnGroup').style.display='flex';
+    if(isThumb){
+      const linkEl=document.getElementById('linkFull');
+      linkEl.href=fullLinkUrl();
+      linkEl.style.display='block';
+    }
+    const ts=[data.T.getFullYear(),String(data.T.getMonth()+1).padStart(2,'0'),String(data.T.getDate()).padStart(2,'0')].join('-');
+    const c=cap(data,isThumb),fn='PO-Gudang-Ditunggu-'+ts+(isThumb?'-preview':'')+'.png';
+    const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
+    const file=new File([blob],fn,{type:'image/png'});
+    const canShareFile=!!(navigator.canShare&&navigator.canShare({files:[file]}));
+    function fallbackShare(){
+      const a=document.createElement('a');a.download=fn;a.href=cv.toDataURL('image/png');a.click();
+      setTimeout(()=>window.open('https://wa.me/?text='+encodeURIComponent(c),'_blank'),800);
+      const n=document.getElementById('note');n.textContent='Gambar disimpan. Kirim dari galeri ke WhatsApp.';n.style.display='block';
+    }
+    document.getElementById('btnWA').addEventListener('click',()=>{
+      if(navigator.share&&canShareFile){
+        navigator.share({files:[file],title:'PO Gudang Ditunggu '+ts,text:c}).catch(e=>{
+          if(e&&e.name==='AbortError')return;
+          fallbackShare();
+        });
+        return;
+      }
+      fallbackShare();
+    });
+    document.getElementById('btnSave').addEventListener('click',()=>{const a=document.createElement('a');a.download=fn;a.href=cv.toDataURL('image/png');a.click();});
+  }catch(err){
+    document.getElementById('spinner').style.display='none';document.getElementById('status').style.display='none';
+    const e=document.getElementById('errMsg');e.style.display='block';e.textContent='Gagal: '+err.message;console.error(err);
+  }
+}
+main();
+</script>
+</body>
+</html>
