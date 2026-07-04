@@ -780,10 +780,11 @@ function renderDpDeliveryPanel(tx2026) {
   const EXCLUDED_STAGES = ['complete', 'return'];
   const txPending = tx2026.filter(t => !EXCLUDED_STAGES.includes((t.stage || '').toLowerCase()));
 
-  // Delivery Harian: transaksi dengan Stage "Complete" pada tanggal berjalan (hari ini),
-  // diurutkan berdasarkan No Invoice.
+  // Delivery Harian: transaksi dengan Stage "Complete" yang TANGGAL TERKIRIM-nya
+  // hari ini (bukan tanggal input/order invoice) — supaya invoice yang diinput
+  // hari sebelumnya tapi baru terkirim hari ini tetap terhitung.
   const txDeliveredToday = tx2026
-    .filter(t => (t.stage || '').toLowerCase() === 'complete' && isSameLocalDay(t.orderDate))
+    .filter(t => (t.stage || '').toLowerCase() === 'complete' && isSameLocalDay(t.tglTerkirim))
     .sort((a, b) => (a.noInvoice || '').localeCompare(b.noInvoice || '', undefined, { numeric: true }));
   const todayLabel = TODAY.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -796,12 +797,12 @@ function renderDpDeliveryPanel(tx2026) {
           Bagikan via WhatsApp
         </button>
       </div>
-      <p class="panel-note">${fmtNum(txDeliveredToday.length)} baris transaksi dengan Stage <strong>Complete</strong> pada tanggal berjalan, diurutkan berdasarkan No Invoice.</p>
+      <p class="panel-note">${fmtNum(txDeliveredToday.length)} baris transaksi dengan Stage <strong>Complete</strong> dan Tanggal Terkirim hari ini, diurutkan berdasarkan No Invoice.</p>
       <div class="table-scroll">
         <table class="data-table data-table-compact">
           <thead>
             <tr>
-              <th>Order Date</th><th>No Invoice</th><th>Customer</th>
+              <th>Order Date</th><th>Tgl Terkirim</th><th>No Invoice</th><th>Customer</th>
               <th>Kode Barang</th><th>Qty</th><th>Amount</th><th>Status</th>
               <th>Company</th><th>Koli</th><th>Status Ekspedisi</th><th>Lokasi</th>
             </tr>
@@ -810,6 +811,7 @@ function renderDpDeliveryPanel(tx2026) {
             ${txDeliveredToday.length ? txDeliveredToday.map(t => `
               <tr>
                 <td>${fmtDateShort(t.orderDate)}</td>
+                <td>${fmtDateShort(t.tglTerkirim)}</td>
                 <td>${escapeHtml(t.noInvoice)}</td>
                 <td>${escapeHtml(t.customer)}</td>
                 <td>${escapeHtml(t.kodeBarang)}</td>
@@ -821,7 +823,7 @@ function renderDpDeliveryPanel(tx2026) {
                 <td>${escapeHtml(t.statusEkspedisi)}</td>
                 <td>${escapeHtml(t.lokasi)}</td>
               </tr>
-            `).join('') : `<tr><td colspan="11" class="empty-row">Belum ada transaksi terkirim (Stage Complete) hari ini.</td></tr>`}
+            `).join('') : `<tr><td colspan="12" class="empty-row">Belum ada transaksi terkirim (Stage Complete) hari ini.</td></tr>`}
           </tbody>
         </table>
       </div>

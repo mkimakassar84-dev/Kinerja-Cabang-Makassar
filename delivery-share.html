@@ -47,8 +47,12 @@ async function load(){
     dt:pDate(r[0]), inv:r[1]||'', customer:(r[3]||'').toUpperCase(), kode:(r[4]||'').toUpperCase(),
     qty:N(r[5]), amt:N(r[6]), status:r[7]||'', company:(r[8]||'').toUpperCase(), koli:N(r[9]),
     stage:(r[10]||'').toLowerCase(), eks:(r[11]||'').toUpperCase(), lok:(r[12]||'').trim(),
+    tglTerkirim:pDate(r[13]),
   })).filter(t=>t.dt);
-  const rows=tx.filter(t=>t.stage==='complete'&&Iso(t.dt)===ts)
+  // Terkirim hari ini = Tanggal Terkirim (kolom N) hari ini, BUKAN tanggal input
+  // invoice (Order Date) — invoice yang diinput hari sebelumnya tapi baru
+  // terkirim hari ini tetap terhitung.
+  const rows=tx.filter(t=>t.stage==='complete'&&t.tglTerkirim&&Iso(t.tglTerkirim)===ts)
     .sort((a,b)=>a.inv.localeCompare(b.inv,undefined,{numeric:true}));
   return {T,ts,rows};
 }
@@ -82,7 +86,7 @@ function draw(d){
   cx.fillText(DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear(),W-44,62);cx.textAlign='left';
 
   cx.fillStyle='#5a4a3a';cx.font='bold 14px system-ui';
-  cx.fillText(Num(d.rows.length)+' invoice dengan Stage Complete pada tanggal berjalan',44,128);
+  cx.fillText(Num(d.rows.length)+' invoice dengan Stage Complete dan Tanggal Terkirim hari ini',44,128);
 
   let y=topH;
   let x=L;

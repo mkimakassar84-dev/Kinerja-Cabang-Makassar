@@ -34,8 +34,10 @@
       M Kabupaten/Kota | N..Y Jan..Des (invoice unik per bulan) | Z Total
 
    5. Stock GD MKS (gid 507949843, header baris 2)
-      A Jenis Barang | B Kode Barang | C Deskripsi
-      D MKI Turnover | E CFN Turnover | F MKI&CFN Turnover
+      A Kode Barang | B Deskripsi | C Harga Satuan | D Nilai Stock GD
+      E MKI Turnover | F CFN Turnover | G MKI&CFN Turnover
+      H Stock MKI | I Stock CFN | J Stock MKI&CFN | K (kosong)
+      L GD MKI (base stock) | M GD CFN (base stock)
       G Stock MKI | H Stock CFN | I Stock MKI&CFN  (acuan stock hari ini)
       (Kolom K, L diabaikan sesuai instruksi)
 
