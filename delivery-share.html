@@ -60,7 +60,7 @@ async function load(){
 function draw(d){
   const W=1080,L=40,rowH=30,headH=30,topH=132,footH=56;
   const cols=[
-    {label:'TGL',w:85,get:t=>t.dt.toLocaleDateString('id-ID',{day:'2-digit',month:'short'})},
+    {label:'TGL ORDER',w:85,get:t=>t.dt.toLocaleDateString('id-ID',{day:'2-digit',month:'short'})},
     {label:'NO INVOICE',w:180,get:t=>t.inv},
     {label:'CUSTOMER',w:145,get:t=>t.customer},
     {label:'KODE BARANG',w:100,get:t=>t.kode},
