@@ -409,7 +409,7 @@ function buildInvoiceTargetFromKpiSheet(kpiRows) {
 /* ==========================================================================
    POIN 5 — KODE BARANG TERLARIS 2026 (by sales & quantity), by company
    ========================================================================== */
-function buildTopProducts(transactions, topN = 15) {
+function buildTopProducts(transactions) {
   const tx2026 = filterYear(transactions, CURRENT_YEAR);
 
   const byProduct = Array.from(groupBy(tx2026, t => t.kodeBarang).entries())
@@ -421,8 +421,8 @@ function buildTopProducts(transactions, topN = 15) {
       invoiceUnik: uniqueCount(items, i => i.noInvoice),
     }));
 
-  const topBySales = [...byProduct].sort((a, b) => b.sales - a.sales).slice(0, topN);
-  const topByQty = [...byProduct].sort((a, b) => b.qty - a.qty).slice(0, topN);
+  const topBySales = [...byProduct].sort((a, b) => b.sales - a.sales);
+  const topByQty = [...byProduct].sort((a, b) => b.qty - a.qty);
 
   const byCompany = {};
   ['MKI', 'CFN'].forEach(co => {
@@ -431,8 +431,8 @@ function buildTopProducts(transactions, topN = 15) {
       .filter(([kode]) => kode)
       .map(([kode, items]) => ({ kode, sales: sum(items, i => i.amount), qty: sum(items, i => i.qty) }));
     byCompany[co] = {
-      topBySales: [...prodCo].sort((a, b) => b.sales - a.sales).slice(0, topN),
-      topByQty: [...prodCo].sort((a, b) => b.qty - a.qty).slice(0, topN),
+      topBySales: [...prodCo].sort((a, b) => b.sales - a.sales),
+      topByQty: [...prodCo].sort((a, b) => b.qty - a.qty),
     };
   });
 
@@ -786,8 +786,10 @@ function buildCustomerFrequency(transactions, asOfDate = TODAY) {
       return { customer, invoiceUnik, totalSales, frequency: items.length, lastPurchase, daysSinceLastPurchase };
     });
 
-  const top10ByFrequency = [...byCustomer].sort((a, b) => b.invoiceUnik - a.invoiceUnik).slice(0, 10);
-  const top10BySales = [...byCustomer].sort((a, b) => b.totalSales - a.totalSales).slice(0, 10);
+  const allByFrequency = [...byCustomer].sort((a, b) => b.invoiceUnik - a.invoiceUnik);
+  const allBySales = [...byCustomer].sort((a, b) => b.totalSales - a.totalSales);
+  const top10ByFrequency = allByFrequency.slice(0, 10);
+  const top10BySales = allBySales.slice(0, 10);
 
   // Customer yang tidak belanja lagi >= 60 hari sejak pembelian terakhir
   const churnedCustomers = byCustomer
@@ -819,7 +821,7 @@ function buildCustomerFrequency(transactions, asOfDate = TODAY) {
   });
 
   return {
-    byCustomer, top10ByFrequency, top10BySales, churnedCustomers,
+    byCustomer, top10ByFrequency, top10BySales, allByFrequency, allBySales, churnedCustomers,
     totalCustomer: byCustomer.length, avgFrequency, avgSalesPerCustomer, frequencyDistribution,
   };
 }

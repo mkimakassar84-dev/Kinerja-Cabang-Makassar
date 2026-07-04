@@ -1833,6 +1833,7 @@ function renderTopProductsSection(m) {
       </div>
       <div class="chart-wrap"><canvas id="chartTopProducts"></canvas></div>
       <table class="data-table" id="tblTopProducts"></table>
+      <div class="pagination" id="pagTopProducts"></div>
     </div>
 
     <div class="panel">
@@ -1867,6 +1868,7 @@ function renderTopProductsSection(m) {
       document.querySelectorAll('#topProductMetricToggle .toggle-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       topProductMetric = btn.dataset.metric;
+      topProductsTablePage = 1;
       renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
     });
   });
@@ -1875,6 +1877,7 @@ function renderTopProductsSection(m) {
       document.querySelectorAll('#topProductCompanyToggle .toggle-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       topProductCompanyFilter = btn.dataset.co;
+      topProductsTablePage = 1;
       renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
     });
   });
@@ -1907,15 +1910,18 @@ function renderStockMovementTables(st) {
   renderDibawah5();
 }
 
+let topProductsTablePage = 1;
+
 function getTopProductData(tp, metric, coFilter) {
   let source;
   if (coFilter === 'semua') source = metric === 'sales' ? tp.topBySales : tp.topByQty;
   else source = metric === 'sales' ? tp.byCompany[coFilter].topBySales : tp.byCompany[coFilter].topByQty;
-  return source.slice(0, 10);
+  return source;
 }
 
 function renderTopProductsChart(tp, metric, coFilter) {
-  const data = getTopProductData(tp, metric, coFilter);
+  const full = getTopProductData(tp, metric, coFilter);
+  const data = full.slice(0, 10);
   makeChart('chartTopProducts', {
     type: 'bar',
     data: {
@@ -1933,10 +1939,25 @@ function renderTopProductsChart(tp, metric, coFilter) {
     },
   });
 
-  document.getElementById('tblTopProducts').innerHTML = `
-    <thead><tr><th>Peringkat</th><th>Kode Barang</th><th>Sales</th><th>Quantity</th></tr></thead>
-    <tbody>${data.map((p, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td></tr>`).join('')}</tbody>
-  `;
+  renderTopProductsTable(full);
+}
+
+function renderTopProductsTable(fullData) {
+  const PAGE = 10;
+  const render = () => {
+    const total = fullData.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE));
+    if (topProductsTablePage > totalPages) topProductsTablePage = totalPages;
+    const shown = fullData.slice((topProductsTablePage - 1) * PAGE, topProductsTablePage * PAGE);
+    document.getElementById('tblTopProducts').outerHTML = `<table class="data-table" id="tblTopProducts">
+      <thead><tr><th>Peringkat</th><th>Kode Barang</th><th>Sales</th><th>Quantity</th></tr></thead>
+      <tbody>${shown.length ? shown.map((p, i) => `<tr><td>${(topProductsTablePage - 1) * PAGE + i + 1}</td><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">Tidak ada data.</td></tr>'}</tbody>
+    </table>`;
+    const pagHtml = makePagBtns('pagTopProducts', topProductsTablePage, totalPages, p => { topProductsTablePage = p; render(); });
+    const pagEl = document.getElementById('pagTopProducts');
+    if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagTopProducts', p => { topProductsTablePage = p; render(); }); }
+  };
+  render();
 }
 
 /* ==========================================================================
@@ -2471,6 +2492,7 @@ function renderCustFreqSection(m) {
       </div>
       <div class="chart-wrap"><canvas id="chartTop10Customer"></canvas></div>
       <table class="data-table" id="tblTop10Customer"></table>
+      <div class="pagination" id="pagTop10Customer"></div>
     </div>
 
     <div class="panel">
@@ -2490,6 +2512,7 @@ function renderCustFreqSection(m) {
       document.querySelectorAll('#custFreqMetricToggle .toggle-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       custFreqMetric = btn.dataset.metric;
+      top10CustomerTablePage = 1;
       renderTop10CustomerChart(cf, custFreqMetric);
     });
   });
@@ -2542,6 +2565,8 @@ function renderFreqDistCharts(dist) {
   `;
 }
 
+let top10CustomerTablePage = 1;
+
 function renderTop10CustomerChart(cf, metric) {
   const data = metric === 'frequency' ? cf.top10ByFrequency : cf.top10BySales;
   makeChart('chartTop10Customer', {
@@ -2561,10 +2586,26 @@ function renderTop10CustomerChart(cf, metric) {
     },
   });
 
-  document.getElementById('tblTop10Customer').innerHTML = `
-    <thead><tr><th>Peringkat</th><th>Customer</th><th>Frekuensi (Invoice Unik)</th><th>Total Sales</th></tr></thead>
-    <tbody>${data.map((c, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(c.customer)}</td><td>${fmtNum(c.invoiceUnik)}</td><td>${fmtRupiah(c.totalSales)}</td></tr>`).join('')}</tbody>
-  `;
+  const fullData = metric === 'frequency' ? cf.allByFrequency : cf.allBySales;
+  renderTop10CustomerTable(fullData);
+}
+
+function renderTop10CustomerTable(fullData) {
+  const PAGE = 10;
+  const render = () => {
+    const total = fullData.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE));
+    if (top10CustomerTablePage > totalPages) top10CustomerTablePage = totalPages;
+    const shown = fullData.slice((top10CustomerTablePage - 1) * PAGE, top10CustomerTablePage * PAGE);
+    document.getElementById('tblTop10Customer').outerHTML = `<table class="data-table" id="tblTop10Customer">
+      <thead><tr><th>Peringkat</th><th>Customer</th><th>Frekuensi (Invoice Unik)</th><th>Total Sales</th></tr></thead>
+      <tbody>${shown.length ? shown.map((c, i) => `<tr><td>${(top10CustomerTablePage - 1) * PAGE + i + 1}</td><td>${escapeHtml(c.customer)}</td><td>${fmtNum(c.invoiceUnik)}</td><td>${fmtRupiah(c.totalSales)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">Tidak ada data.</td></tr>'}</tbody>
+    </table>`;
+    const pagHtml = makePagBtns('pagTop10Customer', top10CustomerTablePage, totalPages, p => { top10CustomerTablePage = p; render(); });
+    const pagEl = document.getElementById('pagTop10Customer');
+    if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagTop10Customer', p => { top10CustomerTablePage = p; render(); }); }
+  };
+  render();
 }
 
 function renderChurnedTable(cf) {
