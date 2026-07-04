@@ -129,7 +129,7 @@ async function load(){
     const deskripsi=row[1]||'';
     const harga=N(row[2]);
     return { kode, deskripsi, harga, mki:N(row[7]), cfn:N(row[8]), total:N(row[9]) };
-  }).filter(i=>i.kode && i.total>0);
+  }).filter(i=>i.kode);
 
   if(filterQ) allItems=allItems.filter(i=>i.kode.includes(filterQ)||i.deskripsi.toUpperCase().includes(filterQ));
   allItems.sort((a,b)=>a.kode.localeCompare(b.kode));
@@ -147,35 +147,48 @@ function render(){
 
   const showMKI = filterCompany!=='CFN';
   const showCFN = filterCompany!=='MKI';
-  const itemsMKI = items.filter(i=>i.mki>0);
-  const itemsCFN = items.filter(i=>i.cfn>0);
+  const combined = showMKI && showCFN; // tidak ada filter company -> tampilkan 1 tabel gabungan
 
-  const totalMKI = itemsMKI.reduce((s,i)=>s+i.mki,0);
-  const totalCFN = itemsCFN.reduce((s,i)=>s+i.cfn,0);
+  const totalMKI = items.reduce((s,i)=>s+i.mki,0);
+  const totalCFN = items.reduce((s,i)=>s+i.cfn,0);
 
   document.getElementById('pageTitle').textContent = 'Laporan Lengkap Stock Gudang' + (filterCompany ? ' — '+filterCompany : '');
   document.getElementById('pageMeta').textContent = new Date().toLocaleString('id-ID', {dateStyle:'full', timeStyle:'short'});
 
   const summaryCards = [];
-  if(showMKI) summaryCards.push(`<div class="summary-card"><div class="label">Kode Barang MKI</div><div class="value">${Num(itemsMKI.length)}</div></div>
-    <div class="summary-card"><div class="label">Total Unit MKI</div><div class="value">${Num(totalMKI)}</div></div>`);
-  if(showCFN) summaryCards.push(`<div class="summary-card"><div class="label">Kode Barang CFN</div><div class="value">${Num(itemsCFN.length)}</div></div>
-    <div class="summary-card"><div class="label">Total Unit CFN</div><div class="value">${Num(totalCFN)}</div></div>`);
+  if(combined){
+    summaryCards.push(`<div class="summary-card"><div class="label">Total Kode Barang</div><div class="value">${Num(items.length)}</div></div>
+      <div class="summary-card"><div class="label">Total Unit MKI</div><div class="value">${Num(totalMKI)}</div></div>
+      <div class="summary-card"><div class="label">Total Unit CFN</div><div class="value">${Num(totalCFN)}</div></div>`);
+  } else if(showMKI){
+    summaryCards.push(`<div class="summary-card"><div class="label">Kode Barang MKI</div><div class="value">${Num(items.length)}</div></div>
+      <div class="summary-card"><div class="label">Total Unit MKI</div><div class="value">${Num(totalMKI)}</div></div>`);
+  } else if(showCFN){
+    summaryCards.push(`<div class="summary-card"><div class="label">Kode Barang CFN</div><div class="value">${Num(items.length)}</div></div>
+      <div class="summary-card"><div class="label">Total Unit CFN</div><div class="value">${Num(totalCFN)}</div></div>`);
+  }
   document.getElementById('summaryBar').innerHTML = summaryCards.join('');
 
+  // Semua barang ditampilkan apa adanya (termasuk stock 0) supaya harga tetap terlihat
+  // walau stock sedang kosong.
   let sectionsHtml = '';
-  if(showMKI){
+  if(combined){
+    sectionsHtml += `<div class="company-section">
+      <h2>Stock Barang (MKI &amp; CFN)</h2>
+      <div class="sub">${Num(items.length)} kode barang &bull; total ${Num(totalMKI+totalCFN)} unit &bull; termasuk yang stock-nya kosong</div>
+      <div class="table-scroll">${renderTable(items, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true},{label:'Stock MKI',get:i=>i.mki,num:true},{label:'Stock CFN',get:i=>i.cfn,num:true},{label:'Total',get:i=>i.total,num:true}])}</div>
+    </div>`;
+  } else if(showMKI){
     sectionsHtml += `<div class="company-section">
       <h2><span class="badge">MKI</span> Stock Barang MKI</h2>
-      <div class="sub">${Num(itemsMKI.length)} kode barang &bull; total ${Num(totalMKI)} unit</div>
-      <div class="table-scroll">${renderTable(itemsMKI, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true},{label:'Stock MKI',get:i=>i.mki,num:true}])}</div>
+      <div class="sub">${Num(items.length)} kode barang &bull; total ${Num(totalMKI)} unit &bull; termasuk yang stock-nya kosong</div>
+      <div class="table-scroll">${renderTable(items, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true},{label:'Stock MKI',get:i=>i.mki,num:true}])}</div>
     </div>`;
-  }
-  if(showCFN){
+  } else if(showCFN){
     sectionsHtml += `<div class="company-section">
       <h2><span class="badge badge-cfn">CFN</span> Stock Barang CFN</h2>
-      <div class="sub">${Num(itemsCFN.length)} kode barang &bull; total ${Num(totalCFN)} unit</div>
-      <div class="table-scroll">${renderTable(itemsCFN, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true},{label:'Stock CFN',get:i=>i.cfn,num:true}])}</div>
+      <div class="sub">${Num(items.length)} kode barang &bull; total ${Num(totalCFN)} unit &bull; termasuk yang stock-nya kosong</div>
+      <div class="table-scroll">${renderTable(items, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true},{label:'Stock CFN',get:i=>i.cfn,num:true}])}</div>
     </div>`;
   }
   document.getElementById('sections').innerHTML = sectionsHtml;
