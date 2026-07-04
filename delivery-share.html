@@ -85,8 +85,10 @@ function draw(d){
   cx.fillStyle='rgba(255,255,255,.75)';cx.font='400 16px system-ui';cx.textAlign='right';
   cx.fillText(DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear(),W-44,62);cx.textAlign='left';
 
+  // Hitung invoice UNIK (satu No Invoice bisa punya beberapa baris kode barang)
+  const uniqueInvoiceCount=new Set(d.rows.map(t=>t.inv)).size;
   cx.fillStyle='#5a4a3a';cx.font='bold 14px system-ui';
-  cx.fillText(Num(d.rows.length)+' invoice dengan Stage Complete dan Tanggal Terkirim hari ini',44,128);
+  cx.fillText(Num(uniqueInvoiceCount)+' invoice unik dengan Stage Complete dan Tanggal Terkirim hari ini ('+Num(d.rows.length)+' baris kode barang)',44,128);
 
   let y=topH;
   let x=L;
@@ -134,7 +136,8 @@ function draw(d){
 function cap(d){
   const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-  return '\ud83d\udce6 *Delivery Harian '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.rows.length)+' invoice terkirim hari ini';
+  const uniqueInvoiceCount=new Set(d.rows.map(t=>t.inv)).size;
+  return '\ud83d\udce6 *Delivery Harian '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(uniqueInvoiceCount)+' invoice unik terkirim hari ini';
 }
 
 async function main(){
