@@ -263,6 +263,45 @@ function renderDpPagination(elId, state, totalPages, onRender) {
   });
 }
 
+/* ----- Pagination generik ringan (tanpa efek scroll khusus Daily Performance),
+   dipakai untuk tabel mini di luar section Daily Performance, mis. Section 06. ----- */
+function renderMiniPagination(elId, state, totalPages, onRender) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+  const pages = [];
+  const windowSize = 7;
+  if (totalPages <= windowSize) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    let start = Math.max(2, state.page - 2);
+    let end = Math.min(totalPages - 1, state.page + 2);
+    if (start > 2) pages.push('...');
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (end < totalPages - 1) pages.push('...');
+    pages.push(totalPages);
+  }
+
+  el.innerHTML = `
+    <button class="page-btn page-nav" id="${elId}-prev" ${state.page === 1 ? 'disabled' : ''} aria-label="Halaman sebelumnya">&larr;</button>
+    ${pages.map(p => p === '...'
+      ? `<span class="page-ellipsis">&hellip;</span>`
+      : `<button class="page-btn ${p === state.page ? 'active' : ''}" data-page="${p}">${p}</button>`
+    ).join('')}
+    <button class="page-btn page-nav" id="${elId}-next" ${state.page === totalPages ? 'disabled' : ''} aria-label="Halaman berikutnya">&rarr;</button>
+  `;
+
+  el.querySelectorAll('.page-btn[data-page]').forEach(btn => {
+    btn.addEventListener('click', () => { state.page = parseInt(btn.dataset.page, 10); onRender(); });
+  });
+  const prevBtn = document.getElementById(`${elId}-prev`);
+  const nextBtn = document.getElementById(`${elId}-next`);
+  if (prevBtn) prevBtn.addEventListener('click', () => { if (state.page > 1) { state.page -= 1; onRender(); } });
+  if (nextBtn) nextBtn.addEventListener('click', () => { if (state.page < totalPages) { state.page += 1; onRender(); } });
+}
+
 /* ----- Sub-section: KPI MONITORING ----- */
 function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
   const html = `
@@ -1763,13 +1802,17 @@ function renderWilayahTable(z, filter) {
 let topProductMetric = 'sales'; // sales | qty
 let topProductCompanyFilter = 'semua'; // semua | MKI | CFN
 
+let stockMovementState = { tidak: { page: 1 }, dibawah5: { page: 1 } };
+const STOCK_MOVEMENT_PAGE_SIZE = 10;
+
 function renderTopProductsSection(m) {
   const tp = m.topProducts;
+  const st = m.stock;
 
   const html = `
     <div class="section-head">
       <div class="eyebrow">06 &mdash; Produk</div>
-      <h2>Kode Barang Terlaris 2026</h2>
+      <h2>Turnover Gudang</h2>
       <p class="lede">Peringkat kode barang berdasarkan nilai penjualan dan quantity terjual sepanjang tahun 2026, dari sheet Grand Data 2026, lengkap dengan pembagian per perusahaan.</p>
     </div>
 
@@ -1791,10 +1834,33 @@ function renderTopProductsSection(m) {
       <div class="chart-wrap"><canvas id="chartTopProducts"></canvas></div>
       <table class="data-table" id="tblTopProducts"></table>
     </div>
+
+    <div class="panel">
+      <h3>Barang Ada Stock Namun Tidak Bergerak / Terjual Dibawah 5 Unit (2026)</h3>
+      <div class="two-col">
+        <div>
+          <div class="mini-table-title">Stock Ada, Belum Pernah Terjual (${fmtNum(st.stockTidakTerjual.length)})</div>
+          <table class="data-table data-table-compact">
+            <thead><tr><th>Kode</th><th>Deskripsi</th><th>Stock</th></tr></thead>
+            <tbody id="tblStockTidakTerjual"></tbody>
+          </table>
+          <div class="pagination" id="pgStockTidakTerjual"></div>
+        </div>
+        <div>
+          <div class="mini-table-title">Terjual Dibawah 5 Unit (${fmtNum(st.stockTerjualDibawah5.length)})</div>
+          <table class="data-table data-table-compact">
+            <thead><tr><th>Kode</th><th>Deskripsi</th><th>Terjual</th></tr></thead>
+            <tbody id="tblStockDibawah5"></tbody>
+          </table>
+          <div class="pagination" id="pgStockDibawah5"></div>
+        </div>
+      </div>
+    </div>
   `;
   document.getElementById('s5').innerHTML = html;
 
   renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
+  renderStockMovementTables(st);
 
   document.querySelectorAll('#topProductMetricToggle .toggle-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1812,6 +1878,33 @@ function renderTopProductsSection(m) {
       renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
     });
   });
+}
+
+function renderStockMovementTables(st) {
+  const renderTidak = () => {
+    const state = stockMovementState.tidak;
+    const totalPages = Math.max(1, Math.ceil(st.stockTidakTerjual.length / STOCK_MOVEMENT_PAGE_SIZE));
+    state.page = Math.min(state.page, totalPages);
+    const start = (state.page - 1) * STOCK_MOVEMENT_PAGE_SIZE;
+    const shown = st.stockTidakTerjual.slice(start, start + STOCK_MOVEMENT_PAGE_SIZE);
+    document.getElementById('tblStockTidakTerjual').innerHTML = shown.length
+      ? shown.map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.stockTotal)}</td></tr>`).join('')
+      : '<tr><td colspan="3" class="empty-row">Tidak ada.</td></tr>';
+    renderMiniPagination('pgStockTidakTerjual', state, totalPages, renderTidak);
+  };
+  const renderDibawah5 = () => {
+    const state = stockMovementState.dibawah5;
+    const totalPages = Math.max(1, Math.ceil(st.stockTerjualDibawah5.length / STOCK_MOVEMENT_PAGE_SIZE));
+    state.page = Math.min(state.page, totalPages);
+    const start = (state.page - 1) * STOCK_MOVEMENT_PAGE_SIZE;
+    const shown = st.stockTerjualDibawah5.slice(start, start + STOCK_MOVEMENT_PAGE_SIZE);
+    document.getElementById('tblStockDibawah5').innerHTML = shown.length
+      ? shown.map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.qtyTerjual)}</td></tr>`).join('')
+      : '<tr><td colspan="3" class="empty-row">Tidak ada.</td></tr>';
+    renderMiniPagination('pgStockDibawah5', state, totalPages, renderDibawah5);
+  };
+  renderTidak();
+  renderDibawah5();
 }
 
 function getTopProductData(tp, metric, coFilter) {
@@ -1914,26 +2007,6 @@ function renderStockSection(m) {
         </div>
       </div>
       <table class="data-table" id="tblStock"></table>
-    </div>
-
-    <div class="panel">
-      <h3>Barang Ada Stock Namun Tidak Bergerak / Terjual Dibawah 5 Unit (2026)</h3>
-      <div class="two-col">
-        <div>
-          <div class="mini-table-title">Stock Ada, Belum Pernah Terjual (${st.stockTidakTerjual.length})</div>
-          <table class="data-table data-table-compact">
-            <thead><tr><th>Kode</th><th>Deskripsi</th><th>Stock</th></tr></thead>
-            <tbody>${st.stockTidakTerjual.slice(0, 30).map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.stockTotal)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty-row">Tidak ada.</td></tr>'}</tbody>
-          </table>
-        </div>
-        <div>
-          <div class="mini-table-title">Terjual Dibawah 5 Unit (${st.stockTerjualDibawah5.length})</div>
-          <table class="data-table data-table-compact">
-            <thead><tr><th>Kode</th><th>Deskripsi</th><th>Terjual</th></tr></thead>
-            <tbody>${st.stockTerjualDibawah5.slice(0, 30).map(i => `<tr><td>${escapeHtml(i.kode)}</td><td>${escapeHtml(i.deskripsi)}</td><td>${fmtNum(i.qtyTerjual)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty-row">Tidak ada.</td></tr>'}</tbody>
-          </table>
-        </div>
-      </div>
     </div>
 
     <div class="panel">
