@@ -55,8 +55,21 @@ async function load(){
     };
   }).filter(t=>t.dt);
 
-  const rows=tx.filter(t=>Iso(t.dt)===ts&&!t.isRetur)
-    .sort((a,b)=>a.inv.localeCompare(b.inv,undefined,{numeric:true}));
+  const todayTx=tx.filter(t=>Iso(t.dt)===ts&&!t.isRetur);
+
+  // Agregasi per KODE BARANG UNIK: satu kode barang bisa dibeli banyak customer/invoice
+  // dalam sehari — semua itu digabung jadi 1 baris per kode, quantity dijumlah.
+  const byKode={};
+  todayTx.forEach(t=>{
+    if(!t.kode) return;
+    if(!byKode[t.kode]) byKode[t.kode]={ kode:t.kode, mkiQty:0, cfnQty:0, customers:new Set() };
+    const b=byKode[t.kode];
+    if(t.company==='MKI') b.mkiQty+=t.qty;
+    else if(t.company==='CFN') b.cfnQty+=t.qty;
+    b.customers.add(t.customer);
+  });
+  const rows=Object.values(byKode)
+    .sort((a,b)=>a.kode.localeCompare(b.kode,undefined,{numeric:true}));
 
   // Stock GD MKS: header 2 baris, data mulai baris index 2 (0-based).
   // Struktur kolom (sejak 3-Jul-2026): A=Kode, B=Deskripsi, C=Harga Satuan,
@@ -77,14 +90,13 @@ async function load(){
 function draw(d){
   const W=1080,L=40,rowH=30,headH=30,topH=132,footH=56;
   const cols=[
-    {label:'NO INVOICE',w:180,get:t=>t.inv},
-    {label:'CUSTOMER',w:140,get:t=>t.customer},
-    {label:'KODE BARANG',w:100,get:t=>t.kode},
-    {label:'MKI TURNOVER',w:130,align:'right',get:t=>t.company==='MKI'?Num(t.qty):'\u2013'},
-    {label:'CFN TURNOVER',w:130,align:'right',get:t=>t.company==='CFN'?Num(t.qty):'\u2013'},
-    {label:'STOCK MKI',w:100,align:'right',get:(t,st)=>st?Num(st.mki):'\u2013'},
-    {label:'STOCK CFN',w:100,align:'right',get:(t,st)=>st?Num(st.cfn):'\u2013'},
-    {label:'STOCK ALL',w:120,align:'right',get:(t,st)=>st?Num(st.all):'\u2013'},
+    {label:'KODE BARANG',w:180,get:t=>t.kode},
+    {label:'CUSTOMER UNIK',w:130,align:'right',get:t=>Num(t.customers.size)},
+    {label:'MKI TURNOVER',w:150,align:'right',get:t=>t.mkiQty>0?Num(t.mkiQty):'\u2013'},
+    {label:'CFN TURNOVER',w:150,align:'right',get:t=>t.cfnQty>0?Num(t.cfnQty):'\u2013'},
+    {label:'STOCK MKI',w:120,align:'right',get:(t,st)=>st?Num(st.mki):'\u2013'},
+    {label:'STOCK CFN',w:120,align:'right',get:(t,st)=>st?Num(st.cfn):'\u2013'},
+    {label:'STOCK ALL',w:150,align:'right',get:(t,st)=>st?Num(st.all):'\u2013'},
   ];
   const H=topH+headH+Math.max(d.rows.length,1)*rowH+footH+16;
   const cv=document.getElementById('cv'),cx=cv.getContext('2d');
@@ -100,7 +112,7 @@ function draw(d){
   cx.fillText(DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear(),W-44,62);cx.textAlign='left';
 
   cx.fillStyle='#5a4a3a';cx.font='bold 14px system-ui';
-  cx.fillText(Num(d.rows.length)+' baris kode barang keluar pada tanggal berjalan',44,128);
+  cx.fillText(Num(d.rows.length)+' kode barang unik keluar pada tanggal berjalan',44,128);
 
   let y=topH;
   cx.fillStyle='#efe4d6';cx.fillRect(L,y,W-2*L,headH);
@@ -116,7 +128,7 @@ function draw(d){
 
   if(d.rows.length===0){
     cx.fillStyle='#9a8a72';cx.font='italic 13px system-ui';
-    cx.fillText('Belum ada kode barang keluar hari ini.',L+8,y+20);
+    cx.fillText('Belum ada kode barang unik keluar hari ini.',L+8,y+20);
     y+=rowH;
   } else {
     d.rows.forEach((t,i)=>{
@@ -148,7 +160,7 @@ function draw(d){
 function cap(d){
   const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-  return '\ud83d\udce6 *Turnover Gudang Harian '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.rows.length)+' kode barang keluar hari ini';
+  return '\ud83d\udce6 *Turnover Gudang Harian '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.rows.length)+' kode barang unik keluar hari ini';
 }
 
 async function main(){
