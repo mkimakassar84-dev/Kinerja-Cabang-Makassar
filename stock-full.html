@@ -226,7 +226,7 @@ function render(){
     sectionsHtml += `<div class="company-section">
       <h2><span class="badge">MKI</span> Stock Barang MKI</h2>
       <div class="sub">${Num(itemsMKI.length)} kode barang &bull; total ${Num(totalMKI)} unit${pageInfo}</div>
-      <div class="table-scroll">${renderTable(pageItemsMKI, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true},{label:'Stock MKI',get:i=>i.mki,num:true}])}</div>
+      <div class="table-scroll">${renderTable(pageItemsMKI, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Stock MKI',get:i=>i.mki,num:true},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true}])}</div>
       <div class="pagination" id="pgStockMKI"></div>
     </div>`;
   }
@@ -238,7 +238,7 @@ function render(){
     sectionsHtml += `<div class="company-section">
       <h2><span class="badge badge-cfn">CFN</span> Stock Barang CFN</h2>
       <div class="sub">${Num(itemsCFN.length)} kode barang &bull; total ${Num(totalCFN)} unit${pageInfo}</div>
-      <div class="table-scroll">${renderTable(pageItemsCFN, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true},{label:'Stock CFN',get:i=>i.cfn,num:true}])}</div>
+      <div class="table-scroll">${renderTable(pageItemsCFN, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Stock CFN',get:i=>i.cfn,num:true},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true}])}</div>
       <div class="pagination" id="pgStockCFN"></div>
     </div>`;
   }
