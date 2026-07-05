@@ -82,15 +82,34 @@ function draw(d){
   const shownItems = isThumb ? d.items.slice(0,8) : d.items;
 
   const W=1080,L=40,rowH=30,headH=30,topH=132,footH=56;
-  const cols=[
-    {label:'KODE BARANG',w:110,get:i=>i.kode},
-    {label:'DESKRIPSI',w:320,get:i=>i.deskripsi},
-    {label:'HARGA',w:110,align:'right',get:i=>Rp(i.harga)},
-    {label:'STOCK MKI',w:90,align:'right',get:i=>Num(i.mki)},
-    {label:'STOCK CFN',w:90,align:'right',get:i=>Num(i.cfn)},
-    {label:'TOTAL',w:90,align:'right',get:i=>Num(i.total)},
-    {label:'NILAI STOCK',w:190,align:'right',get:i=>Rp(i.harga*i.total)},
-  ];
+  let cols;
+  if(filterCompany==='MKI'){
+    cols=[
+      {label:'KODE BARANG',w:140,get:i=>i.kode},
+      {label:'DESKRIPSI',w:430,get:i=>i.deskripsi},
+      {label:'HARGA',w:140,align:'right',get:i=>Rp(i.harga)},
+      {label:'STOCK MKI',w:130,align:'right',get:i=>Num(i.mki)},
+      {label:'NILAI STOCK',w:240,align:'right',get:i=>Rp(i.harga*i.mki)},
+    ];
+  } else if(filterCompany==='CFN'){
+    cols=[
+      {label:'KODE BARANG',w:140,get:i=>i.kode},
+      {label:'DESKRIPSI',w:430,get:i=>i.deskripsi},
+      {label:'HARGA',w:140,align:'right',get:i=>Rp(i.harga)},
+      {label:'STOCK CFN',w:130,align:'right',get:i=>Num(i.cfn)},
+      {label:'NILAI STOCK',w:240,align:'right',get:i=>Rp(i.harga*i.cfn)},
+    ];
+  } else {
+    cols=[
+      {label:'KODE BARANG',w:110,get:i=>i.kode},
+      {label:'DESKRIPSI',w:320,get:i=>i.deskripsi},
+      {label:'HARGA',w:110,align:'right',get:i=>Rp(i.harga)},
+      {label:'STOCK MKI',w:90,align:'right',get:i=>Num(i.mki)},
+      {label:'STOCK CFN',w:90,align:'right',get:i=>Num(i.cfn)},
+      {label:'TOTAL',w:90,align:'right',get:i=>Num(i.total)},
+      {label:'NILAI STOCK',w:190,align:'right',get:i=>Rp(i.harga*i.total)},
+    ];
+  }
   const extraRow = isThumb ? 1 : 0; // baris "+N kode barang lainnya..."
   const H=topH+headH+Math.max(shownItems.length+extraRow,1)*rowH+footH+16;
   const cv=document.getElementById('cv'),cx=cv.getContext('2d');
@@ -106,7 +125,8 @@ function draw(d){
   cx.fillStyle='rgba(255,255,255,.75)';cx.font='400 16px system-ui';cx.textAlign='right';
   cx.fillText(DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear(),W-44,62);cx.textAlign='left';
 
-  const totalNilai=d.items.reduce((s,i)=>s+i.harga*i.total,0);
+  const qtyKey = filterCompany==='MKI' ? 'mki' : filterCompany==='CFN' ? 'cfn' : 'total';
+  const totalNilai=d.items.reduce((s,i)=>s+i.harga*i[qtyKey],0);
   cx.fillStyle='#5a4a3a';cx.font='bold 14px system-ui';
   let noteText=Num(d.items.length)+' kode barang dengan stock tersedia \u2014 total nilai '+Rp(totalNilai);
   if(filterQ) noteText+=' \u2014 pencarian: "'+filterQ+'"';
@@ -169,7 +189,8 @@ function cap(d, isThumb){
   const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
   const titleSuffix = filterCompany ? ' '+filterCompany : '';
-  const totalNilai=d.items.reduce((s,i)=>s+i.harga*i.total,0);
+  const qtyKey = filterCompany==='MKI' ? 'mki' : filterCompany==='CFN' ? 'cfn' : 'total';
+  const totalNilai=d.items.reduce((s,i)=>s+i.harga*i[qtyKey],0);
   let txt='\ud83d\udce6 *Laporan Stock Gudang'+titleSuffix+' '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*\n'+Num(d.items.length)+' kode barang dengan stock tersedia\n\ud83d\udcb0 Total nilai stock: '+Rp(totalNilai);
   if(isThumb){
     txt+='\n\n\ud83d\udcc4 Data lengkap (semua '+Num(d.items.length)+' kode barang, dikelompokkan per company):\n'+fullLinkUrl();
