@@ -51,6 +51,26 @@ function applyChartDefaults() {
   Chart.defaults.color = '#5c574f';
   Chart.defaults.plugins.legend.labels.usePointStyle = true;
   Chart.defaults.plugins.legend.labels.boxWidth = 8;
+
+  // Mobile-friendly tap targets: tooltip muncul begitu jari menyentuh dekat
+  // batang/titik data (tidak perlu presisi tap tepat di atasnya), teks tooltip
+  // dan legend diperbesar sedikit, serta titik line-chart diperbesar area sentuhnya.
+  Chart.defaults.interaction.mode = 'nearest';
+  Chart.defaults.interaction.intersect = false;
+  Chart.defaults.interaction.axis = 'xy';
+  Chart.defaults.plugins.tooltip.padding = 10;
+  Chart.defaults.plugins.tooltip.titleFont = { size: 13, weight: '600' };
+  Chart.defaults.plugins.tooltip.bodyFont = { size: 12.5 };
+  Chart.defaults.plugins.tooltip.displayColors = true;
+  Chart.defaults.plugins.legend.labels.font = { size: 12.5 };
+  Chart.defaults.plugins.legend.labels.padding = 14;
+  Chart.defaults.elements.point.radius = 3.5;
+  Chart.defaults.elements.point.hoverRadius = 6;
+  Chart.defaults.elements.point.hitRadius = 12; // area sentuh lebih lebar dari titik yang terlihat
+  Chart.defaults.elements.bar.hoverBackgroundColor = undefined; // biarkan warna asli, cuma andalkan tooltip
+  Chart.defaults.onHover = (event, elements, chart) => {
+    if (event.native) event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+  };
 }
 
 // Plugin custom untuk menampilkan label nominal Rupiah di atas bar chart
@@ -1637,6 +1657,9 @@ function renderRatioTable(ratio, mode) {
    ========================================================================== */
 let zonaCoverageMode = 'bulanan';
 let zonaFilter = 'semua'; // semua | hijau | kuning | merah
+let wilayahSearch = '';
+let wilayahTablePage = 1;
+const WILAYAH_PAGE_SIZE = 15;
 
 function renderZonaSection(m) {
   const z = m.zonaWilayah;
@@ -1699,6 +1722,12 @@ function renderZonaSection(m) {
           <button class="toggle-btn" data-zone="merah">Merah</button>
         </div>
       </div>
+      <div class="panel-head daily-perf-controls" style="margin-bottom:12px;">
+        <div class="filter-field filter-field-grow">
+          <label for="wilayahSearch">Cari Kabupaten/Kota</label>
+          <input type="text" id="wilayahSearch" class="text-input" placeholder="Ketik nama kabupaten/kota&hellip;" />
+        </div>
+      </div>
       <table class="data-table" id="tblWilayah"></table>
     </div>
 
@@ -1733,9 +1762,20 @@ function renderZonaSection(m) {
       document.querySelectorAll('#zonaFilterToggle .toggle-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       zonaFilter = btn.dataset.zone;
+      wilayahTablePage = 1;
       renderWilayahTable(z, zonaFilter);
     });
   });
+
+  const wilayahSearchEl = document.getElementById('wilayahSearch');
+  if (wilayahSearchEl) {
+    wilayahSearchEl.value = wilayahSearch;
+    wilayahSearchEl.addEventListener('input', (e) => {
+      wilayahSearch = e.target.value;
+      wilayahTablePage = 1;
+      renderWilayahTable(z, zonaFilter);
+    });
+  }
 }
 
 function renderCoverageChart(z, mode) {
@@ -1779,9 +1819,17 @@ function renderTop10WilayahChart(z) {
 }
 
 function renderWilayahTable(z, filter) {
-  const data = filter === 'semua' ? z.wilayahData : z.wilayahData.filter(w => w.zone === filter);
+  const PAGE = WILAYAH_PAGE_SIZE;
+  let data = filter === 'semua' ? z.wilayahData : z.wilayahData.filter(w => w.zone === filter);
+  const q = wilayahSearch.trim().toUpperCase();
+  if (q) data = data.filter(w => w.nama.toUpperCase().includes(q));
   const salesMap = new Map(z.salesByWilayah.map(s => [s.lokasi, s]));
-  const rows = data.map(w => {
+
+  const totalPages = Math.max(1, Math.ceil(data.length / PAGE));
+  if (wilayahTablePage > totalPages) wilayahTablePage = totalPages;
+  const shown = data.slice((wilayahTablePage-1)*PAGE, wilayahTablePage*PAGE);
+
+  const rows = shown.map(w => {
     const salesInfo = salesMap.get(w.nama);
     return `<tr>
       <td>${escapeHtml(w.nama)}</td>
@@ -1790,10 +1838,21 @@ function renderWilayahTable(z, filter) {
       <td>${salesInfo ? fmtRupiah(salesInfo.sales) : fmtRupiah(0)}</td>
     </tr>`;
   }).join('');
-  document.getElementById('tblWilayah').innerHTML = `
+  document.getElementById('tblWilayah').outerHTML = `<table class="data-table" id="tblWilayah">
     <thead><tr><th>Kabupaten/Kota</th><th>Total Invoice 2026</th><th>Zona</th><th>Total Sales</th></tr></thead>
     <tbody>${rows || '<tr><td colspan="4" class="empty-row">Tidak ada data untuk filter ini.</td></tr>'}</tbody>
-  `;
+  </table>`;
+
+  const pagHtml = makePagBtns('pagWilayah', wilayahTablePage, totalPages, p => { wilayahTablePage = p; renderWilayahTable(z, zonaFilter); });
+  let pagEl = document.getElementById('pagWilayah');
+  if (!pagEl) {
+    pagEl = document.createElement('div');
+    pagEl.id = 'pagWilayah';
+    pagEl.className = 'pagination';
+    document.getElementById('tblWilayah').insertAdjacentElement('afterend', pagEl);
+  }
+  pagEl.innerHTML = pagHtml;
+  attachPagBtns('pagWilayah', p => { wilayahTablePage = p; renderWilayahTable(z, zonaFilter); });
 }
 
 /* ==========================================================================
@@ -1832,6 +1891,12 @@ function renderTopProductsSection(m) {
         </div>
       </div>
       <div class="chart-wrap"><canvas id="chartTopProducts"></canvas></div>
+      <div class="panel-head daily-perf-controls" style="margin:12px 0;">
+        <div class="filter-field filter-field-grow">
+          <label for="topProductsSearch">Cari Kode Barang</label>
+          <input type="text" id="topProductsSearch" class="text-input" placeholder="Ketik kode barang&hellip;" />
+        </div>
+      </div>
       <table class="data-table" id="tblTopProducts"></table>
       <div class="pagination" id="pagTopProducts"></div>
     </div>
@@ -1881,6 +1946,16 @@ function renderTopProductsSection(m) {
       renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
     });
   });
+
+  const topProductsSearchEl = document.getElementById('topProductsSearch');
+  if (topProductsSearchEl) {
+    topProductsSearchEl.value = topProductsSearch;
+    topProductsSearchEl.addEventListener('input', (e) => {
+      topProductsSearch = e.target.value;
+      topProductsTablePage = 1;
+      renderTopProductsTable(getTopProductData(tp, topProductMetric, topProductCompanyFilter));
+    });
+  }
 }
 
 function renderStockMovementTables(st) {
@@ -1911,6 +1986,7 @@ function renderStockMovementTables(st) {
 }
 
 let topProductsTablePage = 1;
+let topProductsSearch = '';
 
 function getTopProductData(tp, metric, coFilter) {
   let source;
@@ -1945,13 +2021,15 @@ function renderTopProductsChart(tp, metric, coFilter) {
 function renderTopProductsTable(fullData) {
   const PAGE = 10;
   const render = () => {
-    const total = fullData.length;
+    const q = topProductsSearch.trim().toUpperCase();
+    const data = q ? fullData.filter(p => p.kode.toUpperCase().includes(q)) : fullData;
+    const total = data.length;
     const totalPages = Math.max(1, Math.ceil(total / PAGE));
     if (topProductsTablePage > totalPages) topProductsTablePage = totalPages;
-    const shown = fullData.slice((topProductsTablePage - 1) * PAGE, topProductsTablePage * PAGE);
+    const shown = data.slice((topProductsTablePage - 1) * PAGE, topProductsTablePage * PAGE);
     document.getElementById('tblTopProducts').outerHTML = `<table class="data-table" id="tblTopProducts">
       <thead><tr><th>Peringkat</th><th>Kode Barang</th><th>Sales</th><th>Quantity</th></tr></thead>
-      <tbody>${shown.length ? shown.map((p, i) => `<tr><td>${(topProductsTablePage - 1) * PAGE + i + 1}</td><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">Tidak ada data.</td></tr>'}</tbody>
+      <tbody>${shown.length ? shown.map((p, i) => `<tr><td>${(topProductsTablePage - 1) * PAGE + i + 1}</td><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">Tidak ada kode barang yang cocok.</td></tr>'}</tbody>
     </table>`;
     const pagHtml = makePagBtns('pagTopProducts', topProductsTablePage, totalPages, p => { topProductsTablePage = p; render(); });
     const pagEl = document.getElementById('pagTopProducts');
@@ -2243,6 +2321,12 @@ function renderDeliverySection(m) {
       <h3>Penggunaan Jalur Ekspedisi</h3>
       <p class="panel-note">Hand Carry: <strong>${fmtPct(d.handCarry.pct)}</strong> (${fmtNum(d.handCarry.count)} transaksi) &mdash; Ekspedisi Pihak Ketiga: <strong>${fmtPct(d.ekspedisiLuar.pct)}</strong> (${fmtNum(d.ekspedisiLuar.count)} transaksi)</p>
       <div class="chart-wrap"><canvas id="chartEkspedisi"></canvas></div>
+      <div class="panel-head daily-perf-controls" style="margin-bottom:12px;">
+        <div class="filter-field filter-field-grow">
+          <label for="ekspedisiSearch">Cari Jalur Ekspedisi</label>
+          <input type="text" id="ekspedisiSearch" class="text-input" placeholder="Ketik nama jalur ekspedisi&hellip;" />
+        </div>
+      </div>
       <table class="data-table" id="tblEkspedisi"></table>
     </div>
   `;
@@ -2251,6 +2335,15 @@ function renderDeliverySection(m) {
   renderDeliveryStatusChart(d);
   renderEkspedisiChart(d);
   renderEkspedisiTable(d);
+
+  const ekspedisiSearchEl = document.getElementById('ekspedisiSearch');
+  if (ekspedisiSearchEl) {
+    ekspedisiSearchEl.value = ekspedisiSearch;
+    ekspedisiSearchEl.addEventListener('input', (e) => {
+      ekspedisiSearch = e.target.value;
+      renderEkspedisiTable(d);
+    });
+  }
 }
 
 function renderDeliveryStatusChart(d) {
@@ -2274,10 +2367,14 @@ function renderEkspedisiChart(d) {
   });
 }
 
+let ekspedisiSearch = '';
+
 function renderEkspedisiTable(d) {
   const PAGE = 15;
   let page = 1;
-  const items = d.byEkspedisi;
+  const items = ekspedisiSearch.trim()
+    ? d.byEkspedisi.filter(e => e.nama.toUpperCase().includes(ekspedisiSearch.trim().toUpperCase()))
+    : d.byEkspedisi;
 
   const render = () => {
     const total = items.length;
@@ -2287,7 +2384,7 @@ function renderEkspedisiTable(d) {
     const pagHtml = makePagBtns('pagEkspedisi', page, totalPages, p => { page = p; render(); });
     document.getElementById('tblEkspedisi').outerHTML = `<table class="data-table" id="tblEkspedisi">
       <thead><tr><th>Jalur Ekspedisi</th><th>Jumlah</th><th>Persentase</th><th>Quantity</th><th>Koli</th></tr></thead>
-      <tbody>${shown.map(e => `<tr><td>${escapeHtml(e.nama)}</td><td>${fmtNum(e.count)}</td><td>${fmtPct(e.pct)}</td><td>${fmtNum(e.qty)}</td><td>${fmtNum(e.koli)}</td></tr>`).join('')}</tbody>
+      <tbody>${shown.length ? shown.map(e => `<tr><td>${escapeHtml(e.nama)}</td><td>${fmtNum(e.count)}</td><td>${fmtPct(e.pct)}</td><td>${fmtNum(e.qty)}</td><td>${fmtNum(e.koli)}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-row">Tidak ada jalur ekspedisi yang cocok.</td></tr>'}</tbody>
     </table>`;
     const pagEl = document.getElementById('pagEkspedisi');
     if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagEkspedisi', p => { page = p; render(); }); }
@@ -2369,6 +2466,12 @@ function renderARSection(m) {
     <div class="panel">
       <h3>Daftar Piutang Belum Lunas (diurutkan dari Aging tertinggi)</h3>
       <p class="panel-note" id="arTableNote"></p>
+      <div class="panel-head daily-perf-controls" style="margin-bottom:12px;">
+        <div class="filter-field filter-field-grow">
+          <label for="arSearch">Cari Customer / No Invoice</label>
+          <input type="text" id="arSearch" class="text-input" placeholder="Ketik nama customer atau no invoice&hellip;" />
+        </div>
+      </div>
       <table class="data-table" id="tblAR"></table>
     </div>
   `;
@@ -2377,6 +2480,15 @@ function renderARSection(m) {
   renderAgingChart(ar);
   renderARByCompanyChart(ar);
   renderARTable(ar);
+
+  const arSearchEl = document.getElementById('arSearch');
+  if (arSearchEl) {
+    arSearchEl.value = arSearch;
+    arSearchEl.addEventListener('input', (e) => {
+      arSearch = e.target.value;
+      renderARTable(ar);
+    });
+  }
 }
 
 function renderAgingChart(ar) {
@@ -2402,12 +2514,17 @@ function renderARByCompanyChart(ar) {
   });
 }
 
+let arSearch = '';
+
 function renderARTable(ar) {
   const PAGE = 15;
   let page = 1;
   const parseAgingDays = (aging) => { const m = String(aging).match(/\d+/); return m ? parseInt(m[0], 10) : 0; };
-  const belumLunas = ar.items.filter(i => i.sisaSaldo > 0).sort((a, b) => parseAgingDays(b.aging) - parseAgingDays(a.aging));
+  let belumLunas = ar.items.filter(i => i.sisaSaldo > 0).sort((a, b) => parseAgingDays(b.aging) - parseAgingDays(a.aging));
   const invoiceUnikBelumLunas = new Set(belumLunas.map(i => i.noFaktur)).size;
+
+  const q = arSearch.trim().toUpperCase();
+  if (q) belumLunas = belumLunas.filter(i => (i.customer || '').toUpperCase().includes(q) || (i.noFaktur || '').toUpperCase().includes(q));
 
   // Tampilkan ringkasan invoice unik di panel note
   const noteEl = document.getElementById('arTableNote');
@@ -2421,7 +2538,7 @@ function renderARTable(ar) {
     const pagHtml = makePagBtns('pagAR', page, totalPages, p => { page = p; render(); });
     document.getElementById('tblAR').outerHTML = `<table class="data-table" id="tblAR">
       <thead><tr><th>No Faktur</th><th>Customer</th><th>Company</th><th>Nilai Faktur</th><th>Sisa Saldo</th><th>Aging</th><th>Kategori</th></tr></thead>
-      <tbody>${shown.map(i => `<tr><td>${escapeHtml(i.noFaktur)}</td><td>${escapeHtml(i.customer)}</td><td>${escapeHtml(i.company)}</td><td>${fmtRupiah(i.nilaiFaktur)}</td><td>${fmtRupiah(i.sisaSaldo)}</td><td>${escapeHtml(i.aging)}</td><td>${escapeHtml(i.kategori)}</td></tr>`).join('')}</tbody>
+      <tbody>${shown.length ? shown.map(i => `<tr><td>${escapeHtml(i.noFaktur)}</td><td>${escapeHtml(i.customer)}</td><td>${escapeHtml(i.company)}</td><td>${fmtRupiah(i.nilaiFaktur)}</td><td>${fmtRupiah(i.sisaSaldo)}</td><td>${escapeHtml(i.aging)}</td><td>${escapeHtml(i.kategori)}</td></tr>`).join('') : '<tr><td colspan="7" class="empty-row">Tidak ada piutang yang cocok.</td></tr>'}</tbody>
     </table>`;
     const pagEl = document.getElementById('pagAR');
     if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagAR', p => { page = p; render(); }); }
@@ -2491,6 +2608,12 @@ function renderCustFreqSection(m) {
         </div>
       </div>
       <div class="chart-wrap"><canvas id="chartTop10Customer"></canvas></div>
+      <div class="panel-head daily-perf-controls" style="margin:12px 0;">
+        <div class="filter-field filter-field-grow">
+          <label for="top10CustomerSearch">Cari Customer</label>
+          <input type="text" id="top10CustomerSearch" class="text-input" placeholder="Ketik nama customer&hellip;" />
+        </div>
+      </div>
       <table class="data-table" id="tblTop10Customer"></table>
       <div class="pagination" id="pagTop10Customer"></div>
     </div>
@@ -2498,6 +2621,12 @@ function renderCustFreqSection(m) {
     <div class="panel">
       <h3>Customer Tidak Berbelanja Lagi (&ge;60 Hari sejak Transaksi Terakhir)</h3>
       <p class="panel-note">Total ${fmtNum(cf.churnedCustomers.length)} customer berpotensi tidak aktif. Diurutkan dari yang paling lama tidak bertransaksi.</p>
+      <div class="panel-head daily-perf-controls" style="margin-bottom:12px;">
+        <div class="filter-field filter-field-grow">
+          <label for="churnedSearch">Cari Customer</label>
+          <input type="text" id="churnedSearch" class="text-input" placeholder="Ketik nama customer&hellip;" />
+        </div>
+      </div>
       <table class="data-table" id="tblChurned"></table>
     </div>
   `;
@@ -2516,6 +2645,25 @@ function renderCustFreqSection(m) {
       renderTop10CustomerChart(cf, custFreqMetric);
     });
   });
+
+  const top10CustomerSearchEl = document.getElementById('top10CustomerSearch');
+  if (top10CustomerSearchEl) {
+    top10CustomerSearchEl.value = top10CustomerSearch;
+    top10CustomerSearchEl.addEventListener('input', (e) => {
+      top10CustomerSearch = e.target.value;
+      top10CustomerTablePage = 1;
+      renderTop10CustomerTable(custFreqMetric === 'frequency' ? cf.allByFrequency : cf.allBySales);
+    });
+  }
+
+  const churnedSearchEl = document.getElementById('churnedSearch');
+  if (churnedSearchEl) {
+    churnedSearchEl.value = churnedSearch;
+    churnedSearchEl.addEventListener('input', (e) => {
+      churnedSearch = e.target.value;
+      renderChurnedTable(cf);
+    });
+  }
 }
 
 function renderFreqDistCharts(dist) {
@@ -2566,6 +2714,7 @@ function renderFreqDistCharts(dist) {
 }
 
 let top10CustomerTablePage = 1;
+let top10CustomerSearch = '';
 
 function renderTop10CustomerChart(cf, metric) {
   const data = metric === 'frequency' ? cf.top10ByFrequency : cf.top10BySales;
@@ -2593,13 +2742,15 @@ function renderTop10CustomerChart(cf, metric) {
 function renderTop10CustomerTable(fullData) {
   const PAGE = 10;
   const render = () => {
-    const total = fullData.length;
+    const q = top10CustomerSearch.trim().toUpperCase();
+    const data = q ? fullData.filter(c => (c.customer || '').toUpperCase().includes(q)) : fullData;
+    const total = data.length;
     const totalPages = Math.max(1, Math.ceil(total / PAGE));
     if (top10CustomerTablePage > totalPages) top10CustomerTablePage = totalPages;
-    const shown = fullData.slice((top10CustomerTablePage - 1) * PAGE, top10CustomerTablePage * PAGE);
+    const shown = data.slice((top10CustomerTablePage - 1) * PAGE, top10CustomerTablePage * PAGE);
     document.getElementById('tblTop10Customer').outerHTML = `<table class="data-table" id="tblTop10Customer">
       <thead><tr><th>Peringkat</th><th>Customer</th><th>Frekuensi (Invoice Unik)</th><th>Total Sales</th></tr></thead>
-      <tbody>${shown.length ? shown.map((c, i) => `<tr><td>${(top10CustomerTablePage - 1) * PAGE + i + 1}</td><td>${escapeHtml(c.customer)}</td><td>${fmtNum(c.invoiceUnik)}</td><td>${fmtRupiah(c.totalSales)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">Tidak ada data.</td></tr>'}</tbody>
+      <tbody>${shown.length ? shown.map((c, i) => `<tr><td>${(top10CustomerTablePage - 1) * PAGE + i + 1}</td><td>${escapeHtml(c.customer)}</td><td>${fmtNum(c.invoiceUnik)}</td><td>${fmtRupiah(c.totalSales)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">Tidak ada customer yang cocok.</td></tr>'}</tbody>
     </table>`;
     const pagHtml = makePagBtns('pagTop10Customer', top10CustomerTablePage, totalPages, p => { top10CustomerTablePage = p; render(); });
     const pagEl = document.getElementById('pagTop10Customer');
@@ -2608,10 +2759,13 @@ function renderTop10CustomerTable(fullData) {
   render();
 }
 
+let churnedSearch = '';
+
 function renderChurnedTable(cf) {
   const PAGE = 10;
   let page = 1;
-  const items = cf.churnedCustomers;
+  const q = churnedSearch.trim().toUpperCase();
+  const items = q ? cf.churnedCustomers.filter(c => (c.customer || '').toUpperCase().includes(q)) : cf.churnedCustomers;
 
   const render = () => {
     const total = items.length;
@@ -2621,7 +2775,7 @@ function renderChurnedTable(cf) {
     const pagHtml = makePagBtns('pagChurned', page, totalPages, p => { page = p; render(); });
     document.getElementById('tblChurned').outerHTML = `<table class="data-table" id="tblChurned">
       <thead><tr><th>Customer</th><th>Transaksi Terakhir</th><th>Hari Tidak Aktif</th><th>Total Sales 2026</th></tr></thead>
-      <tbody>${shown.length ? shown.map(c => `<tr><td>${escapeHtml(c.customer)}</td><td>${fmtDateShort(c.lastPurchase)}</td><td>${fmtNum(c.daysSinceLastPurchase)} hari</td><td>${fmtRupiah(c.totalSales)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">Tidak ada customer yang tidak aktif.</td></tr>'}</tbody>
+      <tbody>${shown.length ? shown.map(c => `<tr><td>${escapeHtml(c.customer)}</td><td>${fmtDateShort(c.lastPurchase)}</td><td>${fmtNum(c.daysSinceLastPurchase)} hari</td><td>${fmtRupiah(c.totalSales)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">Tidak ada customer yang cocok.</td></tr>'}</tbody>
     </table>`;
     const pagEl = document.getElementById('pagChurned');
     if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagChurned', p => { page = p; render(); }); }
