@@ -1280,12 +1280,12 @@ function renderCoverageAreaTable(z) {
     return `<tr>
       <td>${escapeHtml(w.nama)}</td>
       <td>${fmtNum(w.total)}</td>
-      <td>${zonePillHtml(w.zone)}</td>
       <td>${salesInfo ? fmtRupiah(salesInfo.sales) : fmtRupiah(0)}</td>
+      <td>${zonePillHtml(w.zone)}</td>
     </tr>`;
   }).join('');
   document.getElementById('tblCoverageArea').outerHTML = `<table class="data-table" id="tblCoverageArea">
-    <thead><tr><th>Kabupaten/Kota</th><th>Total Invoice 2026</th><th>Zona</th><th>Total Sales</th></tr></thead>
+    <thead><tr><th>Kabupaten/Kota</th><th>Total Invoice 2026</th><th>Total Sales</th><th>Zona</th></tr></thead>
     <tbody>${rows || '<tr><td colspan="4" class="empty-row">Tidak ada wilayah yang cocok.</td></tr>'}</tbody>
   </table>`;
 
@@ -1327,8 +1327,8 @@ function renderCoverageAreaCustomerTable(customers) {
   const shown = customers.slice((coverageAreaCustomerPage - 1) * PAGE, coverageAreaCustomerPage * PAGE);
 
   document.getElementById('tblCoverageAreaCustomer').outerHTML = `<table class="data-table" id="tblCoverageAreaCustomer">
-    <thead><tr><th>Nama Customer</th><th>Total Sales 2026</th><th>Total Quantity</th><th>Invoice Unik</th></tr></thead>
-    <tbody>${shown.length ? shown.map(c => `<tr><td>${escapeHtml(c.customer)}</td><td>${fmtRupiah(c.sales)}</td><td>${fmtNum(c.qty)}</td><td>${fmtNum(c.invoiceUnik)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">Belum ada transaksi customer di wilayah ini.</td></tr>'}</tbody>
+    <thead><tr><th>Nama Customer</th><th>Total Sales 2026</th><th>Invoice Unik</th></tr></thead>
+    <tbody>${shown.length ? shown.map(c => `<tr><td>${escapeHtml(c.customer)}</td><td>${fmtRupiah(c.sales)}</td><td>${fmtNum(c.invoiceUnik)}</td></tr>`).join('') : '<tr><td colspan="3" class="empty-row">Belum ada transaksi customer di wilayah ini.</td></tr>'}</tbody>
   </table>`;
 
   const pagHtml = makePagBtns('pagCoverageAreaCustomer', coverageAreaCustomerPage, totalPages, p => { coverageAreaCustomerPage = p; renderCoverageAreaCustomerTable(customers); });
