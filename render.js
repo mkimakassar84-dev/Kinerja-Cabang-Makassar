@@ -1225,6 +1225,7 @@ const COVERAGE_AREA_PAGE_SIZE = 10;
 let coverageAreaSearch = '';
 let coverageAreaPage = 1;
 let coverageAreaCustomerPage = 1;
+let coverageAreaSelectedWilayah = null;
 
 function renderDpCoverageAreaPanel(z) {
   const html = `
@@ -1232,7 +1233,7 @@ function renderDpCoverageAreaPanel(z) {
       <div class="panel-head">
         <h3>Coverage Area</h3>
       </div>
-      <p class="panel-note">Lampiran seluruh wilayah cakupan (${fmtNum(z.wilayahData.length)} kabupaten/kota). Cari nama wilayah untuk melihat customer dengan pembelanjaan terbesar (by total sales) di wilayah tersebut.</p>
+      <p class="panel-note">Lampiran seluruh wilayah cakupan (${fmtNum(z.wilayahData.length)} kabupaten/kota). Cari nama wilayah, lalu klik salah satu baris untuk melihat customer dengan pembelanjaan terbesar (by total sales) di wilayah tersebut.</p>
       <div class="panel-head daily-perf-controls" style="margin-bottom:12px;">
         <div class="filter-field filter-field-grow">
           <label for="coverageAreaSearch">Cari Wilayah</label>
@@ -1241,6 +1242,7 @@ function renderDpCoverageAreaPanel(z) {
       </div>
       <table class="data-table" id="tblCoverageArea"></table>
       <div class="pagination" id="pagCoverageArea"></div>
+      <p class="panel-note hidden" id="coverageAreaCustomerHint" style="margin-top:14px;">Ada beberapa wilayah yang cocok &mdash; klik salah satu baris di atas untuk melihat customer di wilayah tersebut.</p>
 
       <div id="coverageAreaCustomerWrap" class="hidden" style="margin-top:24px;">
         <h4 class="sub-heading" id="coverageAreaCustomerTitle"></h4>
@@ -1260,6 +1262,7 @@ function renderDpCoverageAreaPanel(z) {
       coverageAreaSearch = e.target.value;
       coverageAreaPage = 1;
       coverageAreaCustomerPage = 1;
+      coverageAreaSelectedWilayah = null;
       renderCoverageAreaTable(z);
     });
   }
@@ -1271,13 +1274,19 @@ function renderCoverageAreaTable(z) {
   const data = q ? z.wilayahData.filter(w => w.nama.toUpperCase().includes(q)) : z.wilayahData;
   const salesMap = new Map(z.salesByWilayah.map(s => [s.lokasi, s]));
 
+  // Kalau pencarian cocok persis 1 wilayah, langsung pilih otomatis. Kalau
+  // cocok lebih dari 1 (mis. "bone" -> BONE, BONE-BONE, BONE BOLANGO), user
+  // harus klik salah satu baris supaya data customer tidak tercampur.
+  if (q && data.length === 1) coverageAreaSelectedWilayah = data[0].nama;
+
   const totalPages = Math.max(1, Math.ceil(data.length / PAGE));
   if (coverageAreaPage > totalPages) coverageAreaPage = totalPages;
   const shown = data.slice((coverageAreaPage - 1) * PAGE, coverageAreaPage * PAGE);
 
   const rows = shown.map(w => {
     const salesInfo = salesMap.get(w.nama);
-    return `<tr>
+    const isSelected = coverageAreaSelectedWilayah === w.nama;
+    return `<tr class="clickable-row${isSelected ? ' row-selected' : ''}" data-wilayah="${escapeHtml(w.nama)}">
       <td>${escapeHtml(w.nama)}</td>
       <td>${fmtNum(w.total)}</td>
       <td>${salesInfo ? fmtRupiah(salesInfo.sales) : fmtRupiah(0)}</td>
@@ -1289,33 +1298,40 @@ function renderCoverageAreaTable(z) {
     <tbody>${rows || '<tr><td colspan="4" class="empty-row">Tidak ada wilayah yang cocok.</td></tr>'}</tbody>
   </table>`;
 
+  document.getElementById('tblCoverageArea').querySelectorAll('tr[data-wilayah]').forEach(tr => {
+    tr.addEventListener('click', () => {
+      coverageAreaSelectedWilayah = tr.dataset.wilayah;
+      coverageAreaCustomerPage = 1;
+      renderCoverageAreaTable(z);
+    });
+  });
+
   const pagHtml = makePagBtns('pagCoverageArea', coverageAreaPage, totalPages, p => { coverageAreaPage = p; renderCoverageAreaTable(z); });
   const pagEl = document.getElementById('pagCoverageArea');
   if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagCoverageArea', p => { coverageAreaPage = p; renderCoverageAreaTable(z); }); }
 
-  // Drill-down customer: hanya muncul kalau ada pencarian wilayah dan wilayah-nya ketemu.
   const custWrap = document.getElementById('coverageAreaCustomerWrap');
-  if (!q || data.length === 0) {
+  const custHint = document.getElementById('coverageAreaCustomerHint');
+
+  // Wilayah terpilih sudah tidak ada di daftar hasil filter saat ini -> reset.
+  if (coverageAreaSelectedWilayah && !data.some(w => w.nama === coverageAreaSelectedWilayah)) {
+    coverageAreaSelectedWilayah = null;
+  }
+
+  if (!coverageAreaSelectedWilayah) {
     custWrap.classList.add('hidden');
+    if (custHint) custHint.classList.toggle('hidden', !(q && data.length > 1));
     return;
   }
+  if (custHint) custHint.classList.add('hidden');
   custWrap.classList.remove('hidden');
 
-  // Gabungkan customer dari seluruh wilayah yang cocok dengan pencarian.
-  const combined = {};
-  data.forEach(w => {
-    const custList = z.customersByWilayah[w.nama] || [];
-    custList.forEach(c => {
-      if (!combined[c.customer]) combined[c.customer] = { customer: c.customer, sales: 0, qty: 0, invoiceUnik: 0 };
-      combined[c.customer].sales += c.sales;
-      combined[c.customer].qty += c.qty;
-      combined[c.customer].invoiceUnik += c.invoiceUnik;
-    });
-  });
-  const customers = Object.values(combined).sort((a, b) => b.sales - a.sales);
+  const customers = (z.customersByWilayah[coverageAreaSelectedWilayah] || [])
+    .map(c => ({ customer: c.customer, sales: c.sales, invoiceUnik: c.invoiceUnik }))
+    .sort((a, b) => b.sales - a.sales);
 
   document.getElementById('coverageAreaCustomerTitle').textContent =
-    `Customer Pembelanjaan Terbesar — ${data.length === 1 ? data[0].nama : `${data.length} wilayah cocok dengan "${coverageAreaSearch.trim()}"`}`;
+    `Customer Pembelanjaan Terbesar — ${coverageAreaSelectedWilayah}`;
 
   renderCoverageAreaCustomerTable(customers);
 }
