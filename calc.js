@@ -372,9 +372,26 @@ function buildZonaWilayah(kpiRows, transactions) {
     .map(([lokasi, items]) => ({ lokasi, sales: sum(items, i => i.amount), invoiceUnik: uniqueCount(items, i => i.noInvoice) }))
     .sort((a, b) => b.sales - a.sales);
 
+  // Ranking customer per wilayah (untuk drill-down "Coverage Area" — customer dengan
+  // pembelanjaan terbesar di suatu kabupaten/kota), di-key oleh nama wilayah (huruf besar).
+  const customersByWilayah = {};
+  Array.from(groupBy(tx2026, t => t.lokasi).entries()).forEach(([lokasi, items]) => {
+    if (!lokasi) return;
+    const byCustomer = Array.from(groupBy(items, t => t.customer).entries())
+      .filter(([customer]) => customer)
+      .map(([customer, custItems]) => ({
+        customer,
+        sales: sum(custItems, i => i.amount),
+        qty: sum(custItems, i => i.qty),
+        invoiceUnik: uniqueCount(custItems, i => i.noInvoice),
+      }))
+      .sort((a, b) => b.sales - a.sales);
+    customersByWilayah[lokasi] = byCustomer;
+  });
+
   return {
     wilayahData, wilayahAktif, wilayahTanpaPembelanjaan, zoneCounts,
-    coveragePerBulan, coveragePerKuartal, salesByWilayah,
+    coveragePerBulan, coveragePerKuartal, salesByWilayah, customersByWilayah,
     totalWilayah: wilayahData.length,
   };
 }

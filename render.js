@@ -188,6 +188,7 @@ function renderDailyPerformanceSection(m) {
       <button class="subtab-btn" data-tab="revenue">Revenue</button>
       <button class="subtab-btn" data-tab="ar">Account Receivable</button>
       <button class="subtab-btn" data-tab="po">PO Gudang</button>
+      <button class="subtab-btn" data-tab="coverage">Coverage Area</button>
     </div>
 
     <div class="subtab-panel active" id="dpPanel-kpi"></div>
@@ -197,6 +198,7 @@ function renderDailyPerformanceSection(m) {
     <div class="subtab-panel" id="dpPanel-revenue"></div>
     <div class="subtab-panel" id="dpPanel-ar"></div>
     <div class="subtab-panel" id="dpPanel-po"></div>
+    <div class="subtab-panel" id="dpPanel-coverage"></div>
   `;
   document.getElementById('s0').innerHTML = html;
 
@@ -216,6 +218,7 @@ function renderDailyPerformanceSection(m) {
   renderDpDeliveryPanel(tx2026);
   renderDpPoGudangPanel(m.poGudang.items);
   renderDpLogistikPanel(tx2026, m.stock);
+  renderDpCoverageAreaPanel(m.zonaWilayah);
 }
 
 /* ----- Helper generik: kerangka panel filter bulan + search + tabel + pagination ----- */
@@ -1204,6 +1207,126 @@ function renderDpLogistikPanel(tx2026, stock) {
 
   const waBtn = document.getElementById('btnWaShareLogistik');
   if (waBtn) waBtn.addEventListener('click', () => window.open('logistik-share.html?_=' + Date.now(), '_blank'));
+}
+
+/* ----- Sub-tab: COVERAGE AREA (Daily Performance) -----
+   Lampiran seluruh wilayah cakupan dengan paginasi 10/halaman + pencarian.
+   Saat wilayah dicari, muncul daftar customer dengan pembelanjaan terbesar
+   (by total sales) di wilayah yang cocok dengan pencarian tsb, juga
+   dipaginasi 10/halaman. ----- */
+const COVERAGE_AREA_PAGE_SIZE = 10;
+let coverageAreaSearch = '';
+let coverageAreaPage = 1;
+let coverageAreaCustomerPage = 1;
+
+function renderDpCoverageAreaPanel(z) {
+  const html = `
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Coverage Area</h3>
+      </div>
+      <p class="panel-note">Lampiran seluruh wilayah cakupan (${fmtNum(z.wilayahData.length)} kabupaten/kota). Cari nama wilayah untuk melihat customer dengan pembelanjaan terbesar (by total sales) di wilayah tersebut.</p>
+      <div class="panel-head daily-perf-controls" style="margin-bottom:12px;">
+        <div class="filter-field filter-field-grow">
+          <label for="coverageAreaSearch">Cari Wilayah</label>
+          <input type="text" id="coverageAreaSearch" class="text-input" placeholder="Ketik nama kabupaten/kota&hellip;" />
+        </div>
+      </div>
+      <table class="data-table" id="tblCoverageArea"></table>
+      <div class="pagination" id="pagCoverageArea"></div>
+
+      <div id="coverageAreaCustomerWrap" class="hidden" style="margin-top:24px;">
+        <h4 class="sub-heading" id="coverageAreaCustomerTitle"></h4>
+        <table class="data-table" id="tblCoverageAreaCustomer"></table>
+        <div class="pagination" id="pagCoverageAreaCustomer"></div>
+      </div>
+    </div>
+  `;
+  document.getElementById('dpPanel-coverage').innerHTML = html;
+
+  renderCoverageAreaTable(z);
+
+  const searchEl = document.getElementById('coverageAreaSearch');
+  if (searchEl) {
+    searchEl.value = coverageAreaSearch;
+    searchEl.addEventListener('input', (e) => {
+      coverageAreaSearch = e.target.value;
+      coverageAreaPage = 1;
+      coverageAreaCustomerPage = 1;
+      renderCoverageAreaTable(z);
+    });
+  }
+}
+
+function renderCoverageAreaTable(z) {
+  const PAGE = COVERAGE_AREA_PAGE_SIZE;
+  const q = coverageAreaSearch.trim().toUpperCase();
+  const data = q ? z.wilayahData.filter(w => w.nama.toUpperCase().includes(q)) : z.wilayahData;
+  const salesMap = new Map(z.salesByWilayah.map(s => [s.lokasi, s]));
+
+  const totalPages = Math.max(1, Math.ceil(data.length / PAGE));
+  if (coverageAreaPage > totalPages) coverageAreaPage = totalPages;
+  const shown = data.slice((coverageAreaPage - 1) * PAGE, coverageAreaPage * PAGE);
+
+  const rows = shown.map(w => {
+    const salesInfo = salesMap.get(w.nama);
+    return `<tr>
+      <td>${escapeHtml(w.nama)}</td>
+      <td>${fmtNum(w.total)}</td>
+      <td>${zonePillHtml(w.zone)}</td>
+      <td>${salesInfo ? fmtRupiah(salesInfo.sales) : fmtRupiah(0)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('tblCoverageArea').outerHTML = `<table class="data-table" id="tblCoverageArea">
+    <thead><tr><th>Kabupaten/Kota</th><th>Total Invoice 2026</th><th>Zona</th><th>Total Sales</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="4" class="empty-row">Tidak ada wilayah yang cocok.</td></tr>'}</tbody>
+  </table>`;
+
+  const pagHtml = makePagBtns('pagCoverageArea', coverageAreaPage, totalPages, p => { coverageAreaPage = p; renderCoverageAreaTable(z); });
+  const pagEl = document.getElementById('pagCoverageArea');
+  if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagCoverageArea', p => { coverageAreaPage = p; renderCoverageAreaTable(z); }); }
+
+  // Drill-down customer: hanya muncul kalau ada pencarian wilayah dan wilayah-nya ketemu.
+  const custWrap = document.getElementById('coverageAreaCustomerWrap');
+  if (!q || data.length === 0) {
+    custWrap.classList.add('hidden');
+    return;
+  }
+  custWrap.classList.remove('hidden');
+
+  // Gabungkan customer dari seluruh wilayah yang cocok dengan pencarian.
+  const combined = {};
+  data.forEach(w => {
+    const custList = z.customersByWilayah[w.nama] || [];
+    custList.forEach(c => {
+      if (!combined[c.customer]) combined[c.customer] = { customer: c.customer, sales: 0, qty: 0, invoiceUnik: 0 };
+      combined[c.customer].sales += c.sales;
+      combined[c.customer].qty += c.qty;
+      combined[c.customer].invoiceUnik += c.invoiceUnik;
+    });
+  });
+  const customers = Object.values(combined).sort((a, b) => b.sales - a.sales);
+
+  document.getElementById('coverageAreaCustomerTitle').textContent =
+    `Customer Pembelanjaan Terbesar — ${data.length === 1 ? data[0].nama : `${data.length} wilayah cocok dengan "${coverageAreaSearch.trim()}"`}`;
+
+  renderCoverageAreaCustomerTable(customers);
+}
+
+function renderCoverageAreaCustomerTable(customers) {
+  const PAGE = COVERAGE_AREA_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(customers.length / PAGE));
+  if (coverageAreaCustomerPage > totalPages) coverageAreaCustomerPage = totalPages;
+  const shown = customers.slice((coverageAreaCustomerPage - 1) * PAGE, coverageAreaCustomerPage * PAGE);
+
+  document.getElementById('tblCoverageAreaCustomer').outerHTML = `<table class="data-table" id="tblCoverageAreaCustomer">
+    <thead><tr><th>Nama Customer</th><th>Total Sales 2026</th><th>Total Quantity</th><th>Invoice Unik</th></tr></thead>
+    <tbody>${shown.length ? shown.map(c => `<tr><td>${escapeHtml(c.customer)}</td><td>${fmtRupiah(c.sales)}</td><td>${fmtNum(c.qty)}</td><td>${fmtNum(c.invoiceUnik)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">Belum ada transaksi customer di wilayah ini.</td></tr>'}</tbody>
+  </table>`;
+
+  const pagHtml = makePagBtns('pagCoverageAreaCustomer', coverageAreaCustomerPage, totalPages, p => { coverageAreaCustomerPage = p; renderCoverageAreaCustomerTable(customers); });
+  const pagEl = document.getElementById('pagCoverageAreaCustomer');
+  if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagCoverageAreaCustomer', p => { coverageAreaCustomerPage = p; renderCoverageAreaCustomerTable(customers); }); }
 }
 
 /* ==========================================================================
