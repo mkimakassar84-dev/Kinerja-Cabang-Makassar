@@ -437,14 +437,18 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     const totalQtyNoHC     = sum(txMonth, t => t.qty);
     const totalKoliNoHC    = sum(txMonth, t => t.koli);
 
-    // 5. INVOICE
+    // 5. INVOICE — invoice retur (kode "R-.../R/..." atau amount negatif, lihat
+    // t.isRetur) TIDAK dihitung sebagai invoice unik, karena bukan invoice
+    // penjualan baru melainkan pembatalan/pengembalian barang.
     const TARGET_INVOICE = 280;
-    const invoiceUnikAll = uniqueCount(txMonth, t => t.noInvoice);
-    const invoiceMKI     = uniqueCount(txMonth.filter(t => t.company === 'MKI'), t => t.noInvoice);
-    const invoiceCFN     = uniqueCount(txMonth.filter(t => t.company === 'CFN'), t => t.noInvoice);
-    const dailyInvoice   = uniqueCount(txToday, t => t.noInvoice);
-    const dailyInvoiceMKI = uniqueCount(txToday.filter(t => t.company === 'MKI'), t => t.noInvoice);
-    const dailyInvoiceCFN = uniqueCount(txToday.filter(t => t.company === 'CFN'), t => t.noInvoice);
+    const txMonthNonRetur = txMonth.filter(t => !t.isRetur);
+    const txTodayNonRetur = txToday.filter(t => !t.isRetur);
+    const invoiceUnikAll = uniqueCount(txMonthNonRetur, t => t.noInvoice);
+    const invoiceMKI     = uniqueCount(txMonthNonRetur.filter(t => t.company === 'MKI'), t => t.noInvoice);
+    const invoiceCFN     = uniqueCount(txMonthNonRetur.filter(t => t.company === 'CFN'), t => t.noInvoice);
+    const dailyInvoice   = uniqueCount(txTodayNonRetur, t => t.noInvoice);
+    const dailyInvoiceMKI = uniqueCount(txTodayNonRetur.filter(t => t.company === 'MKI'), t => t.noInvoice);
+    const dailyInvoiceCFN = uniqueCount(txTodayNonRetur.filter(t => t.company === 'CFN'), t => t.noInvoice);
     const pctInvoice     = isAll ? null : (invoiceUnikAll / TARGET_INVOICE) * 100;
 
     // 6. WILAYAH
