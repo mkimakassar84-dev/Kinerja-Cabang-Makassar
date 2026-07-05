@@ -151,9 +151,9 @@ function renderTable(items, cols){
 }
 
 const PAGE_SIZE = 15;
-let currentPage = 1;
+const pageState = { mki: 1, cfn: 1 };
 
-function renderPagination(elId, page, totalPages){
+function renderPagination(elId, page, totalPages, onChange){
   const el = document.getElementById(elId);
   if(!el) return;
   if(totalPages <= 1){ el.innerHTML=''; return; }
@@ -176,7 +176,7 @@ function renderPagination(elId, page, totalPages){
   el.querySelectorAll('.page-btn[data-page]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const p=parseInt(btn.dataset.page,10);
-      if(p>=1 && p<=totalPages){ currentPage=p; render(); window.scrollTo({top:0,behavior:'smooth'}); }
+      if(p>=1 && p<=totalPages){ onChange(p); window.scrollTo({top:0,behavior:'smooth'}); }
     });
   });
 }
@@ -187,68 +187,65 @@ function render(){
 
   const showMKI = filterCompany!=='CFN';
   const showCFN = filterCompany!=='MKI';
-  const combined = showMKI && showCFN; // tidak ada filter company -> tampilkan 1 tabel gabungan
+  const combined = showMKI && showCFN; // tidak ada filter company -> tampilkan 2 bagian bertumpuk (MKI lalu CFN)
 
-  // Untuk share per-company (?company=MKI/CFN): hanya kode barang yang relevan untuk
-  // company itu (ada catatan stock). Untuk tampilan umum/gabungan: semua kode barang
-  // ditampilkan apa adanya (termasuk stock 0) supaya harga tetap terlihat.
-  const displayItems = filterCompany==='MKI' ? items.filter(i=>i.mki>0)
-                      : filterCompany==='CFN' ? items.filter(i=>i.cfn>0)
-                      : items;
+  // Tampilan gabungan (tanpa filter company): semua kode barang ditampilkan apa adanya
+  // (termasuk stock 0) supaya harga tetap terlihat walau stock sedang kosong.
+  // Share per company (?company=MKI/CFN): hanya kode barang yang relevan untuk company itu.
+  const itemsMKI = combined ? items : (filterCompany==='MKI' ? items.filter(i=>i.mki>0) : items);
+  const itemsCFN = combined ? items : (filterCompany==='CFN' ? items.filter(i=>i.cfn>0) : items);
 
-  const totalMKI = displayItems.reduce((s,i)=>s+i.mki,0);
-  const totalCFN = displayItems.reduce((s,i)=>s+i.cfn,0);
-
-  const totalPages = Math.max(1, Math.ceil(displayItems.length / PAGE_SIZE));
-  if(currentPage>totalPages) currentPage=totalPages;
-  const pageItems = displayItems.slice((currentPage-1)*PAGE_SIZE, currentPage*PAGE_SIZE);
+  const totalMKI = itemsMKI.reduce((s,i)=>s+i.mki,0);
+  const totalCFN = itemsCFN.reduce((s,i)=>s+i.cfn,0);
 
   document.getElementById('pageTitle').textContent = 'Laporan Lengkap Stock Gudang' + (filterCompany ? ' — '+filterCompany : '');
   document.getElementById('pageMeta').textContent = new Date().toLocaleString('id-ID', {dateStyle:'full', timeStyle:'short'});
 
   const summaryCards = [];
   if(combined){
-    summaryCards.push(`<div class="summary-card"><div class="label">Total Kode Barang</div><div class="value">${Num(displayItems.length)}</div></div>
+    summaryCards.push(`<div class="summary-card"><div class="label">Total Kode Barang</div><div class="value">${Num(items.length)}</div></div>
       <div class="summary-card"><div class="label">Total Unit MKI</div><div class="value">${Num(totalMKI)}</div></div>
       <div class="summary-card"><div class="label">Total Unit CFN</div><div class="value">${Num(totalCFN)}</div></div>`);
   } else if(showMKI){
-    summaryCards.push(`<div class="summary-card"><div class="label">Kode Barang MKI</div><div class="value">${Num(displayItems.length)}</div></div>
+    summaryCards.push(`<div class="summary-card"><div class="label">Kode Barang MKI</div><div class="value">${Num(itemsMKI.length)}</div></div>
       <div class="summary-card"><div class="label">Total Unit MKI</div><div class="value">${Num(totalMKI)}</div></div>`);
   } else if(showCFN){
-    summaryCards.push(`<div class="summary-card"><div class="label">Kode Barang CFN</div><div class="value">${Num(displayItems.length)}</div></div>
+    summaryCards.push(`<div class="summary-card"><div class="label">Kode Barang CFN</div><div class="value">${Num(itemsCFN.length)}</div></div>
       <div class="summary-card"><div class="label">Total Unit CFN</div><div class="value">${Num(totalCFN)}</div></div>`);
   }
   document.getElementById('summaryBar').innerHTML = summaryCards.join('');
 
-  const pageInfo = displayItems.length > PAGE_SIZE
-    ? ` &bull; halaman ${currentPage}/${totalPages} (${PAGE_SIZE} baris/halaman)`
-    : '';
+  const totalPagesFor = n => Math.max(1, Math.ceil(n / PAGE_SIZE));
 
   let sectionsHtml = '';
-  if(combined){
-    sectionsHtml += `<div class="company-section">
-      <h2>Stock Barang (MKI &amp; CFN)</h2>
-      <div class="sub">${Num(displayItems.length)} kode barang &bull; total ${Num(totalMKI+totalCFN)} unit &bull; termasuk yang stock-nya kosong${pageInfo}</div>
-      <div class="table-scroll">${renderTable(pageItems, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true},{label:'Stock MKI',get:i=>i.mki,num:true},{label:'Stock CFN',get:i=>i.cfn,num:true},{label:'Total',get:i=>i.total,num:true}])}</div>
-      <div class="pagination" id="pgStock"></div>
-    </div>`;
-  } else if(showMKI){
+  if(showMKI){
+    const totalPagesMKI = totalPagesFor(itemsMKI.length);
+    if(pageState.mki>totalPagesMKI) pageState.mki=totalPagesMKI;
+    const pageItemsMKI = itemsMKI.slice((pageState.mki-1)*PAGE_SIZE, pageState.mki*PAGE_SIZE);
+    const pageInfo = itemsMKI.length>PAGE_SIZE ? ` &bull; halaman ${pageState.mki}/${totalPagesMKI} (${PAGE_SIZE} baris/halaman)` : '';
     sectionsHtml += `<div class="company-section">
       <h2><span class="badge">MKI</span> Stock Barang MKI</h2>
-      <div class="sub">${Num(displayItems.length)} kode barang &bull; total ${Num(totalMKI)} unit${pageInfo}</div>
-      <div class="table-scroll">${renderTable(pageItems, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true},{label:'Stock MKI',get:i=>i.mki,num:true}])}</div>
-      <div class="pagination" id="pgStock"></div>
+      <div class="sub">${Num(itemsMKI.length)} kode barang &bull; total ${Num(totalMKI)} unit${pageInfo}</div>
+      <div class="table-scroll">${renderTable(pageItemsMKI, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true},{label:'Stock MKI',get:i=>i.mki,num:true}])}</div>
+      <div class="pagination" id="pgStockMKI"></div>
     </div>`;
-  } else if(showCFN){
+  }
+  if(showCFN){
+    const totalPagesCFN = totalPagesFor(itemsCFN.length);
+    if(pageState.cfn>totalPagesCFN) pageState.cfn=totalPagesCFN;
+    const pageItemsCFN = itemsCFN.slice((pageState.cfn-1)*PAGE_SIZE, pageState.cfn*PAGE_SIZE);
+    const pageInfo = itemsCFN.length>PAGE_SIZE ? ` &bull; halaman ${pageState.cfn}/${totalPagesCFN} (${PAGE_SIZE} baris/halaman)` : '';
     sectionsHtml += `<div class="company-section">
       <h2><span class="badge badge-cfn">CFN</span> Stock Barang CFN</h2>
-      <div class="sub">${Num(displayItems.length)} kode barang &bull; total ${Num(totalCFN)} unit${pageInfo}</div>
-      <div class="table-scroll">${renderTable(pageItems, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true},{label:'Stock CFN',get:i=>i.cfn,num:true}])}</div>
-      <div class="pagination" id="pgStock"></div>
+      <div class="sub">${Num(itemsCFN.length)} kode barang &bull; total ${Num(totalCFN)} unit${pageInfo}</div>
+      <div class="table-scroll">${renderTable(pageItemsCFN, [{label:'Kode Barang',get:i=>i.kode},{label:'Deskripsi',get:i=>i.deskripsi},{label:'Harga Satuan',get:i=>Rp(i.harga),raw:true},{label:'Stock CFN',get:i=>i.cfn,num:true}])}</div>
+      <div class="pagination" id="pgStockCFN"></div>
     </div>`;
   }
   document.getElementById('sections').innerHTML = sectionsHtml;
-  renderPagination('pgStock', currentPage, totalPages);
+
+  if(showMKI) renderPagination('pgStockMKI', pageState.mki, totalPagesFor(itemsMKI.length), p=>{ pageState.mki=p; render(); });
+  if(showCFN) renderPagination('pgStockCFN', pageState.cfn, totalPagesFor(itemsCFN.length), p=>{ pageState.cfn=p; render(); });
 }
 
 async function main(){
@@ -257,7 +254,7 @@ async function main(){
     document.getElementById('status').style.display='none';
     document.getElementById('content').style.display='block';
     render();
-    document.getElementById('liveSearch').addEventListener('input', () => { currentPage = 1; render(); });
+    document.getElementById('liveSearch').addEventListener('input', () => { pageState.mki = 1; pageState.cfn = 1; render(); });
   }catch(err){
     document.getElementById('status').innerHTML = '<div style="color:#c0392b;">Gagal memuat data: '+esc(err.message)+'</div>';
     console.error(err);
