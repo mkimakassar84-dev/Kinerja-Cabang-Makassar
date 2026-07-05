@@ -45,9 +45,17 @@ async function load(){
   document.getElementById('status').textContent='Mengambil data\u2026';
   const [gT,rT,sT]=await Promise.all([g('1703817529'),g('1062237088'),g('1234708655')]);
   const gR=csv(gT),rR=csv(rT),sR=csv(sT);
-  const T=new Date(),ts=Iso(T),mi=T.getMonth();
+  const T=new Date(),ts=Iso(T);
+  // month param dikirim dari tombol "Bagikan via WhatsApp" di KPI Monitoring —
+  // 'all' = Semua Bulan (sama seperti filter di layar), atau index bulan 0-11.
+  // Kalau parameter tidak ada (dibuka langsung tanpa lewat dashboard), fallback
+  // ke bulan berjalan seperti perilaku lama.
+  const params=new URLSearchParams(location.search);
+  const monthParam=params.get('month');
+  const isAll=monthParam==='all';
+  const mi=isAll ? null : (monthParam!==null ? parseInt(monthParam,10) : T.getMonth());
   const tx=gR.slice(1).map(r=>({dt:pDate(r[0]),inv:r[1],amt:N(r[6]),qty:N(r[5]),kol:N(r[9]),stg:(r[10]||'').toLowerCase(),eks:(r[11]||'').toUpperCase(),sts:r[7]||'',co:r[8]||'',lok:(r[12]||'').trim()})).filter(t=>t.dt);
-  const tM=tx.filter(t=>t.dt.getMonth()===mi),tD=tM.filter(t=>Iso(t.dt)===ts);
+  const tM=isAll ? tx : tx.filter(t=>t.dt.getMonth()===mi),tD=tM.filter(t=>Iso(t.dt)===ts);
   const sM=S(tM,t=>t.amt),sD=S(tD,t=>t.amt);
   const sMKI=S(tM.filter(t=>t.co==='MKI'),t=>t.amt),sCFN=S(tM.filter(t=>t.co==='CFN'),t=>t.amt);
   const sDMKI=S(tD.filter(t=>t.co==='MKI'),t=>t.amt),sDCFN=S(tD.filter(t=>t.co==='CFN'),t=>t.amt);
@@ -64,19 +72,19 @@ async function load(){
   const lkList=Object.entries(lkM).sort((a,b)=>b[1].size-a[1].size);
   const rh=rR[0],iRd=rh.findIndex(x=>x.includes('Date')),iRp=rh.findIndex(x=>x.toLowerCase().includes('pelunasan')),iRc=rh.findIndex(x=>x.toLowerCase().includes('company'));
   const rv=rR.slice(1).map(r=>({dt:pDate(r[iRd]),p:N(r[iRp]),co:r[iRc]||''})).filter(r=>r.dt);
-  const rM=S(rv.filter(r=>r.dt.getMonth()===mi),r=>r.p),rD=S(rv.filter(r=>Iso(r.dt)===ts),r=>r.p);
-  const rMKI=S(rv.filter(r=>r.dt.getMonth()===mi&&r.co==='MKI'),r=>r.p),rCFN=S(rv.filter(r=>r.dt.getMonth()===mi&&r.co==='CFN'),r=>r.p);
+  const rM=isAll ? S(rv,r=>r.p) : S(rv.filter(r=>r.dt.getMonth()===mi),r=>r.p),rD=S(rv.filter(r=>Iso(r.dt)===ts),r=>r.p);
+  const rMKI=isAll ? S(rv.filter(r=>r.co==='MKI'),r=>r.p) : S(rv.filter(r=>r.dt.getMonth()===mi&&r.co==='MKI'),r=>r.p),rCFN=isAll ? S(rv.filter(r=>r.co==='CFN'),r=>r.p) : S(rv.filter(r=>r.dt.getMonth()===mi&&r.co==='CFN'),r=>r.p);
   const rDMKI=S(rv.filter(r=>Iso(r.dt)===ts&&r.co==='MKI'),r=>r.p),rDCFN=S(rv.filter(r=>Iso(r.dt)===ts&&r.co==='CFN'),r=>r.p);
   const col=sM>0?(rM/sM)*100:0;
   const colD=sD>0?(rD/sD)*100:null;
   // Target Sales/Revenue bulan berjalan: sheet Sales SUM, kolom AS (nama
-  // bulan, index 44) & AT (target, index 45).
+  // bulan, index 44) & AT (target, index 45). Tidak ada target untuk "Semua Bulan".
   const MO_EN=['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const targetRow=sR.find(r=>(r[44]||'').trim().toLowerCase()===MO_EN[mi].toLowerCase());
+  const targetRow=isAll ? null : sR.find(r=>(r[44]||'').trim().toLowerCase()===MO_EN[mi].toLowerCase());
   const targetSM=targetRow?N(targetRow[45]):0;
-  const daysInMonth=new Date(T.getFullYear(),mi+1,0).getDate();
+  const daysInMonth=isAll ? null : new Date(T.getFullYear(),mi+1,0).getDate();
   const TARGET_INVOICE=280;
-  return {T,ts,mi,sM,sD,sMKI,sCFN,sDMKI,sDCFN,iM,iD,iMKI,iCFN,iDMKI,iDCFN,rM,rD,rMKI,rCFN,rDMKI,rDCFN,oPct,oDpct,oH,oT,oDh,oDt,qty,kol,lkList,lkTot:Object.keys(lkM).length,col,colD,targetSM,daysInMonth,TARGET_INVOICE};
+  return {T,ts,mi,isAll,sM,sD,sMKI,sCFN,sDMKI,sDCFN,iM,iD,iMKI,iCFN,iDMKI,iDCFN,rM,rD,rMKI,rCFN,rDMKI,rDCFN,oPct,oDpct,oH,oT,oDh,oDt,qty,kol,lkList,lkTot:Object.keys(lkM).length,col,colD,targetSM,daysInMonth,TARGET_INVOICE};
 }
 function draw(d){
   const W=1080,GAP=24,L=40,CW=488,T1=118;
@@ -92,7 +100,7 @@ function draw(d){
   cx.fillStyle='rgba(255,255,255,.65)';cx.font='600 20px system-ui';cx.fillText('MKI \u2014 CABANG MAKASSAR',44,34);
   cx.fillStyle='#fff';cx.font='bold 28px system-ui';cx.fillText('Dashboard Kinerja Bisnis MKI Makassar 2026',44,74);
   cx.fillStyle='rgba(255,255,255,.75)';cx.font='400 18px system-ui';cx.textAlign='right';
-  cx.fillText(DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.mi]+' '+d.T.getFullYear(),W-44,62);cx.textAlign='left';
+  cx.fillText(DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear(),W-44,62);cx.textAlign='left';
   function bar(x,y,w,p,t){const h=p>=(t||100);cx.fillStyle='#e8e0d4';cx.fillRect(x,y,w,7);const f=Math.min(p/100,1)*w;if(f>0){cx.fillStyle=h?'#4d8a5c':'#b84040';cx.fillRect(x,y,f,7);}}
   function bdg(x,y,p,t){const h=p>=(t||100);const s=h?'\u2713 TARGET HIT':'\u26a0 BELUM ACHIEVE';cx.font='bold 13px system-ui';const bw=cx.measureText(s).width+20;cx.fillStyle=h?'#dceede':'#f3dad6';cx.fillRect(x,y,bw,24);cx.fillStyle=h?'#4d6b46':'#8c3c30';cx.fillText(s,x+10,y+16);}
   function co(x,y,vm,vc){cx.fillStyle='#c17a5a';cx.font='bold 14px system-ui';cx.fillText('MKI',x,y);cx.fillStyle='#2a2520';cx.font='400 14px system-ui';cx.fillText(vm,x+30,y);cx.fillStyle='#7a9872';cx.font='bold 14px system-ui';cx.fillText('CFN',x+210,y);cx.fillStyle='#2a2520';cx.font='400 14px system-ui';cx.fillText(vc,x+240,y);}
@@ -144,25 +152,36 @@ function draw(d){
     if(o.daily){dailyBox(x+22,yy,w-44,o.daily);}
     else if(o.dailyNote){cx.fillStyle='#8a7d6a';cx.font='italic 12px system-ui';cx.fillText(o.dailyNote,x+22,yy+14);}
   }
-  const dTgt=d.targetSM/d.daysInMonth, iTgt=d.TARGET_INVOICE/d.daysInMonth;
-  const todayDM=d.T.getDate()+' '+MO[d.mi];
-  card(L,T1,CW,CH1,{lbl:'TOTAL SALES \u2014 '+MO[d.mi].toUpperCase(),val:Rp(d.sM),co:[Rp(d.sMKI),Rp(d.sCFN)],s2:'Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct(d.targetSM>0?(d.sM/d.targetSM)*100:0),pct:d.targetSM>0?(d.sM/d.targetSM)*100:0,daily:d.targetSM>0?{todayValue:Rp(d.sD),todayLabel:todayDM,targetPerDay:Rp(dTgt),achieved:d.sD>=dTgt,breakdown:[Rp(d.sDMKI),Rp(d.sDCFN)]}:null});
-  card(L+CW+GAP,T1,CW,CH1,{lbl:'TOTAL REVENUE \u2014 '+MO[d.mi].toUpperCase(),val:Rp(d.rM),co:[Rp(d.rMKI),Rp(d.rCFN)],s2:'Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct(d.targetSM>0?(d.rM/d.targetSM)*100:0),pct:d.targetSM>0?(d.rM/d.targetSM)*100:0,daily:d.targetSM>0?{todayValue:Rp(d.rD),todayLabel:todayDM,targetPerDay:Rp(dTgt),achieved:d.rD>=dTgt,breakdown:[Rp(d.rDMKI),Rp(d.rDCFN)]}:null});
-  card(L,T2,CW,CH2,{lbl:'TOTAL INVOICE \u2014 '+MO[d.mi].toUpperCase(),val:Num(d.iM),fs:44,co:[Num(d.iMKI)+' inv',Num(d.iCFN)+' inv'],pct:d.iM>0?(d.iM/280)*100:0,daily:{todayValue:Num(d.iD)+' invoice',todayLabel:todayDM,targetPerDay:Num(Math.round(iTgt)),achieved:d.iD>=iTgt,breakdown:[Num(d.iDMKI),Num(d.iDCFN)]}});
-  card(L+CW+GAP,T2,CW,CH2,{lbl:'OTD ACCURACY \u2014 '+MO[d.mi].toUpperCase(),val:Pct(d.oPct),fs:44,vc:d.oPct>=80?'#4d8a5c':'#b84040',s2:Num(d.oH)+' Same Day / '+Num(d.oT)+' invoice (termasuk HC)',s3:'Total Qty: '+Num(d.qty)+'  |  Total Koli: '+Num(d.kol),pct:d.oPct,tgt:80,daily:{todayValue:(d.oDt>0?Pct(d.oDpct):'\u2014')+' ('+Num(d.oDh)+'/'+Num(d.oDt)+' inv)',achieved:d.oDt>=1?(d.oDpct>=80):undefined,note:d.oDt===0?'Belum ada invoice hari ini':null}});
+  const dTgt=d.isAll ? 0 : d.targetSM/d.daysInMonth, iTgt=d.isAll ? 0 : d.TARGET_INVOICE/d.daysInMonth;
+  const todayDM=d.T.getDate()+' '+MO[d.T.getMonth()];
+  const moLabel=d.isAll ? 'SEMUA BULAN' : MO[d.mi].toUpperCase();
+  const noTargetNote='Target tersedia per bulan \u2014 pilih bulan spesifik di dashboard';
+  card(L,T1,CW,CH1,{lbl:'TOTAL SALES \u2014 '+moLabel,val:Rp(d.sM),co:[Rp(d.sMKI),Rp(d.sCFN)],
+    s2:d.targetSM>0?('Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct((d.sM/d.targetSM)*100)):(d.isAll?noTargetNote:null),
+    pct:d.targetSM>0?(d.sM/d.targetSM)*100:undefined,
+    daily:d.targetSM>0?{todayValue:Rp(d.sD),todayLabel:todayDM,targetPerDay:Rp(dTgt),achieved:d.sD>=dTgt,breakdown:[Rp(d.sDMKI),Rp(d.sDCFN)]}:null});
+  card(L+CW+GAP,T1,CW,CH1,{lbl:'TOTAL REVENUE \u2014 '+moLabel,val:Rp(d.rM),co:[Rp(d.rMKI),Rp(d.rCFN)],
+    s2:d.targetSM>0?('Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct((d.rM/d.targetSM)*100)):(d.isAll?noTargetNote:null),
+    pct:d.targetSM>0?(d.rM/d.targetSM)*100:undefined,
+    daily:d.targetSM>0?{todayValue:Rp(d.rD),todayLabel:todayDM,targetPerDay:Rp(dTgt),achieved:d.rD>=dTgt,breakdown:[Rp(d.rDMKI),Rp(d.rDCFN)]}:null});
+  card(L,T2,CW,CH2,{lbl:'TOTAL INVOICE \u2014 '+moLabel,val:Num(d.iM),fs:44,co:[Num(d.iMKI)+' inv',Num(d.iCFN)+' inv'],
+    s2:d.isAll?noTargetNote:null,
+    pct:d.isAll?undefined:(d.iM>0?(d.iM/280)*100:0),
+    daily:d.isAll?null:{todayValue:Num(d.iD)+' invoice',todayLabel:todayDM,targetPerDay:Num(Math.round(iTgt)),achieved:d.iD>=iTgt,breakdown:[Num(d.iDMKI),Num(d.iDCFN)]}});
+  card(L+CW+GAP,T2,CW,CH2,{lbl:'OTD ACCURACY \u2014 '+moLabel,val:Pct(d.oPct),fs:44,vc:d.oPct>=80?'#4d8a5c':'#b84040',s2:Num(d.oH)+' Same Day / '+Num(d.oT)+' invoice (termasuk HC)',s3:'Total Qty: '+Num(d.qty)+'  |  Total Koli: '+Num(d.kol),pct:d.oPct,tgt:80,daily:d.isAll?null:{todayValue:(d.oDt>0?Pct(d.oDpct):'\u2014')+' ('+Num(d.oDh)+'/'+Num(d.oDt)+' inv)',achieved:d.oDt>=1?(d.oDpct>=80):undefined,note:d.oDt===0?'Belum ada invoice hari ini':null}});
   card(L,T3,CW,CH3,{lbl:'SALES TO REVENUE RATIO',val:Pct(d.col),fs:44,s1:'Sales: '+Rp(d.sM),s2:'Revenue: '+Rp(d.rM)});
   // Baris "HARI INI" untuk Sales to Revenue (tanpa box/target, murni angka besar)
   (function(){
     const bx=L+22,by=T3+94+20+18+16;
     cx.strokeStyle='#e3dccb';cx.beginPath();cx.moveTo(bx,by);cx.lineTo(L+CW-22,by);cx.stroke();
     let yy=by+22;
-    cx.fillStyle='#6b7787';cx.font='bold 11px system-ui';cx.fillText('HARI INI ('+d.T.getDate()+' '+MO[d.mi]+')',bx,yy);
+    cx.fillStyle='#6b7787';cx.font='bold 11px system-ui';cx.fillText('HARI INI ('+d.T.getDate()+' '+MO[d.T.getMonth()]+')',bx,yy);
     yy+=24;cx.fillStyle='#2a2520';cx.font='bold 20px system-ui';cx.fillText(d.colD!==null?Pct(d.colD):'\u2013',bx,yy);
     yy+=20;cx.fillStyle='#6a5a4a';cx.font='400 13px system-ui';cx.fillText('Sales: '+Rp(d.sD)+'  |  Revenue: '+Rp(d.rD),bx,yy);
   })();
   const wx=L+CW+GAP,wy=T3,ww=CW,wh=CH3;
   cx.fillStyle='#fff';cx.fillRect(wx,wy,ww,wh);cx.strokeStyle='#ddd6cc';cx.lineWidth=1;cx.strokeRect(wx,wy,ww,wh);
-  cx.fillStyle='#9a7a5a';cx.font='bold 14px system-ui';cx.fillText('PERFORMA WILAYAH \u2014 '+MO[d.mi].toUpperCase(),wx+22,wy+30);
+  cx.fillStyle='#9a7a5a';cx.font='bold 14px system-ui';cx.fillText('PERFORMA WILAYAH \u2014 '+moLabel,wx+22,wy+30);
   cx.fillStyle='#2a2520';cx.font='bold 36px system-ui';cx.fillText(Num(d.lkTot)+' area aktif',wx+22,wy+72);
   cx.fillStyle='#9a7a5a';cx.font='bold 12px system-ui';cx.fillText('TOP 5 WILAYAH',wx+22,wy+96);
   d.lkList.slice(0,5).forEach((e,i)=>{cx.fillStyle='#3a3530';cx.font='400 14px system-ui';cx.fillText((i+1)+'. '+e[0],wx+22,wy+114+i*22);cx.fillStyle='#c17a5a';cx.font='bold 14px system-ui';cx.textAlign='right';cx.fillText(Num(e[1].size)+' inv',wx+ww-22,wy+114+i*22);cx.textAlign='left';});
@@ -172,7 +191,7 @@ function draw(d){
 function cap(d){
   const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-  return '\ud83d\udcca *Report '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.mi]+' '+d.T.getFullYear()+'*';
+  return '\ud83d\udcca *Report '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*';
 }
 async function main(){
   try{

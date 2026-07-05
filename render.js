@@ -581,7 +581,10 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     btn.addEventListener('click', () => {
       // Buka halaman kpi-share.html yang generate gambar KPI real-time via Canvas.
       // User simpan gambar → kirim ke grup WA sebagai foto (bukan link).
-      window.open('kpi-share.html?_=' + Date.now(), '_blank');
+      // Kirim juga filter bulan yang sedang aktif di halaman (termasuk "all" /
+      // Semua Bulan) supaya gambar yang di-share konsisten dengan tampilan layar,
+      // bukan selalu berdasarkan tanggal berjalan.
+      window.open('kpi-share.html?month=' + encodeURIComponent(dailyPerfState.kpi.month) + '&_=' + Date.now(), '_blank');
     });
   };
   attachWaBtn();
