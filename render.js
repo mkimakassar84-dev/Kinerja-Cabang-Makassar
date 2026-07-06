@@ -372,9 +372,9 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     const achieved = actualToday >= dailyTarget;
     return `
       <div class="kmc-daily">
-        <div class="kmc-pace-label">TARGET HARIAN <span class="kmc-pace-dynamic">(dinamis)</span></div>
+        <div class="kmc-pace-label">TARGET HARIAN</div>
         <div class="kmc-sub">Hari ini (${todayLabelCtx}): <strong class="kmc-today-value">${fmtFn(actualToday)}${suffix}</strong></div>
-        <div class="kmc-sub">Target/hari: <strong>${fmtFn(dailyTarget)}${suffix}</strong> <span class="kmc-pace-note">(sisa target &divide; sisa ${daysRemaining} hari)</span></div>
+        <div class="kmc-sub">Target/hari: <strong>${fmtFn(dailyTarget)}${suffix}</strong></div>
         <span class="kmc-status ${achieved ? 'kmc-status-hit' : 'kmc-status-miss'}">${achieved ? '&#10003; DAILY ACHIEVED' : '&#10005; DAILY NOT ACHIEVED'}</span>
         <div class="kmc-daily-breakdown">
           <span class="kmc-daily-breakdown-label">Breakdown Hari Ini</span>

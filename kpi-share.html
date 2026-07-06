@@ -116,7 +116,7 @@ function draw(d){
     const h=18+(hasToday?20:0)+(hasTarget?22:0)+30+(hasBreak?42:0)+18;
     cx.fillStyle='#e2e6ea';cx.fillRect(x,y,w,h);cx.strokeStyle='#b9c2cc';cx.lineWidth=1;cx.strokeRect(x,y,w,h);
     let yy=y+22;
-    cx.fillStyle='#6b7787';cx.font='bold 11px system-ui';cx.fillText('TARGET HARIAN (DINAMIS)',x+14,yy);
+    cx.fillStyle='#6b7787';cx.font='bold 11px system-ui';cx.fillText('TARGET HARIAN',x+14,yy);
     yy+=4;
     if(hasToday){
       yy+=18;
