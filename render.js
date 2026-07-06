@@ -2291,13 +2291,26 @@ function renderStockChart(st) {
 }
 
 // Pencarian multi-kata: setiap kata di query harus muncul di suatu tempat pada
-// teks (kode+deskripsi digabung), tidak harus berurutan/bersambungan. Jadi
-// "kabel 12 core" tetap cocok dengan "Kabel Fiber Optik 12 Core, GYTC8S-24B1.3".
+// teks (kode+deskripsi digabung), tidak harus berurutan/bersambungan. Kasus
+// khusus: pasangan "<angka> core" (mis. "12 core") dicocokkan sebagai satu
+// kesatuan jumlah core yang SPESIFIK — tidak boleh ke-substring oleh jumlah
+// core lain (12 vs 1/6/4/24) atau oleh kode barang yang kebetulan mengandung
+// angka yang sama.
 function matchesSearchTokens(haystack, query) {
   const tokens = query.trim().toUpperCase().split(/\s+/).filter(Boolean);
   if (!tokens.length) return true;
   const text = haystack.toUpperCase();
-  return tokens.every(t => text.includes(t));
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (/^\d+$/.test(tok) && tokens[i + 1] === 'CORE') {
+      const re = new RegExp('(?<!\\d)' + tok + '(?!\\d)\\s*CORE');
+      if (!re.test(text)) return false;
+      i++; // token 'CORE' sudah diproses bersama pasangannya, lewati
+      continue;
+    }
+    if (!text.includes(tok)) return false;
+  }
+  return true;
 }
 
 function renderStockTable(st) {
