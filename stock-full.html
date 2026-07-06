@@ -219,14 +219,20 @@ function render(){
   const totalMKI = itemsMKI.reduce((s,i)=>s+i.mki,0);
   const totalCFN = itemsCFN.reduce((s,i)=>s+i.cfn,0);
 
+  // Kalau hasil filter/pencarian saat ini cuma punya stock di salah satu
+  // company (yang lain 0), sembunyikan saja section company yang kosong itu
+  // supaya tidak menampilkan tabel kosong yang tidak berguna.
+  const hideMKI = combined && totalMKI === 0 && totalCFN > 0;
+  const hideCFN = combined && totalCFN === 0 && totalMKI > 0;
+
   document.getElementById('pageTitle').textContent = 'Laporan Lengkap Stock Gudang' + (filterCompany ? ' — '+filterCompany : '');
   document.getElementById('pageMeta').textContent = new Date().toLocaleString('id-ID', {dateStyle:'full', timeStyle:'short'});
 
   const summaryCards = [];
   if(combined){
-    summaryCards.push(`<div class="summary-card"><div class="label">Total Kode Barang</div><div class="value">${Num(items.length)}</div></div>
-      <div class="summary-card"><div class="label">Total Unit MKI</div><div class="value">${Num(totalMKI)}</div></div>
-      <div class="summary-card"><div class="label">Total Unit CFN</div><div class="value">${Num(totalCFN)}</div></div>`);
+    summaryCards.push(`<div class="summary-card"><div class="label">Total Kode Barang</div><div class="value">${Num(items.length)}</div></div>`);
+    if(!hideMKI) summaryCards.push(`<div class="summary-card"><div class="label">Total Unit MKI</div><div class="value">${Num(totalMKI)}</div></div>`);
+    if(!hideCFN) summaryCards.push(`<div class="summary-card"><div class="label">Total Unit CFN</div><div class="value">${Num(totalCFN)}</div></div>`);
   } else if(showMKI){
     summaryCards.push(`<div class="summary-card"><div class="label">Kode Barang MKI</div><div class="value">${Num(itemsMKI.length)}</div></div>
       <div class="summary-card"><div class="label">Total Unit MKI</div><div class="value">${Num(totalMKI)}</div></div>`);
@@ -239,7 +245,7 @@ function render(){
   const totalPagesFor = n => Math.max(1, Math.ceil(n / PAGE_SIZE));
 
   let sectionsHtml = '';
-  if(showMKI){
+  if(showMKI && !hideMKI){
     const totalPagesMKI = totalPagesFor(itemsMKI.length);
     if(pageState.mki>totalPagesMKI) pageState.mki=totalPagesMKI;
     const pageItemsMKI = itemsMKI.slice((pageState.mki-1)*PAGE_SIZE, pageState.mki*PAGE_SIZE);
@@ -251,7 +257,7 @@ function render(){
       <div class="pagination" id="pgStockMKI"></div>
     </div>`;
   }
-  if(showCFN){
+  if(showCFN && !hideCFN){
     const totalPagesCFN = totalPagesFor(itemsCFN.length);
     if(pageState.cfn>totalPagesCFN) pageState.cfn=totalPagesCFN;
     const pageItemsCFN = itemsCFN.slice((pageState.cfn-1)*PAGE_SIZE, pageState.cfn*PAGE_SIZE);
@@ -265,8 +271,8 @@ function render(){
   }
   document.getElementById('sections').innerHTML = sectionsHtml;
 
-  if(showMKI) renderPagination('pgStockMKI', pageState.mki, totalPagesFor(itemsMKI.length), p=>{ pageState.mki=p; render(); });
-  if(showCFN) renderPagination('pgStockCFN', pageState.cfn, totalPagesFor(itemsCFN.length), p=>{ pageState.cfn=p; render(); });
+  if(showMKI && !hideMKI) renderPagination('pgStockMKI', pageState.mki, totalPagesFor(itemsMKI.length), p=>{ pageState.mki=p; render(); });
+  if(showCFN && !hideCFN) renderPagination('pgStockCFN', pageState.cfn, totalPagesFor(itemsCFN.length), p=>{ pageState.cfn=p; render(); });
 }
 
 async function main(){
