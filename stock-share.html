@@ -34,6 +34,15 @@ const SID='1_uou6JDGV-Tm80oALMrduuj9ZIVWM1r9ppuQsYq7_qo';
 const Num=v=>(v||0).toLocaleString('id-ID');
 const Rp=v=>v?'Rp'+Math.round(v).toLocaleString('id-ID'):'Rp0';
 const N=v=>parseFloat(String(v||'').replace(/[^0-9.-]/g,''))||0;
+// Pencarian multi-kata: tiap kata di query harus muncul di suatu tempat pada
+// teks (tidak harus berurutan), jadi "kabel 12 core" tetap cocok dengan
+// "Kabel Fiber Optik 12 Core, GYTC8S-24B1.3".
+function matchesSearchTokens(haystack, query){
+  const tokens=String(query||'').trim().toUpperCase().split(/\s+/).filter(Boolean);
+  if(!tokens.length) return true;
+  const text=String(haystack||'').toUpperCase();
+  return tokens.every(t=>text.includes(t));
+}
 function csv(t){const rows=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'&&t[i+1]==='"'){f+='"';i++;}else if(c==='"')q=false;else f+=c;}else if(c==='"')q=true;else if(c===','){row.push(f.trim());f='';}else if(c==='\n'||c==='\r'){if(f||row.length){row.push(f.trim());rows.push(row);}row=[];f='';if(c==='\r'&&t[i+1]==='\n')i++;}else f+=c;}if(f||row.length){row.push(f.trim());rows.push(row);}return rows;}
 
 const params=new URLSearchParams(window.location.search);
@@ -60,7 +69,7 @@ async function load(){
 
   if(filterCompany==='MKI') items=items.filter(i=>i.mki>0);
   else if(filterCompany==='CFN') items=items.filter(i=>i.cfn>0);
-  if(filterQ) items=items.filter(i=>i.kode.includes(filterQ)||i.deskripsi.toUpperCase().includes(filterQ));
+  if(filterQ) items=items.filter(i=>matchesSearchTokens(i.kode+' '+i.deskripsi, filterQ));
 
   items.sort((a,b)=>a.kode.localeCompare(b.kode));
 

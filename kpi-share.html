@@ -84,7 +84,10 @@ async function load(){
   const targetSM=targetRow?N(targetRow[45]):0;
   const daysInMonth=isAll ? null : new Date(T.getFullYear(),mi+1,0).getDate();
   const TARGET_INVOICE=280;
-  return {T,ts,mi,isAll,sM,sD,sMKI,sCFN,sDMKI,sDCFN,iM,iD,iMKI,iCFN,iDMKI,iDCFN,rM,rD,rMKI,rCFN,rDMKI,rDCFN,oPct,oDpct,oH,oT,oDh,oDt,qty,kol,lkList,lkTot:Object.keys(lkM).length,col,colD,targetSM,daysInMonth,TARGET_INVOICE};
+  // Bulan yang sudah lewat (bukan "Semua Bulan" dan bukan bulan berjalan) —
+  // kolom "Target Hari Ini"/"Target Harian" tidak relevan lagi untuk laporan ini.
+  const isElapsed = !isAll && mi < T.getMonth();
+  return {T,ts,mi,isAll,isElapsed,sM,sD,sMKI,sCFN,sDMKI,sDCFN,iM,iD,iMKI,iCFN,iDMKI,iDCFN,rM,rD,rMKI,rCFN,rDMKI,rDCFN,oPct,oDpct,oH,oT,oDh,oDt,qty,kol,lkList,lkTot:Object.keys(lkM).length,col,colD,targetSM,daysInMonth,TARGET_INVOICE};
 }
 function draw(d){
   const W=1080,GAP=24,L=40,CW=488,T1=118;
@@ -100,7 +103,7 @@ function draw(d){
   cx.fillStyle='rgba(255,255,255,.65)';cx.font='600 20px system-ui';cx.fillText('MKI \u2014 CABANG MAKASSAR',44,34);
   cx.fillStyle='#fff';cx.font='bold 28px system-ui';cx.fillText('Dashboard Kinerja Bisnis MKI Makassar 2026',44,74);
   cx.fillStyle='rgba(255,255,255,.75)';cx.font='400 18px system-ui';cx.textAlign='right';
-  cx.fillText(DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear(),W-44,62);cx.textAlign='left';
+  cx.fillText(d.isElapsed ? (MO[d.mi]+' '+d.T.getFullYear()) : (DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()),W-44,62);cx.textAlign='left';
   function bar(x,y,w,p,t){const h=p>=(t||100);cx.fillStyle='#e8e0d4';cx.fillRect(x,y,w,7);const f=Math.min(p/100,1)*w;if(f>0){cx.fillStyle=h?'#4d8a5c':'#b84040';cx.fillRect(x,y,f,7);}}
   function bdg(x,y,p,t){const h=p>=(t||100);const s=h?'\u2713 TARGET HIT':'\u26a0 BELUM ACHIEVE';cx.font='bold 13px system-ui';const bw=cx.measureText(s).width+20;cx.fillStyle=h?'#dceede':'#f3dad6';cx.fillRect(x,y,bw,24);cx.fillStyle=h?'#4d6b46':'#8c3c30';cx.fillText(s,x+10,y+16);}
   function co(x,y,vm,vc){cx.fillStyle='#c17a5a';cx.font='bold 14px system-ui';cx.fillText('MKI',x,y);cx.fillStyle='#2a2520';cx.font='400 14px system-ui';cx.fillText(vm,x+30,y);cx.fillStyle='#7a9872';cx.font='bold 14px system-ui';cx.fillText('CFN',x+210,y);cx.fillStyle='#2a2520';cx.font='400 14px system-ui';cx.fillText(vc,x+240,y);}
@@ -159,19 +162,20 @@ function draw(d){
   card(L,T1,CW,CH1,{lbl:'TOTAL SALES \u2014 '+moLabel,val:Rp(d.sM),co:[Rp(d.sMKI),Rp(d.sCFN)],
     s2:d.targetSM>0?('Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct((d.sM/d.targetSM)*100)):(d.isAll?noTargetNote:null),
     pct:d.targetSM>0?(d.sM/d.targetSM)*100:undefined,
-    daily:d.targetSM>0?{todayValue:Rp(d.sD),todayLabel:todayDM,targetPerDay:Rp(dTgt),achieved:d.sD>=dTgt,breakdown:[Rp(d.sDMKI),Rp(d.sDCFN)]}:null});
+    daily:(d.targetSM>0 && !d.isElapsed)?{todayValue:Rp(d.sD),todayLabel:todayDM,targetPerDay:Rp(dTgt),achieved:d.sD>=dTgt,breakdown:[Rp(d.sDMKI),Rp(d.sDCFN)]}:null});
   card(L+CW+GAP,T1,CW,CH1,{lbl:'TOTAL REVENUE \u2014 '+moLabel,val:Rp(d.rM),co:[Rp(d.rMKI),Rp(d.rCFN)],
     s2:d.targetSM>0?('Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct((d.rM/d.targetSM)*100)):(d.isAll?noTargetNote:null),
     pct:d.targetSM>0?(d.rM/d.targetSM)*100:undefined,
-    daily:d.targetSM>0?{todayValue:Rp(d.rD),todayLabel:todayDM,targetPerDay:Rp(dTgt),achieved:d.rD>=dTgt,breakdown:[Rp(d.rDMKI),Rp(d.rDCFN)]}:null});
+    daily:(d.targetSM>0 && !d.isElapsed)?{todayValue:Rp(d.rD),todayLabel:todayDM,targetPerDay:Rp(dTgt),achieved:d.rD>=dTgt,breakdown:[Rp(d.rDMKI),Rp(d.rDCFN)]}:null});
   card(L,T2,CW,CH2,{lbl:'TOTAL INVOICE \u2014 '+moLabel,val:Num(d.iM),fs:44,co:[Num(d.iMKI)+' inv',Num(d.iCFN)+' inv'],
     s2:d.isAll?noTargetNote:null,
     pct:d.isAll?undefined:(d.iM>0?(d.iM/280)*100:0),
-    daily:d.isAll?null:{todayValue:Num(d.iD)+' invoice',todayLabel:todayDM,targetPerDay:Num(Math.round(iTgt)),achieved:d.iD>=iTgt,breakdown:[Num(d.iDMKI),Num(d.iDCFN)]}});
-  card(L+CW+GAP,T2,CW,CH2,{lbl:'OTD ACCURACY \u2014 '+moLabel,val:Pct(d.oPct),fs:44,vc:d.oPct>=80?'#4d8a5c':'#b84040',s2:Num(d.oH)+' Same Day / '+Num(d.oT)+' invoice (termasuk HC)',s3:'Total Qty: '+Num(d.qty)+'  |  Total Koli: '+Num(d.kol),pct:d.oPct,tgt:80,daily:d.isAll?null:{todayValue:(d.oDt>0?Pct(d.oDpct):'\u2014')+' ('+Num(d.oDh)+'/'+Num(d.oDt)+' inv)',achieved:d.oDt>=1?(d.oDpct>=80):undefined,note:d.oDt===0?'Belum ada invoice hari ini':null}});
+    daily:(d.isAll||d.isElapsed)?null:{todayValue:Num(d.iD)+' invoice',todayLabel:todayDM,targetPerDay:Num(Math.round(iTgt)),achieved:d.iD>=iTgt,breakdown:[Num(d.iDMKI),Num(d.iDCFN)]}});
+  card(L+CW+GAP,T2,CW,CH2,{lbl:'OTD ACCURACY \u2014 '+moLabel,val:Pct(d.oPct),fs:44,vc:d.oPct>=80?'#4d8a5c':'#b84040',s2:Num(d.oH)+' Same Day / '+Num(d.oT)+' invoice (termasuk HC)',s3:'Total Qty: '+Num(d.qty)+'  |  Total Koli: '+Num(d.kol),pct:d.oPct,tgt:80,daily:(d.isAll||d.isElapsed)?null:{todayValue:(d.oDt>0?Pct(d.oDpct):'\u2014')+' ('+Num(d.oDh)+'/'+Num(d.oDt)+' inv)',achieved:d.oDt>=1?(d.oDpct>=80):undefined,note:d.oDt===0?'Belum ada invoice hari ini':null}});
   card(L,T3,CW,CH3,{lbl:'SALES TO REVENUE RATIO',val:Pct(d.col),fs:44,s1:'Sales: '+Rp(d.sM),s2:'Revenue: '+Rp(d.rM)});
   // Baris "HARI INI" untuk Sales to Revenue (tanpa box/target, murni angka besar)
-  (function(){
+  // — tidak relevan untuk bulan yang sudah lewat.
+  if (!d.isElapsed) (function(){
     const bx=L+22,by=T3+94+20+18+16;
     cx.strokeStyle='#e3dccb';cx.beginPath();cx.moveTo(bx,by);cx.lineTo(L+CW-22,by);cx.stroke();
     let yy=by+22;
@@ -191,6 +195,7 @@ function draw(d){
 function cap(d){
   const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  if(d.isElapsed) return '\ud83d\udcca *Report Capaian Bulan '+MO[d.mi]+'*';
   return '\ud83d\udcca *Report '+DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()+'*';
 }
 async function main(){

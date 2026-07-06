@@ -2290,6 +2290,16 @@ function renderStockChart(st) {
   });
 }
 
+// Pencarian multi-kata: setiap kata di query harus muncul di suatu tempat pada
+// teks (kode+deskripsi digabung), tidak harus berurutan/bersambungan. Jadi
+// "kabel 12 core" tetap cocok dengan "Kabel Fiber Optik 12 Core, GYTC8S-24B1.3".
+function matchesSearchTokens(haystack, query) {
+  const tokens = query.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return true;
+  const text = haystack.toUpperCase();
+  return tokens.every(t => text.includes(t));
+}
+
 function renderStockTable(st) {
   const PAGE = 15;
   let page = 1;
@@ -2298,11 +2308,11 @@ function renderStockTable(st) {
   const allItems = st.items.filter(i => i.stockTotal > 0).sort((a, b) => a.kode.localeCompare(b.kode));
 
   const render = () => {
-    const q = search.trim().toUpperCase();
+    const q = search.trim();
     let items = allItems;
     if (company === 'MKI') items = items.filter(i => i.stockMKI > 0);
     else if (company === 'CFN') items = items.filter(i => i.stockCFN > 0);
-    if (q) items = items.filter(i => i.kode.toUpperCase().includes(q) || (i.deskripsi || '').toUpperCase().includes(q));
+    if (q) items = items.filter(i => matchesSearchTokens(`${i.kode} ${i.deskripsi || ''}`, q));
     const total = items.length;
     const totalPages = Math.max(1, Math.ceil(total / PAGE));
     if (page > totalPages) page = totalPages;
