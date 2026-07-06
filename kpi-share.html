@@ -116,7 +116,7 @@ function draw(d){
     const h=18+(hasToday?20:0)+(hasTarget?22:0)+30+(hasBreak?42:0)+18;
     cx.fillStyle='#e2e6ea';cx.fillRect(x,y,w,h);cx.strokeStyle='#b9c2cc';cx.lineWidth=1;cx.strokeRect(x,y,w,h);
     let yy=y+22;
-    cx.fillStyle='#6b7787';cx.font='bold 11px system-ui';cx.fillText('TARGET HARIAN',x+14,yy);
+    cx.fillStyle='#6b7787';cx.font='bold 11px system-ui';cx.fillText('TARGET HARIAN (DINAMIS)',x+14,yy);
     yy+=4;
     if(hasToday){
       yy+=18;
@@ -155,18 +155,25 @@ function draw(d){
     if(o.daily){dailyBox(x+22,yy,w-44,o.daily);}
     else if(o.dailyNote){cx.fillStyle='#8a7d6a';cx.font='italic 12px system-ui';cx.fillText(o.dailyNote,x+22,yy+14);}
   }
-  const dTgt=d.isAll ? 0 : d.targetSM/d.daysInMonth, iTgt=d.isAll ? 0 : d.TARGET_INVOICE/d.daysInMonth;
+  // Target harian DINAMIS: (sisa target yang belum tercapai) ÷ (sisa hari
+  // termasuk hari ini) — sama seperti logika di dashboard, bukan lagi rata-rata
+  // flat (target bulanan ÷ jumlah hari sebulan).
+  const dayOfMonth=d.T.getDate();
+  const daysRemaining=(d.isAll||d.isElapsed) ? 1 : Math.max(d.daysInMonth-dayOfMonth+1,1);
+  const dTgtSales=(d.isAll||d.isElapsed) ? 0 : Math.max(d.targetSM-(d.sM-d.sD),0)/daysRemaining;
+  const dTgtRev=(d.isAll||d.isElapsed) ? 0 : Math.max(d.targetSM-(d.rM-d.rD),0)/daysRemaining;
+  const iTgt=(d.isAll||d.isElapsed) ? 0 : Math.max(d.TARGET_INVOICE-(d.iM-d.iD),0)/daysRemaining;
   const todayDM=d.T.getDate()+' '+MO[d.T.getMonth()];
   const moLabel=d.isAll ? 'SEMUA BULAN' : MO[d.mi].toUpperCase();
   const noTargetNote='Target tersedia per bulan \u2014 pilih bulan spesifik di dashboard';
   card(L,T1,CW,CH1,{lbl:'TOTAL SALES \u2014 '+moLabel,val:Rp(d.sM),co:[Rp(d.sMKI),Rp(d.sCFN)],
     s2:d.targetSM>0?('Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct((d.sM/d.targetSM)*100)):(d.isAll?noTargetNote:null),
     pct:d.targetSM>0?(d.sM/d.targetSM)*100:undefined,
-    daily:(d.targetSM>0 && !d.isElapsed)?{todayValue:Rp(d.sD),todayLabel:todayDM,targetPerDay:Rp(dTgt),achieved:d.sD>=dTgt,breakdown:[Rp(d.sDMKI),Rp(d.sDCFN)]}:null});
+    daily:(d.targetSM>0 && !d.isElapsed)?{todayValue:Rp(d.sD),todayLabel:todayDM,targetPerDay:Rp(dTgtSales),achieved:d.sD>=dTgtSales,breakdown:[Rp(d.sDMKI),Rp(d.sDCFN)]}:null});
   card(L+CW+GAP,T1,CW,CH1,{lbl:'TOTAL REVENUE \u2014 '+moLabel,val:Rp(d.rM),co:[Rp(d.rMKI),Rp(d.rCFN)],
     s2:d.targetSM>0?('Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct((d.rM/d.targetSM)*100)):(d.isAll?noTargetNote:null),
     pct:d.targetSM>0?(d.rM/d.targetSM)*100:undefined,
-    daily:(d.targetSM>0 && !d.isElapsed)?{todayValue:Rp(d.rD),todayLabel:todayDM,targetPerDay:Rp(dTgt),achieved:d.rD>=dTgt,breakdown:[Rp(d.rDMKI),Rp(d.rDCFN)]}:null});
+    daily:(d.targetSM>0 && !d.isElapsed)?{todayValue:Rp(d.rD),todayLabel:todayDM,targetPerDay:Rp(dTgtRev),achieved:d.rD>=dTgtRev,breakdown:[Rp(d.rDMKI),Rp(d.rDCFN)]}:null});
   card(L,T2,CW,CH2,{lbl:'TOTAL INVOICE \u2014 '+moLabel,val:Num(d.iM),fs:44,co:[Num(d.iMKI)+' inv',Num(d.iCFN)+' inv'],
     s2:d.isAll?noTargetNote:null,
     pct:d.isAll?undefined:(d.iM>0?(d.iM/280)*100:0),

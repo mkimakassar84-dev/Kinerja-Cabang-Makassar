@@ -356,18 +356,25 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     return `<span class="kmc-status kmc-status-miss">&#9888; BELUM ACHIEVE</span>`;
   };
 
-  // Indikator target harian: membandingkan capaian HARI INI SAJA terhadap
-  // target rata-rata per hari (target bulanan ÷ jumlah hari sebulan).
+  // Indikator target harian DINAMIS: bukan lagi rata-rata flat (target
+  // bulanan ÷ jumlah hari sebulan), melainkan (sisa target yang belum
+  // tercapai) ÷ (sisa hari termasuk hari ini). Jadi kalau hari-hari
+  // sebelumnya kurang dari target, target hari ini otomatis naik; kalau
+  // sudah lebih dari target, target hari ini otomatis turun.
   // Hanya relevan saat bulan yang dipilih adalah bulan berjalan.
-  const dailyTargetHtml = (metricTarget, actualToday, todayMKI, todayCFN, isCurrentMonthCtx, daysInMonthCtx, fmtFn, todayLabelCtx, suffix = '') => {
+  const dailyTargetHtml = (metricTarget, monthActualSoFar, actualToday, todayMKI, todayCFN, isCurrentMonthCtx, daysInMonthCtx, fmtFn, todayLabelCtx, suffix = '') => {
     if (!isCurrentMonthCtx || !(metricTarget > 0)) return '';
-    const dailyTarget = metricTarget / daysInMonthCtx;
+    const actualBeforeToday = monthActualSoFar - actualToday;
+    const dayOfMonth = TODAY.getDate();
+    const daysRemaining = Math.max(daysInMonthCtx - dayOfMonth + 1, 1);
+    const remainingTarget = Math.max(metricTarget - actualBeforeToday, 0);
+    const dailyTarget = remainingTarget / daysRemaining;
     const achieved = actualToday >= dailyTarget;
     return `
       <div class="kmc-daily">
-        <div class="kmc-pace-label">TARGET HARIAN</div>
+        <div class="kmc-pace-label">TARGET HARIAN <span class="kmc-pace-dynamic">(dinamis)</span></div>
         <div class="kmc-sub">Hari ini (${todayLabelCtx}): <strong class="kmc-today-value">${fmtFn(actualToday)}${suffix}</strong></div>
-        <div class="kmc-sub">Target/hari: <strong>${fmtFn(dailyTarget)}${suffix}</strong></div>
+        <div class="kmc-sub">Target/hari: <strong>${fmtFn(dailyTarget)}${suffix}</strong> <span class="kmc-pace-note">(sisa target &divide; sisa ${daysRemaining} hari)</span></div>
         <span class="kmc-status ${achieved ? 'kmc-status-hit' : 'kmc-status-miss'}">${achieved ? '&#10003; DAILY ACHIEVED' : '&#10005; DAILY NOT ACHIEVED'}</span>
         <div class="kmc-daily-breakdown">
           <span class="kmc-daily-breakdown-label">Breakdown Hari Ini</span>
@@ -485,7 +492,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         ${targetSales > 0 ? `
           <div class="kmc-target" style="margin-top:10px;">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctSales)}</strong></div>
           ${kpiBar(pctSales)}${kpiStatus(pctSales)}
-          ${dailyTargetHtml(targetSales, dailySales, dailySalesMKI, dailySalesCFN, isCurrentMonth, daysInMonth, fmtRupiah, escapeHtml(todayLabel))}
+          ${dailyTargetHtml(targetSales, totalSales, dailySales, dailySalesMKI, dailySalesCFN, isCurrentMonth, daysInMonth, fmtRupiah, escapeHtml(todayLabel))}
         ` : noTargetNote}
       </div>`;
 
@@ -497,7 +504,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         ${targetSales > 0 ? `
           <div class="kmc-target" style="margin-top:10px;">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctRevenue)}</strong></div>
           ${kpiBar(pctRevenue)}${kpiStatus(pctRevenue)}
-          ${dailyTargetHtml(targetSales, dailyRevenue, dailyRevenueMKI, dailyRevenueCFN, isCurrentMonth, daysInMonth, fmtRupiah, escapeHtml(todayLabel))}
+          ${dailyTargetHtml(targetSales, totalRevenue, dailyRevenue, dailyRevenueMKI, dailyRevenueCFN, isCurrentMonth, daysInMonth, fmtRupiah, escapeHtml(todayLabel))}
         ` : noTargetNote}
       </div>`;
 
@@ -509,7 +516,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         ${pctInvoice !== null ? `
           <div class="kmc-target" style="margin-top:10px;">Target: ${fmtNum(TARGET_INVOICE)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctInvoice)}</strong></div>
           ${kpiBar(pctInvoice)}${kpiStatus(pctInvoice)}
-          ${dailyTargetHtml(TARGET_INVOICE, dailyInvoice, dailyInvoiceMKI, dailyInvoiceCFN, isCurrentMonth, daysInMonth, fmtNum, escapeHtml(todayLabel), ' invoice')}
+          ${dailyTargetHtml(TARGET_INVOICE, invoiceUnikAll, dailyInvoice, dailyInvoiceMKI, dailyInvoiceCFN, isCurrentMonth, daysInMonth, fmtNum, escapeHtml(todayLabel), ' invoice')}
         ` : noTargetNote}
       </div>`;
 
