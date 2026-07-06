@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan MKI Cabang Makassar</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#1a1209;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:16px;}
+#status{color:#fff;font-size:15px;text-align:center;opacity:.8;}
+#spinner{width:44px;height:44px;border:3px solid rgba(255,255,255,.2);border-top-color:#c17a5a;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+canvas{display:none;border-radius:12px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.5);}
+.btn-group{display:none;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:360px;}
+#btnWA{background:#25D366;color:#fff;border:none;border-radius:12px;padding:16px 0;font-size:18px;font-weight:700;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;}
+#btnSave{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:12px 0;font-size:14px;cursor:pointer;width:100%;}
+#note{color:rgba(255,255,255,.45);font-size:12px;text-align:center;max-width:320px;line-height:1.6;display:none;}
+#errMsg{display:none;color:#ff6b6b;font-size:14px;text-align:center;max-width:320px;}
+</style>
+</head>
+<body>
+<div id="spinner"></div>
+<div id="status">Mengambil data terkini&hellip;</div>
+<canvas id="cv" width="1080" height="600"></canvas>
+<div class="btn-group" id="btnGroup">
+<button id="btnWA">&#128242; Kirim ke WhatsApp</button>
+<button id="btnSave">Simpan ke Galeri</button>
+</div>
+<div id="note"></div>
+<div id="errMsg"></div>
+
+<script src="data-loader.js"></script>
+<script src="calc.js"></script>
+<script>
+const Rp=v=>v?'Rp'+Math.round(v).toLocaleString('id-ID'):'Rp0';
+const Num=v=>(v||0).toLocaleString('id-ID');
+const Pct=v=>(v||0).toFixed(1).replace('.',',')+'%';
+
+const params=new URLSearchParams(location.search);
+const section=params.get('section')||'sales';
+
+// Ambil aging dalam hari dari teks kategori (mis. "61-90 hari" -> 90), untuk
+// mengurutkan piutang dari yang paling lama menunggak.
+function agingDays(txt){ const m=String(txt||'').match(/\d+/g); return m ? parseInt(m[m.length-1],10) : 0; }
+
+// Menyusun judul + KPI + tabel per section, semuanya dari objek metrics `m`
+// yang SAMA PERSIS dipakai dashboard (computeAllMetrics) — supaya angka yang
+// dibagikan selalu konsisten dengan yang tampil di layar.
+function buildSpec(m){
+  const T=new Date();
+  if(section==='sales'){
+    const s=m.invoiceCustomerSummary;
+    return {
+      title:'Tren Penjualan (Sales) 2026',
+      kpis:[
+        {label:'TOTAL SALES 2026',value:Rp(s.totalSales)},
+        {label:'TOTAL QTY TERJUAL',value:Num(s.totalQty)},
+        {label:'TOTAL INVOICE UNIK',value:Num(s.totalInvoiceUnik)},
+        {label:'TOTAL CUSTOMER UNIK',value:Num(s.totalCustomerUnik)},
+      ],
+      tableTitle:'Top 10 Kode Barang Terlaris (By Sales)',
+      columns:['Kode Barang','Sales','Quantity'],
+      rows:m.topProducts.topBySales.slice(0,10).map(p=>[p.kode,Rp(p.sales),Num(p.qty)]),
+    };
+  }
+  if(section==='revenue'){
+    const r=m.revTrend;
+    return {
+      title:'Tren Pendapatan (Revenue) 2026',
+      kpis:[
+        {label:'TOTAL REVENUE 2026',value:Rp(r.total)},
+        {label:'INVOICE UNIK',value:Num(r.invoiceUnik)},
+        {label:'CUSTOMER UNIK',value:Num(r.customerUnik)},
+      ],
+      tableTitle:'Revenue per Bulan 2026',
+      columns:['Bulan','Revenue'],
+      rows:r.monthly.map(mo=>[mo.label,Rp(mo.value)]),
+    };
+  }
+  if(section==='ratio'){
+    const rr=m.salesToRevenueRatio;
+    return {
+      title:'Rasio Sales to Revenue 2026',
+      kpis:[
+        {label:'TOTAL SALES',value:Rp(rr.totalSales)},
+        {label:'TOTAL REVENUE',value:Rp(rr.totalRevenue)},
+        {label:'RASIO KESELURUHAN',value:Pct(rr.totalRatio)},
+      ],
+      tableTitle:'Rasio per Bulan 2026',
+      columns:['Bulan','Sales','Revenue','Rasio'],
+      rows:rr.monthly.map(mo=>[mo.label,Rp(mo.sales),Rp(mo.revenue),Pct(mo.ratio)]),
+    };
+  }
+  if(section==='wilayah'){
+    const z=m.zonaWilayah;
+    const zc=z.zoneCounts||{};
+    return {
+      title:'Performa & Zona Wilayah Kabupaten/Kota',
+      kpis:[
+        {label:'TOTAL WILAYAH',value:Num(z.totalWilayah)},
+        {label:'WILAYAH AKTIF',value:Num(z.wilayahAktif.length)},
+        {label:'ZONA HIJAU',value:Num(zc.hijau||0)},
+        {label:'ZONA MERAH',value:Num(zc.merah||0)},
+      ],
+      tableTitle:'Top 10 Wilayah (By Total Invoice 2026)',
+      columns:['Kabupaten/Kota','Total Invoice','Zona'],
+      rows:[...z.wilayahData].sort((a,b)=>b.total-a.total).slice(0,10).map(w=>[w.nama,Num(w.total),w.zone.charAt(0).toUpperCase()+w.zone.slice(1)]),
+    };
+  }
+  if(section==='turnover'){
+    const tp=m.topProducts;
+    return {
+      title:'Turnover Gudang — Kode Barang Terlaris',
+      kpis:[
+        {label:'TOTAL KODE BARANG',value:Num(tp.totalProductCount)},
+        {label:'TERLARIS (SALES)',value:tp.topBySales[0]?tp.topBySales[0].kode:'-'},
+      ],
+      tableTitle:'Top 10 Kode Barang Terlaris (By Sales)',
+      columns:['Kode Barang','Sales','Quantity'],
+      rows:tp.topBySales.slice(0,10).map(p=>[p.kode,Rp(p.sales),Num(p.qty)]),
+    };
+  }
+  if(section==='delivery'){
+    const d=m.delivery;
+    return {
+      title:'Delivery & Ekspedisi 2026',
+      kpis:[
+        {label:'TOTAL TRANSAKSI',value:Num(d.total)},
+        {label:'HAND CARRY',value:Pct(d.handCarry.pct)},
+        {label:'EKSPEDISI LUAR',value:Pct(d.ekspedisiLuar.pct)},
+        {label:'TOTAL KOLI',value:Num(d.totalKoli)},
+      ],
+      tableTitle:'Top 10 Jalur Ekspedisi',
+      columns:['Jalur Ekspedisi','Jumlah','Persentase','Qty'],
+      rows:d.byEkspedisi.slice(0,10).map(e=>[e.nama,Num(e.count),Pct(e.pct),Num(e.qty)]),
+    };
+  }
+  if(section==='ar'){
+    const ar=m.ar;
+    const belumLunas=ar.items.filter(i=>i.sisaSaldo>0).sort((a,b)=>agingDays(b.aging)-agingDays(a.aging));
+    return {
+      title:'Piutang (AR) 2026',
+      kpis:[
+        {label:'TOTAL SISA SALDO',value:Rp(ar.totalSisaSaldo)},
+        {label:'PIUTANG >60 HARI',value:Rp(ar.totalPiutangDiatas60Hari)},
+        {label:'RASIO AR / SALES',value:Pct(ar.ratioARtoSales)},
+      ],
+      tableTitle:'Top 10 Piutang (Aging Tertinggi)',
+      columns:['No Faktur','Customer','Sisa Saldo','Aging'],
+      rows:belumLunas.slice(0,10).map(i=>[i.noFaktur,i.customer,Rp(i.sisaSaldo),i.aging]),
+    };
+  }
+  if(section==='customer'){
+    const cf=m.customerFrequency;
+    return {
+      title:'Frekuensi Pembelanjaan Customer 2026',
+      kpis:[
+        {label:'TOTAL CUSTOMER UNIK',value:Num(cf.totalCustomer)},
+        {label:'RATA-RATA FREKUENSI',value:cf.avgFrequency.toFixed(1)+'x'},
+        {label:'CUSTOMER TIDAK AKTIF',value:Num(cf.churnedCustomers.length)},
+      ],
+      tableTitle:'Top 10 Customer (By Total Sales)',
+      columns:['Customer','Frekuensi','Total Sales'],
+      rows:cf.top10BySales.slice(0,10).map(c=>[c.customer,Num(c.invoiceUnik),Rp(c.totalSales)]),
+    };
+  }
+  // fiber
+  const fo=m.fiberOptic1Core;
+  return {
+    title:'Fiber Optic 1-Core 2026',
+    kpis:[
+      {label:'TOTAL SALES',value:Rp(fo.totalSales)},
+      {label:'TOTAL QTY',value:Num(fo.totalQty)},
+    ],
+    tableTitle:'Kode Barang Fiber Optic 1-Core',
+    columns:['Kode Barang','Sales','Quantity'],
+    rows:fo.byKode.slice(0,10).map(k=>[k.kode,Rp(k.sales),Num(k.qty)]),
+  };
+}
+
+function draw(spec){
+  const W=1080,L=40,rowH=32,headH=32,topH=132,kpiH=100,footH=56;
+  const nKpi=spec.kpis.length;
+  const H=topH+kpiH+20+30+headH+Math.max(spec.rows.length,1)*rowH+footH+16;
+  const cv=document.getElementById('cv'),cx=cv.getContext('2d');
+  cv.height=H;
+  const T=new Date();
+  const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+
+  cx.fillStyle='#f8f5f0';cx.fillRect(0,0,W,H);
+  const hg=cx.createLinearGradient(0,0,W,0);hg.addColorStop(0,'#c17a5a');hg.addColorStop(1,'#a85d3f');
+  cx.fillStyle=hg;cx.fillRect(0,0,W,106);
+  cx.fillStyle='rgba(255,255,255,.65)';cx.font='600 20px system-ui';cx.fillText('MKI \u2014 CABANG MAKASSAR',44,34);
+  cx.fillStyle='#fff';cx.font='bold 25px system-ui';cx.fillText(spec.title,44,72);
+  cx.fillStyle='rgba(255,255,255,.75)';cx.font='400 16px system-ui';cx.textAlign='right';
+  cx.fillText(DY[T.getDay()]+', '+T.getDate()+' '+MO[T.getMonth()]+' '+T.getFullYear(),W-44,62);cx.textAlign='left';
+
+  // KPI cards
+  const kpiY=topH-14,kpiGap=16;
+  const kpiW=(W-2*L-(nKpi-1)*kpiGap)/nKpi;
+  spec.kpis.forEach((k,i)=>{
+    const kx=L+i*(kpiW+kpiGap);
+    cx.fillStyle='#fff';cx.strokeStyle='#e3dccb';cx.lineWidth=1;
+    cx.beginPath();cx.roundRect(kx,kpiY,kpiW,kpiH,10);cx.fill();cx.stroke();
+    cx.fillStyle='#8a7a68';cx.font='600 11px system-ui';cx.fillText(k.label,kx+14,kpiY+24);
+    cx.fillStyle='#2a2520';cx.font='bold 19px system-ui';
+    let val=String(k.value);
+    if(cx.measureText(val).width>kpiW-28){cx.font='bold 15px system-ui';}
+    cx.fillText(val,kx+14,kpiY+56);
+  });
+
+  let y=kpiY+kpiH+30;
+  cx.fillStyle='#5a4a3a';cx.font='bold 14px system-ui';cx.fillText(spec.tableTitle,L,y);
+  y+=18;
+
+  const colW=(W-2*L)/spec.columns.length;
+  cx.fillStyle='#efe4d6';cx.fillRect(L,y,W-2*L,headH);
+  cx.font='bold 11px system-ui';cx.fillStyle='#7a6248';
+  spec.columns.forEach((c,i)=>cx.fillText(c.toUpperCase(),L+14+i*colW,y+20));
+  y+=headH;
+
+  if(spec.rows.length===0){
+    cx.fillStyle='#9a8a72';cx.font='italic 13px system-ui';
+    cx.fillText('Belum ada data.',L+14,y+20);
+    y+=rowH;
+  } else {
+    spec.rows.forEach((row,ri)=>{
+      cx.fillStyle=ri%2===0?'#fbf8f2':'#f3ede0';cx.fillRect(L,y,W-2*L,rowH);
+      cx.fillStyle='#3a3530';cx.font='400 13px system-ui';
+      row.forEach((cell,ci)=>{
+        let txt=String(cell);
+        const maxW=colW-20;
+        while(cx.measureText(txt).width>maxW && txt.length>3){ txt=txt.slice(0,-2); }
+        if(txt!==String(cell)) txt+='\u2026';
+        cx.fillText(txt,L+14+ci*colW,y+21);
+      });
+      y+=rowH;
+    });
+  }
+
+  cx.fillStyle='#efe8df';cx.fillRect(0,H-footH,W,footH);
+  cx.fillStyle='#a08060';cx.font='400 13px system-ui';
+  cx.fillText('mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar  \u2022  '+T.toLocaleString('id-ID'),44,H-20);
+}
+
+function cap(spec){
+  const T=new Date();
+  const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const kpiLines=spec.kpis.map(k=>k.label+': '+k.value).join('\n');
+  return '\ud83d\udcca *'+spec.title+'*\n'+DY[T.getDay()]+', '+T.getDate()+' '+MO[T.getMonth()]+' '+T.getFullYear()+'\n\n'+kpiLines;
+}
+
+async function main(){
+  try{
+    const {data,errors}=await loadAllSheetData();
+    const m=computeAllMetrics(data);
+    document.getElementById('status').textContent='Membuat gambar\u2026';
+    const spec=buildSpec(m);
+    draw(spec);
+    document.getElementById('spinner').style.display='none';
+    document.getElementById('status').style.display='none';
+    const cv=document.getElementById('cv');cv.style.display='block';document.getElementById('btnGroup').style.display='flex';
+
+    const ts=new Date().toISOString().slice(0,10);
+    const fn='MKI-'+section+'-'+ts+'.png';
+    const c=cap(spec);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
+    const file=new File([blob],fn,{type:'image/png'});
+    const canShareFile=!!(navigator.canShare&&navigator.canShare({files:[file]}));
+    function fallbackShare(){
+      const a=document.createElement('a');a.download=fn;a.href=cv.toDataURL('image/png');a.click();
+      setTimeout(()=>window.open('https://wa.me/?text='+encodeURIComponent(c),'_blank'),800);
+      const n=document.getElementById('note');n.textContent='Gambar disimpan. Kirim dari galeri ke WhatsApp.';n.style.display='block';
+    }
+    document.getElementById('btnWA').addEventListener('click',()=>{
+      if(navigator.share&&canShareFile){
+        navigator.share({files:[file],title:spec.title,text:c}).catch(e=>{
+          if(e&&e.name==='AbortError')return;
+          fallbackShare();
+        });
+        return;
+      }
+      fallbackShare();
+    });
+    document.getElementById('btnSave').addEventListener('click',()=>{const a=document.createElement('a');a.download=fn;a.href=cv.toDataURL('image/png');a.click();});
+  }catch(err){
+    document.getElementById('spinner').style.display='none';document.getElementById('status').style.display='none';
+    const e=document.getElementById('errMsg');e.style.display='block';e.textContent='Gagal: '+err.message;console.error(err);
+  }
+}
+main();
+</script>
+</body>
+</html>
