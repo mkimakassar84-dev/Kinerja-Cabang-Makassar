@@ -23,6 +23,13 @@ header .meta{font-size:13px;opacity:.85;}
 .panel{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px 20px 8px;box-shadow:var(--shadow);}
 .panel h2{font-size:15px;font-weight:700;margin-bottom:2px;}
 .panel .sub{font-size:12px;color:var(--ink-soft);margin-bottom:12px;}
+.search-box{margin-bottom:16px;}
+.search-box input{width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:var(--paper);color:var(--ink);}
+.search-box input:focus{outline:none;border-color:var(--terra);}
+.filter-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+.filter-row label{font-size:12px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;}
+.filter-row select{padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:var(--paper);color:var(--ink);}
+.filter-row select:focus{outline:none;border-color:var(--terra);}
 .table-scroll{overflow-x:auto;margin:0 -20px;padding:0 20px 4px;}
 table{width:100%;min-width:340px;border-collapse:collapse;font-size:13px;}
 th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);padding:8px;border-bottom:2px solid var(--line);white-space:nowrap;}
@@ -56,6 +63,13 @@ footer{text-align:center;font-size:11.5px;color:var(--ink-soft);margin-top:24px;
     <div class="panel">
       <h2 id="tableTitle"></h2>
       <div class="sub" id="tableSub"></div>
+      <div class="filter-row" id="filterRow" style="display:none;">
+        <label id="filterLabelText" for="filterSelect"></label>
+        <select id="filterSelect"></select>
+      </div>
+      <div class="search-box">
+        <input type="text" id="liveSearch" placeholder="Cari&hellip;" />
+      </div>
       <div class="table-scroll">
         <table id="dataTable"><thead></thead><tbody></tbody></table>
       </div>
@@ -85,6 +99,8 @@ function agingDays(txt){ const m=String(txt||'').match(/\d+/g); return m ? parse
 function buildSpec(m){
   if(section==='sales'){
     const s=m.invoiceCustomerSummary;
+    const tp=m.topProducts;
+    const mapRows=list=>list.map(p=>[p.kode,Rp(p.sales),Num(p.qty)]);
     return {
       title:'Tren Penjualan (Sales) 2026',
       kpis:[
@@ -95,7 +111,10 @@ function buildSpec(m){
       ],
       tableTitle:'Kode Barang Terlaris (By Sales)',
       columns:['Kode Barang','Sales','Quantity'],
-      rows:m.topProducts.topBySales.map(p=>[p.kode,Rp(p.sales),Num(p.qty)]),
+      rows:mapRows(tp.topBySales),
+      filterLabel:'Company',
+      filterOptions:['Semua','MKI','CFN'],
+      rowsByFilter:{Semua:mapRows(tp.topBySales),MKI:mapRows(tp.byCompany.MKI.topBySales),CFN:mapRows(tp.byCompany.CFN.topBySales)},
     };
   }
   if(section==='revenue'){
@@ -129,6 +148,8 @@ function buildSpec(m){
   if(section==='wilayah'){
     const z=m.zonaWilayah;
     const zc=z.zoneCounts||{};
+    const mapRows=list=>list.map(w=>[w.nama,Num(w.total),w.zone.charAt(0).toUpperCase()+w.zone.slice(1)]);
+    const sorted=[...z.wilayahData].sort((a,b)=>b.total-a.total);
     return {
       title:'Performa & Zona Wilayah Kabupaten/Kota',
       kpis:[
@@ -139,11 +160,20 @@ function buildSpec(m){
       ],
       tableTitle:'Wilayah (By Total Invoice 2026)',
       columns:['Kabupaten/Kota','Total Invoice','Zona'],
-      rows:[...z.wilayahData].sort((a,b)=>b.total-a.total).map(w=>[w.nama,Num(w.total),w.zone.charAt(0).toUpperCase()+w.zone.slice(1)]),
+      rows:mapRows(sorted),
+      filterLabel:'Zona',
+      filterOptions:['Semua','Hijau','Kuning','Merah'],
+      rowsByFilter:{
+        Semua:mapRows(sorted),
+        Hijau:mapRows(sorted.filter(w=>w.zone==='hijau')),
+        Kuning:mapRows(sorted.filter(w=>w.zone==='kuning')),
+        Merah:mapRows(sorted.filter(w=>w.zone==='merah')),
+      },
     };
   }
   if(section==='turnover'){
     const tp=m.topProducts;
+    const mapRows=list=>list.map(p=>[p.kode,Rp(p.sales),Num(p.qty)]);
     return {
       title:'Turnover Gudang \u2014 Kode Barang Terlaris',
       kpis:[
@@ -152,11 +182,15 @@ function buildSpec(m){
       ],
       tableTitle:'Kode Barang Terlaris (By Sales)',
       columns:['Kode Barang','Sales','Quantity'],
-      rows:tp.topBySales.map(p=>[p.kode,Rp(p.sales),Num(p.qty)]),
+      rows:mapRows(tp.topBySales),
+      filterLabel:'Company',
+      filterOptions:['Semua','MKI','CFN'],
+      rowsByFilter:{Semua:mapRows(tp.topBySales),MKI:mapRows(tp.byCompany.MKI.topBySales),CFN:mapRows(tp.byCompany.CFN.topBySales)},
     };
   }
   if(section==='delivery'){
     const d=m.delivery;
+    const mapRows=list=>list.map(e=>[e.nama,Num(e.count),Pct(e.pct),Num(e.qty)]);
     return {
       title:'Delivery & Ekspedisi 2026',
       kpis:[
@@ -167,12 +201,20 @@ function buildSpec(m){
       ],
       tableTitle:'Jalur Ekspedisi',
       columns:['Jalur Ekspedisi','Jumlah','Persentase','Qty'],
-      rows:d.byEkspedisi.map(e=>[e.nama,Num(e.count),Pct(e.pct),Num(e.qty)]),
+      rows:mapRows(d.byEkspedisi),
+      filterLabel:'Jenis',
+      filterOptions:['Semua','Hand Carry','Ekspedisi Luar'],
+      rowsByFilter:{
+        Semua:mapRows(d.byEkspedisi),
+        'Hand Carry':mapRows(d.byEkspedisi.filter(e=>e.nama.toUpperCase().includes('HAND CARRY'))),
+        'Ekspedisi Luar':mapRows(d.byEkspedisi.filter(e=>!e.nama.toUpperCase().includes('HAND CARRY'))),
+      },
     };
   }
   if(section==='ar'){
     const ar=m.ar;
     const belumLunas=ar.items.filter(i=>i.sisaSaldo>0).sort((a,b)=>agingDays(b.aging)-agingDays(a.aging));
+    const mapRows=list=>list.map(i=>[i.noFaktur,i.customer,Rp(i.sisaSaldo),i.aging]);
     return {
       title:'Piutang (AR) 2026',
       kpis:[
@@ -182,7 +224,14 @@ function buildSpec(m){
       ],
       tableTitle:'Piutang Belum Lunas (Aging Tertinggi)',
       columns:['No Faktur','Customer','Sisa Saldo','Aging'],
-      rows:belumLunas.map(i=>[i.noFaktur,i.customer,Rp(i.sisaSaldo),i.aging]),
+      rows:mapRows(belumLunas),
+      filterLabel:'Company',
+      filterOptions:['Semua','MKI','CFN'],
+      rowsByFilter:{
+        Semua:mapRows(belumLunas),
+        MKI:mapRows(belumLunas.filter(i=>i.company==='MKI')),
+        CFN:mapRows(belumLunas.filter(i=>i.company==='CFN')),
+      },
     };
   }
   if(section==='customer'){
@@ -212,8 +261,20 @@ function buildSpec(m){
   };
 }
 
-function renderPagination(spec){
-  const total=spec.rows.length;
+let searchQuery='';
+let activeFilter='Semua';
+function getBaseRows(spec){
+  return (spec.rowsByFilter && spec.rowsByFilter[activeFilter]) ? spec.rowsByFilter[activeFilter] : spec.rows;
+}
+function getFilteredRows(spec){
+  const base=getBaseRows(spec);
+  const q=searchQuery.trim().toUpperCase();
+  if(!q) return base;
+  return base.filter(row=>row.some(cell=>String(cell).toUpperCase().includes(q)));
+}
+
+function renderPagination(spec,filtered){
+  const total=filtered.length;
   const totalPages=Math.max(1,Math.ceil(total/PAGE_SIZE));
   if(page>totalPages) page=totalPages;
   const el=document.getElementById('pagination');
@@ -250,16 +311,18 @@ function render(spec){
   document.getElementById('pageMeta').textContent=new Date().toLocaleString('id-ID',{dateStyle:'full',timeStyle:'short'});
   document.getElementById('summaryBar').innerHTML=spec.kpis.map(k=>`<div class="summary-card"><div class="label">${esc(k.label)}</div><div class="value">${esc(k.value)}</div></div>`).join('');
   document.getElementById('tableTitle').textContent=spec.tableTitle;
-  document.getElementById('tableSub').textContent=Num(spec.rows.length)+' baris data';
+  const filtered=getFilteredRows(spec);
+  const baseCount=getBaseRows(spec).length;
+  document.getElementById('tableSub').textContent=Num(filtered.length)+' baris data'+(searchQuery.trim()?' (dari total '+Num(baseCount)+')':'');
   document.querySelector('#dataTable thead').innerHTML='<tr>'+spec.columns.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr>';
 
-  const totalPages=Math.max(1,Math.ceil(spec.rows.length/PAGE_SIZE));
+  const totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
   if(page>totalPages) page=totalPages;
-  const shown=spec.rows.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE);
+  const shown=filtered.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE);
   document.querySelector('#dataTable tbody').innerHTML=shown.length
     ? shown.map(row=>'<tr>'+row.map(cell=>'<td>'+esc(cell)+'</td>').join('')+'</tr>').join('')
-    : `<tr><td colspan="${spec.columns.length}" class="empty">Belum ada data.</td></tr>`;
-  renderPagination(spec);
+    : `<tr><td colspan="${spec.columns.length}" class="empty">${searchQuery.trim() ? 'Tidak ada data yang cocok.' : 'Belum ada data.'}</td></tr>`;
+  renderPagination(spec,filtered);
 }
 
 async function main(){
@@ -269,7 +332,25 @@ async function main(){
     const spec=buildSpec(m);
     document.getElementById('status').style.display='none';
     document.getElementById('content').style.display='block';
+
+    if(spec.filterOptions && spec.filterOptions.length>1){
+      document.getElementById('filterRow').style.display='flex';
+      document.getElementById('filterLabelText').textContent=spec.filterLabel||'Filter';
+      const sel=document.getElementById('filterSelect');
+      sel.innerHTML=spec.filterOptions.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('');
+      sel.addEventListener('change',(e)=>{
+        activeFilter=e.target.value;
+        page=1;
+        render(spec);
+      });
+    }
+
     render(spec);
+    document.getElementById('liveSearch').addEventListener('input',(e)=>{
+      searchQuery=e.target.value;
+      page=1;
+      render(spec);
+    });
   }catch(err){
     document.getElementById('status').innerHTML='<div style="color:#b84040;">Gagal memuat data: '+esc(err.message)+'</div>';
     console.error(err);
