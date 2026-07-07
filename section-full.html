@@ -98,23 +98,29 @@ function agingDays(txt){ const m=String(txt||'').match(/\d+/g); return m ? parse
 // PERSIS dipakai dashboard (computeAllMetrics) — supaya angka selalu konsisten.
 function buildSpec(m){
   if(section==='sales'){
-    const s=m.invoiceCustomerSummary;
-    const tp=m.topProducts;
-    const mapRows=list=>list.map(p=>[p.kode,Rp(p.sales),Num(p.qty)]);
+    const sc=m.salesByCompany;
+    const mki=sc.companies.find(c=>c.company==='MKI');
+    const cfn=sc.companies.find(c=>c.company==='CFN');
+    const yoy=m.yoyComparison;
+    const rows=yoy.months.map(mo=>[
+      mo.label,
+      Rp(mo.sales2026),
+      Rp(mo.sales2025),
+      Pct(growthPct(mo.sales2026,mo.sales2025)),
+      Rp(mo.targetSalesRevenue),
+      Pct(mo.targetSalesRevenue>0 ? (mo.sales2026/mo.targetSalesRevenue)*100 : 0),
+    ]);
     return {
       title:'Tren Penjualan (Sales) 2026',
       kpis:[
-        {label:'Total Sales 2026',value:Rp(s.totalSales)},
-        {label:'Total Qty Terjual',value:Num(s.totalQty)},
-        {label:'Total Invoice Unik',value:Num(s.totalInvoiceUnik)},
-        {label:'Total Customer Unik',value:Num(s.totalCustomerUnik)},
+        {label:'Total Sales 2026',value:Rp(yoy.totalSales2026)},
+        {label:'Target Tahunan',value:Rp(yoy.totalTarget)},
+        {label:'Sales MKI',value:Rp(mki?mki.sales:0)},
+        {label:'Sales CFN',value:Rp(cfn?cfn.sales:0)},
       ],
-      tableTitle:'Kode Barang Terlaris (By Sales)',
-      columns:['Kode Barang','Sales','Quantity'],
-      rows:mapRows(tp.topBySales),
-      filterLabel:'Company',
-      filterOptions:['Semua','MKI','CFN'],
-      rowsByFilter:{Semua:mapRows(tp.topBySales),MKI:mapRows(tp.byCompany.MKI.topBySales),CFN:mapRows(tp.byCompany.CFN.topBySales)},
+      tableTitle:'Penjualan per Bulan & Komparasi 2025 vs 2026',
+      columns:['Bulan','Sales 2026','Sales 2025','Growth','Target','Capaian'],
+      rows,
     };
   }
   if(section==='revenue'){
