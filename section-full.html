@@ -53,6 +53,7 @@ footer{text-align:center;font-size:11.5px;color:var(--ink-soft);margin-top:24px;
 @keyframes spin{to{transform:rotate(360deg);}}
 #content{display:none;}
 .empty{padding:24px 8px;text-align:center;color:var(--ink-soft);font-style:italic;font-size:13px;}
+.hidden{display:none!important;}
 </style>
 </head>
 <body>
@@ -71,6 +72,10 @@ footer{text-align:center;font-size:11.5px;color:var(--ink-soft);margin-top:24px;
       <div class="filter-row" id="filterRow" style="display:none;">
         <label id="filterLabelText" for="filterSelect"></label>
         <select id="filterSelect"></select>
+      </div>
+      <div class="filter-row" id="monthFilterRow" style="display:none;">
+        <label for="monthFilterSelect">Bulan</label>
+        <select id="monthFilterSelect"></select>
       </div>
       <div class="search-box">
         <input type="text" id="liveSearch" placeholder="Cari&hellip;" />
@@ -107,8 +112,35 @@ const params=new URLSearchParams(location.search);
 const section=params.get('section')||'sales';
 const PAGE_SIZE=15;
 let page=1;
+let searchQuery='';
+let activeFilter='Semua';
+let monthFilter='Semua'; // 'Semua' atau index bulan 0-11 — dipakai turnover/wilayah/delivery/ar
 
 function agingDays(txt){ const m=String(txt||'').match(/\d+/g); return m ? parseInt(m[m.length-1],10) : 0; }
+
+// ---- Agregasi bulanan generik dari transaksi 2026, dikelompokkan per key (mis. kode
+// barang / nama wilayah / nama ekspedisi) — dipakai untuk tabel utama yang bisa
+// difilter per bulan, sekaligus untuk drill-down tren 12 bulan. ----
+function buildMonthlyAgg(items, keyFn){
+  const map=new Map();
+  items.forEach(t=>{
+    const key=keyFn(t);
+    if(key==null||key==='') return;
+    if(!map.has(key)) map.set(key, Array.from({length:12},()=>({sales:0,qty:0,koli:0,invSet:new Set()})));
+    const mi=t.orderDate.getMonth();
+    if(mi<0||mi>11) return;
+    const b=map.get(key)[mi];
+    b.sales+=t.amount; b.qty+=t.qty; b.koli+=(t.koli||0); b.invSet.add(t.noInvoice);
+  });
+  return map;
+}
+function aggForMonth(monthlyArr, mf){
+  if(mf==='Semua'||mf==null){
+    return monthlyArr.reduce((acc,b)=>({sales:acc.sales+b.sales,qty:acc.qty+b.qty,koli:acc.koli+b.koli,invoiceUnik:acc.invoiceUnik+b.invSet.size}),{sales:0,qty:0,koli:0,invoiceUnik:0});
+  }
+  const b=monthlyArr[mf]||{sales:0,qty:0,koli:0,invSet:new Set()};
+  return {sales:b.sales,qty:b.qty,koli:b.koli,invoiceUnik:b.invSet.size};
+}
 
 // Menyusun judul + KPI + tabel per section, dari objek metrics `m` yang SAMA
 // PERSIS dipakai dashboard (computeAllMetrics) — supaya angka selalu konsisten.
@@ -138,22 +170,37 @@ function buildSpec(m){
       tableTitle:'Penjualan per Bulan & Komparasi 2025 vs 2026',
       columns:['Bulan','Sales 2025','Sales 2026','Growth','Target','Capaian'],
       rows,
-      rowClickable:true,
+      isMonthTxDrill:true,
       rowClickHint:'Klik nama bulan untuk melihat semua transaksi bulan tersebut.',
     };
   }
   if(section==='revenue'){
-    const r=m.revTrend;
+    const rc=m.revenueByCompany;
+    const mki=rc.companies.find(c=>c.company==='MKI');
+    const cfn=rc.companies.find(c=>c.company==='CFN');
+    const yoy=m.yoyComparison;
+    const rows=yoy.months.map((mo,idx)=>[
+      mo.label,
+      Rp(mo.rev2025),
+      Rp(mo.rev2026),
+      Pct(growthPct(mo.rev2026,mo.rev2025)),
+      Rp(mo.targetSalesRevenue),
+      Pct(mo.targetSalesRevenue>0 ? (mo.rev2026/mo.targetSalesRevenue)*100 : 0),
+      idx,
+    ]);
     return {
       title:'Tren Pendapatan (Revenue) 2026',
       kpis:[
-        {label:'Total Revenue 2026',value:Rp(r.total)},
-        {label:'Invoice Unik',value:Num(r.invoiceUnik)},
-        {label:'Customer Unik',value:Num(r.customerUnik)},
+        {label:'Total Revenue 2026',value:Rp(yoy.totalRev2026)},
+        {label:'Target Tahunan',value:Rp(yoy.totalTarget)},
+        {label:'Revenue MKI',value:Rp(mki?mki.revenue:0)},
+        {label:'Revenue CFN',value:Rp(cfn?cfn.revenue:0)},
       ],
-      tableTitle:'Revenue per Bulan 2026',
-      columns:['Bulan','Revenue'],
-      rows:r.monthly.map(mo=>[mo.label,Rp(mo.value)]),
+      tableTitle:'Pendapatan per Bulan & Komparasi 2025 vs 2026',
+      columns:['Bulan','Revenue 2025','Revenue 2026','Growth','Target','Capaian'],
+      rows,
+      isMonthTxDrill:true,
+      rowClickHint:'Klik nama bulan untuk melihat semua transaksi bulan tersebut.',
     };
   }
   if(section==='ratio'){
@@ -168,13 +215,23 @@ function buildSpec(m){
       tableTitle:'Rasio per Bulan 2026',
       columns:['Bulan','Sales','Revenue','Rasio'],
       rows:rr.monthly.map(mo=>[mo.label,Rp(mo.sales),Rp(mo.revenue),Pct(mo.ratio)]),
+      hideSearch:true,
     };
   }
   if(section==='wilayah'){
     const z=m.zonaWilayah;
     const zc=z.zoneCounts||{};
-    const mapRows=list=>list.map(w=>[w.nama,Num(w.total),w.zone.charAt(0).toUpperCase()+w.zone.slice(1)]);
-    const sorted=[...z.wilayahData].sort((a,b)=>b.total-a.total);
+    const monthlyMap=buildMonthlyAgg(tx2026Global, t=>t.lokasi);
+    const computeRowsFor=(zoneKey,mf)=>{
+      let list=z.wilayahData;
+      if(zoneKey!=='Semua') list=list.filter(w=>w.zone===zoneKey.toLowerCase());
+      const withAgg=list.map(w=>{
+        const monthly=monthlyMap.get(w.nama)||Array.from({length:12},()=>({sales:0,qty:0,koli:0,invSet:new Set()}));
+        const agg=aggForMonth(monthly,mf);
+        return {nama:w.nama,zone:w.zone,sales:agg.sales,invoiceUnik:agg.invoiceUnik};
+      }).sort((a,b)=>b.sales-a.sales);
+      return withAgg.map(x=>[x.nama,Num(x.invoiceUnik),Rp(x.sales),x.zone.charAt(0).toUpperCase()+x.zone.slice(1),x.nama]);
+    };
     return {
       title:'Performa & Zona Wilayah Kabupaten/Kota',
       kpis:[
@@ -183,22 +240,43 @@ function buildSpec(m){
         {label:'Zona Hijau',value:Num(zc.hijau||0)},
         {label:'Zona Merah',value:Num(zc.merah||0)},
       ],
-      tableTitle:'Wilayah (By Total Invoice 2026)',
-      columns:['Kabupaten/Kota','Total Invoice','Zona'],
-      rows:mapRows(sorted),
+      tableTitle:'Wilayah (By Invoice Unik & Sales)',
+      columns:['Kabupaten/Kota','Invoice Unik','Sales','Zona'],
       filterLabel:'Zona',
       filterOptions:['Semua','Hijau','Kuning','Merah'],
-      rowsByFilter:{
-        Semua:mapRows(sorted),
-        Hijau:mapRows(sorted.filter(w=>w.zone==='hijau')),
-        Kuning:mapRows(sorted.filter(w=>w.zone==='kuning')),
-        Merah:mapRows(sorted.filter(w=>w.zone==='merah')),
+      monthFilterEnabled:true,
+      computeVariants:(mf)=>({
+        Semua:computeRowsFor('Semua',mf),
+        Hijau:computeRowsFor('Hijau',mf),
+        Kuning:computeRowsFor('Kuning',mf),
+        Merah:computeRowsFor('Merah',mf),
+      }),
+      rowClickable:true,
+      rowClickHint:'Klik nama wilayah untuk melihat invoice unik & sales per bulan.',
+      getDrillData:(nama)=>{
+        const monthly=monthlyMap.get(nama)||Array.from({length:12},()=>({sales:0,invSet:new Set()}));
+        return {
+          title:'Tren Bulanan \u2014 '+nama,
+          columns:['Bulan','Invoice Unik','Sales'],
+          rows:monthly.map((b,i)=>[MONTH_NAMES_ID[i],Num(b.invSet.size),Rp(b.sales)]),
+        };
       },
     };
   }
   if(section==='turnover'){
     const tp=m.topProducts;
-    const mapRows=list=>list.map(p=>[p.kode,Rp(p.sales),Num(p.qty)]);
+    const monthlyMapAll=buildMonthlyAgg(tx2026Global, t=>t.kodeBarang);
+    const monthlyMapMKI=buildMonthlyAgg(tx2026Global.filter(t=>t.company==='MKI'), t=>t.kodeBarang);
+    const monthlyMapCFN=buildMonthlyAgg(tx2026Global.filter(t=>t.company==='CFN'), t=>t.kodeBarang);
+    const computeRowsFor=(monthlyMap,mf)=>{
+      const list=[];
+      monthlyMap.forEach((monthly,kode)=>{
+        const agg=aggForMonth(monthly,mf);
+        list.push({kode,sales:agg.sales,qty:agg.qty});
+      });
+      list.sort((a,b)=>b.sales-a.sales);
+      return list.map(x=>[x.kode,Rp(x.sales),Num(x.qty),x.kode]);
+    };
     return {
       title:'Turnover Gudang \u2014 Kode Barang Terlaris',
       kpis:[
@@ -207,15 +285,41 @@ function buildSpec(m){
       ],
       tableTitle:'Kode Barang Terlaris (By Sales)',
       columns:['Kode Barang','Sales','Quantity'],
-      rows:mapRows(tp.topBySales),
       filterLabel:'Company',
       filterOptions:['Semua','MKI','CFN'],
-      rowsByFilter:{Semua:mapRows(tp.topBySales),MKI:mapRows(tp.byCompany.MKI.topBySales),CFN:mapRows(tp.byCompany.CFN.topBySales)},
+      monthFilterEnabled:true,
+      computeVariants:(mf)=>({
+        Semua:computeRowsFor(monthlyMapAll,mf),
+        MKI:computeRowsFor(monthlyMapMKI,mf),
+        CFN:computeRowsFor(monthlyMapCFN,mf),
+      }),
+      rowClickable:true,
+      rowClickHint:'Klik kode barang untuk melihat quantity & sales per bulan.',
+      getDrillData:(kode)=>{
+        const monthly=monthlyMapAll.get(kode)||Array.from({length:12},()=>({sales:0,qty:0}));
+        return {
+          title:'Tren Bulanan \u2014 '+kode,
+          columns:['Bulan','Quantity','Sales'],
+          rows:monthly.map((b,i)=>[MONTH_NAMES_ID[i],Num(b.qty),Rp(b.sales)]),
+        };
+      },
     };
   }
   if(section==='delivery'){
     const d=m.delivery;
-    const mapRows=list=>list.map(e=>[e.nama,Num(e.count),Pct(e.pct),Num(e.qty)]);
+    const isHandCarry=t=>(t.statusEkspedisi||'').toUpperCase().includes('HAND CARRY');
+    const monthlyMapAll=buildMonthlyAgg(tx2026Global, t=>t.statusEkspedisi||'TIDAK TERCATAT');
+    const monthlyMapHC=buildMonthlyAgg(tx2026Global.filter(isHandCarry), t=>t.statusEkspedisi||'TIDAK TERCATAT');
+    const monthlyMapLuar=buildMonthlyAgg(tx2026Global.filter(t=>!isHandCarry(t)), t=>t.statusEkspedisi||'TIDAK TERCATAT');
+    const computeRowsFor=(monthlyMap,mf)=>{
+      const list=[];
+      monthlyMap.forEach((monthly,nama)=>{
+        const agg=aggForMonth(monthly,mf);
+        list.push({nama,invoiceUnik:agg.invoiceUnik,qty:agg.qty,koli:agg.koli,sales:agg.sales});
+      });
+      list.sort((a,b)=>b.sales-a.sales);
+      return list.map(x=>[x.nama,Num(x.invoiceUnik),Num(x.qty),Num(x.koli),Rp(x.sales),x.nama]);
+    };
     return {
       title:'Delivery & Ekspedisi 2026',
       kpis:[
@@ -224,22 +328,54 @@ function buildSpec(m){
         {label:'Ekspedisi Luar',value:Pct(d.ekspedisiLuar.pct)},
         {label:'Total Koli',value:Num(d.totalKoli)},
       ],
-      tableTitle:'Jalur Ekspedisi',
-      columns:['Jalur Ekspedisi','Jumlah','Persentase','Qty'],
-      rows:mapRows(d.byEkspedisi),
+      tableTitle:'Jalur Ekspedisi (Invoice Unik, Qty, Koli & Sales)',
+      columns:['Jalur Ekspedisi','Invoice Unik','Quantity','Koli','Sales'],
       filterLabel:'Jenis',
       filterOptions:['Semua','Hand Carry','Ekspedisi Luar'],
-      rowsByFilter:{
-        Semua:mapRows(d.byEkspedisi),
-        'Hand Carry':mapRows(d.byEkspedisi.filter(e=>e.nama.toUpperCase().includes('HAND CARRY'))),
-        'Ekspedisi Luar':mapRows(d.byEkspedisi.filter(e=>!e.nama.toUpperCase().includes('HAND CARRY'))),
+      monthFilterEnabled:true,
+      computeVariants:(mf)=>({
+        Semua:computeRowsFor(monthlyMapAll,mf),
+        'Hand Carry':computeRowsFor(monthlyMapHC,mf),
+        'Ekspedisi Luar':computeRowsFor(monthlyMapLuar,mf),
+      }),
+      rowClickable:true,
+      rowClickHint:'Klik nama jalur ekspedisi untuk melihat invoice unik, qty, koli & sales per bulan.',
+      getDrillData:(nama)=>{
+        const monthly=monthlyMapAll.get(nama)||Array.from({length:12},()=>({sales:0,qty:0,koli:0,invSet:new Set()}));
+        return {
+          title:'Tren Bulanan \u2014 '+nama,
+          columns:['Bulan','Invoice Unik','Quantity','Koli','Sales'],
+          rows:monthly.map((b,i)=>[MONTH_NAMES_ID[i],Num(b.invSet.size),Num(b.qty),Num(b.koli),Rp(b.sales)]),
+        };
       },
     };
   }
   if(section==='ar'){
     const ar=m.ar;
-    const belumLunas=ar.items.filter(i=>i.sisaSaldo>0).sort((a,b)=>agingDays(b.aging)-agingDays(a.aging));
-    const mapRows=list=>list.map(i=>[i.noFaktur,i.customer,Rp(i.sisaSaldo),i.aging]);
+    const belumLunas=ar.items.filter(i=>i.sisaSaldo>0);
+    const AGING_BUCKETS=[
+      {key:'Semua', test:()=>true},
+      {key:'0-13 Hari', test:d=>d>=0&&d<=13},
+      {key:'14-30 Hari', test:d=>d>=14&&d<=30},
+      {key:'>30 Hari', test:d=>d>30},
+      {key:'>60 Hari', test:d=>d>60},
+    ];
+    const byCustomer=new Map();
+    belumLunas.forEach(i=>{
+      if(!byCustomer.has(i.customer)) byCustomer.set(i.customer,[]);
+      byCustomer.get(i.customer).push(i);
+    });
+    function filterByMonth(list,mf){
+      if(mf==='Semua'||mf==null) return list;
+      return list.filter(i=>i.tanggal && i.tanggal.getMonth()===mf);
+    }
+    function computeRowsFor(bucketKey,mf){
+      const bucket=AGING_BUCKETS.find(b=>b.key===bucketKey)||AGING_BUCKETS[0];
+      let list=belumLunas.filter(i=>bucket.test(agingDays(i.aging)));
+      list=filterByMonth(list,mf);
+      list=list.slice().sort((a,b)=>agingDays(b.aging)-agingDays(a.aging));
+      return list.map(i=>[i.noFaktur,i.customer,Rp(i.sisaSaldo),i.aging,i.customer]);
+    }
     return {
       title:'Piutang (AR) 2026',
       kpis:[
@@ -249,18 +385,43 @@ function buildSpec(m){
       ],
       tableTitle:'Piutang Belum Lunas (Aging Tertinggi)',
       columns:['No Faktur','Customer','Sisa Saldo','Aging'],
-      rows:mapRows(belumLunas),
-      filterLabel:'Company',
-      filterOptions:['Semua','MKI','CFN'],
-      rowsByFilter:{
-        Semua:mapRows(belumLunas),
-        MKI:mapRows(belumLunas.filter(i=>i.company==='MKI')),
-        CFN:mapRows(belumLunas.filter(i=>i.company==='CFN')),
+      filterLabel:'Aging',
+      filterOptions:AGING_BUCKETS.map(b=>b.key),
+      monthFilterEnabled:true,
+      computeVariants:(mf)=>{
+        const out={};
+        AGING_BUCKETS.forEach(b=>{ out[b.key]=computeRowsFor(b.key,mf); });
+        return out;
+      },
+      extraKpiForMonth:(mf)=>{
+        const list=filterByMonth(belumLunas,mf);
+        return {label:'Sisa Saldo Bulan Terpilih',value:Rp(list.reduce((s,i)=>s+i.sisaSaldo,0))};
+      },
+      rowClickable:true,
+      rowClickHint:'Klik baris untuk melihat riwayat piutang customer tersebut per bulan.',
+      getDrillData:(customerName)=>{
+        const items=(byCustomer.get(customerName)||[]).slice().sort((a,b)=>(a.tanggal&&b.tanggal?a.tanggal-b.tanggal:0));
+        return {
+          title:'Riwayat Piutang \u2014 '+customerName,
+          columns:['Bulan','No Invoice','Sisa Saldo'],
+          rows:items.map(i=>[i.tanggal?MONTH_NAMES_ID[i.tanggal.getMonth()]:'-',i.noFaktur,Rp(i.sisaSaldo)]),
+        };
       },
     };
   }
   if(section==='customer'){
     const cf=m.customerFrequency;
+    const FREQ_BUCKETS=[
+      {key:'Semua', test:()=>true},
+      {key:'1x Belanja', test:n=>n===1},
+      {key:'2x Belanja', test:n=>n===2},
+      {key:'3-5x Belanja', test:n=>n>=3&&n<=5},
+      {key:'5-10x Belanja', test:n=>n>5&&n<=10},
+      {key:'>10x Belanja', test:n=>n>10},
+    ];
+    const mapRows=list=>list.map(c=>[c.customer,Num(c.invoiceUnik),Rp(c.totalSales)]);
+    const variants={};
+    FREQ_BUCKETS.forEach(b=>{ variants[b.key]=mapRows(cf.allBySales.filter(c=>b.test(c.invoiceUnik))); });
     return {
       title:'Frekuensi Pembelanjaan Customer 2026',
       kpis:[
@@ -270,10 +431,17 @@ function buildSpec(m){
       ],
       tableTitle:'Customer (By Total Sales)',
       columns:['Customer','Frekuensi','Total Sales'],
-      rows:cf.allBySales.map(c=>[c.customer,Num(c.invoiceUnik),Rp(c.totalSales)]),
+      filterLabel:'Frekuensi Belanja',
+      filterOptions:FREQ_BUCKETS.map(b=>b.key),
+      rowsByFilter:variants,
+      rows:variants.Semua,
     };
   }
+  // fiber
   const fo=m.fiberOptic1Core;
+  const mapKodeRow=k=>[k.kode,Rp(k.sales),Num(k.qty),k.kode];
+  const rowsByFilterFiber={Semua:fo.byKode.map(mapKodeRow)};
+  fo.byKode.forEach(k=>{ rowsByFilterFiber[k.kode]=[mapKodeRow(k)]; });
   return {
     title:'Fiber Optic 1-Core 2026',
     kpis:[
@@ -282,14 +450,27 @@ function buildSpec(m){
     ],
     tableTitle:'Kode Barang Fiber Optic 1-Core',
     columns:['Kode Barang','Sales','Quantity'],
-    rows:fo.byKode.map(k=>[k.kode,Rp(k.sales),Num(k.qty)]),
+    filterLabel:'Kode Produk',
+    filterOptions:['Semua',...fo.byKode.map(k=>k.kode)],
+    rowsByFilter:rowsByFilterFiber,
+    rows:rowsByFilterFiber.Semua,
+    rowClickable:true,
+    rowClickHint:'Klik kode barang untuk melihat quantity & sales per bulan.',
+    getDrillData:(kode)=>{
+      const k=fo.byKode.find(x=>x.kode===kode);
+      if(!k) return {title:kode,columns:['Bulan','Quantity','Sales'],rows:[]};
+      return {
+        title:'Tren Bulanan \u2014 '+kode,
+        columns:['Bulan','Quantity','Sales'],
+        rows:k.monthly.map(mo=>[mo.label,Num(mo.qty),Rp(mo.sales)]),
+      };
+    },
   };
 }
 
-let searchQuery='';
-let activeFilter='Semua';
 function getBaseRows(spec){
-  return (spec.rowsByFilter && spec.rowsByFilter[activeFilter]) ? spec.rowsByFilter[activeFilter] : spec.rows;
+  const variants=spec.computeVariants ? spec.computeVariants(monthFilter) : (spec.rowsByFilter || {Semua:spec.rows});
+  return variants[activeFilter] || variants.Semua || spec.rows;
 }
 function getFilteredRows(spec){
   const base=getBaseRows(spec);
@@ -334,9 +515,14 @@ function render(spec){
   document.getElementById('pageTitleTag').textContent=spec.title+' \u2014 MKI Cabang Makassar';
   document.getElementById('pageTitle').textContent=spec.title;
   document.getElementById('pageMeta').textContent=new Date().toLocaleString('id-ID',{dateStyle:'full',timeStyle:'short'});
-  document.getElementById('summaryBar').innerHTML=spec.kpis.map(k=>`<div class="summary-card"><div class="label">${esc(k.label)}</div><div class="value">${esc(k.value)}</div></div>`).join('');
+
+  const kpis=spec.kpis.concat(spec.extraKpiForMonth ? [spec.extraKpiForMonth(monthFilter)] : []);
+  document.getElementById('summaryBar').innerHTML=kpis.map(k=>`<div class="summary-card"><div class="label">${esc(k.label)}</div><div class="value">${esc(k.value)}</div></div>`).join('');
   fitCardValues();
+
   document.getElementById('tableTitle').textContent=spec.tableTitle;
+  document.getElementById('liveSearch').closest('.search-box').classList.toggle('hidden', !!spec.hideSearch);
+
   const filtered=getFilteredRows(spec);
   const baseCount=getBaseRows(spec).length;
   let subText=Num(filtered.length)+' baris data'+(searchQuery.trim()?' (dari total '+Num(baseCount)+')':'');
@@ -348,20 +534,30 @@ function render(spec){
   if(page>totalPages) page=totalPages;
   const shown=filtered.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE);
   const nCols=spec.columns.length;
+  const clickable=spec.isMonthTxDrill||spec.rowClickable;
   document.querySelector('#dataTable tbody').innerHTML=shown.length
     ? shown.map(row=>{
         const cells=row.slice(0,nCols).map(cell=>'<td>'+esc(cell)+'</td>').join('');
-        const cls=spec.rowClickable?' class="data-table-row-clickable"':'';
-        const meta=spec.rowClickable?` data-meta="${esc(row[nCols])}"`:'';
+        const cls=clickable?' class="data-table-row-clickable"':'';
+        const meta=clickable?` data-meta="${esc(row[nCols])}"`:'';
         return `<tr${cls}${meta}>${cells}</tr>`;
       }).join('')
     : `<tr><td colspan="${nCols}" class="empty">${searchQuery.trim() ? 'Tidak ada data yang cocok.' : 'Belum ada data.'}</td></tr>`;
   renderPagination(spec,filtered);
 
-  if(spec.rowClickable){
+  if(clickable){
     document.querySelectorAll('#dataTable tbody tr[data-meta]').forEach(tr=>{
-      tr.addEventListener('click',()=>showMonthDrilldown(parseInt(tr.dataset.meta,10)));
+      tr.addEventListener('click',()=>{
+        if(spec.isMonthTxDrill) showMonthDrilldown(parseInt(tr.dataset.meta,10));
+        else showGenericDrilldown(spec,tr.dataset.meta);
+      });
     });
+  }
+
+  // Kalau hasil pencarian tinggal cocok 1 baris, langsung tampilkan drill-down-nya
+  // (tanpa perlu klik lagi) — memudahkan saat user langsung ketik nama spesifik.
+  if(!spec.isMonthTxDrill && spec.getDrillData && searchQuery.trim() && filtered.length===1){
+    showGenericDrilldown(spec, filtered[0][nCols]);
   }
 }
 
@@ -385,11 +581,14 @@ let drillPage=1;
 const DRILL_PAGE_SIZE=10;
 // MONTH_NAMES_ID sudah dideklarasikan secara global oleh calc.js, dipakai ulang di sini.
 
+// ---- Drill-down khusus Sales/Revenue: daftar transaksi mentah bulan yang diklik,
+// dengan search (No Invoice/Customer) + pagination. ----
 function showMonthDrilldown(monthIdx){
   drillMonthIdx=monthIdx;
   drillSearch='';
   drillPage=1;
   document.getElementById('drillSearch').value='';
+  document.getElementById('drillSearch').closest('.search-box').classList.remove('hidden');
   document.getElementById('drillPanel').style.display='block';
   renderDrilldown();
   document.getElementById('drillPanel').scrollIntoView({behavior:'smooth',block:'start'});
@@ -441,6 +640,22 @@ function renderDrilldown(){
   });
 }
 
+// ---- Drill-down generik: dipakai turnover/wilayah/delivery/ar/fiber — tabel
+// tetap (mis. 12 baris per bulan), tanpa search/pagination. ----
+function showGenericDrilldown(spec,metaKey){
+  const data=spec.getDrillData(metaKey);
+  document.getElementById('drillTitle').textContent=data.title;
+  document.getElementById('drillSub').textContent='';
+  document.getElementById('drillSearch').closest('.search-box').classList.add('hidden');
+  document.getElementById('drillPagination').innerHTML='';
+  document.querySelector('#drillTable thead').innerHTML='<tr>'+data.columns.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr>';
+  document.querySelector('#drillTable tbody').innerHTML=data.rows.length
+    ? data.rows.map(row=>'<tr>'+row.map(cell=>'<td>'+esc(cell)+'</td>').join('')+'</tr>').join('')
+    : `<tr><td colspan="${data.columns.length}" class="empty">Belum ada data.</td></tr>`;
+  document.getElementById('drillPanel').style.display='block';
+  document.getElementById('drillPanel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
 async function main(){
   try{
     const {data,errors}=await loadAllSheetData();
@@ -457,6 +672,17 @@ async function main(){
       sel.innerHTML=spec.filterOptions.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('');
       sel.addEventListener('change',(e)=>{
         activeFilter=e.target.value;
+        page=1;
+        render(spec);
+      });
+    }
+
+    if(spec.monthFilterEnabled){
+      document.getElementById('monthFilterRow').style.display='flex';
+      const msel=document.getElementById('monthFilterSelect');
+      msel.innerHTML='<option value="Semua">Semua Bulan</option>'+MONTH_NAMES_ID.map((mo,i)=>`<option value="${i}">${mo}</option>`).join('');
+      msel.addEventListener('change',(e)=>{
+        monthFilter=e.target.value==='Semua' ? 'Semua' : parseInt(e.target.value,10);
         page=1;
         render(spec);
       });
@@ -479,6 +705,7 @@ async function main(){
   }
 }
 main();
+
 </script>
 </body>
 </html>

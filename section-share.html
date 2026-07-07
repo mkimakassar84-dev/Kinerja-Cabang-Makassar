@@ -78,19 +78,30 @@ function buildSpec(m){
     };
   }
   if(section==='revenue'){
-    const r=m.revTrend;
-    const full=r.monthly.map(mo=>[mo.label,Rp(mo.value)]);
+    const rc=m.revenueByCompany;
+    const mki=rc.companies.find(c=>c.company==='MKI');
+    const cfn=rc.companies.find(c=>c.company==='CFN');
+    const yoy=m.yoyComparison;
+    const rows=yoy.months.map(mo=>[
+      mo.label,
+      Rp(mo.rev2025),
+      Rp(mo.rev2026),
+      Pct(growthPct(mo.rev2026,mo.rev2025)),
+      Rp(mo.targetSalesRevenue),
+      Pct(mo.targetSalesRevenue>0 ? (mo.rev2026/mo.targetSalesRevenue)*100 : 0),
+    ]);
     return {
       title:'Tren Pendapatan (Revenue) 2026',
       kpis:[
-        {label:'TOTAL REVENUE 2026',value:Rp(r.total)},
-        {label:'INVOICE UNIK',value:Num(r.invoiceUnik)},
-        {label:'CUSTOMER UNIK',value:Num(r.customerUnik)},
+        {label:'Total Revenue 2026',value:Rp(yoy.totalRev2026)},
+        {label:'Target Tahunan',value:Rp(yoy.totalTarget)},
+        {label:'Revenue MKI',value:Rp(mki?mki.revenue:0)},
+        {label:'Revenue CFN',value:Rp(cfn?cfn.revenue:0)},
       ],
-      tableTitle:'Revenue per Bulan 2026',
-      columns:['Bulan','Revenue'],
-      rows:full,
-      fullRows:full,
+      tableTitle:'Pendapatan per Bulan & Komparasi 2025 vs 2026',
+      columns:['Bulan','Revenue 2025','Revenue 2026','Growth','Target','Capaian'],
+      rows,
+      fullRows:rows,
     };
   }
   if(section==='ratio'){
