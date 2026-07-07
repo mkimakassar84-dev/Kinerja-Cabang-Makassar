@@ -16,6 +16,16 @@ canvas{display:none;border-radius:12px;max-width:100%;box-shadow:0 8px 32px rgba
 #btnSave{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:12px 0;font-size:14px;cursor:pointer;width:100%;}
 #note{color:rgba(255,255,255,.45);font-size:12px;text-align:center;max-width:320px;line-height:1.6;display:none;}
 #errMsg{display:none;color:#ff6b6b;font-size:14px;text-align:center;max-width:320px;}
+#fullTableWrap{display:none;width:100%;max-width:900px;background:#f8f5f0;border-radius:12px;padding:20px;margin-top:8px;}
+#fullTableWrap h3{color:#5a4a3a;font-size:15px;margin-bottom:12px;}
+#fullTable{width:100%;border-collapse:collapse;font-size:13px;}
+#fullTable th{text-align:left;font-size:11px;text-transform:uppercase;color:#8a7a68;padding:8px;border-bottom:2px solid #e3dccb;}
+#fullTable td{padding:8px;border-bottom:1px solid #e3dccb;color:#3a3530;}
+#fullTable tbody tr:nth-child(even){background:#f0e9dc;}
+#fullPagination{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding:14px 0 0;}
+#fullPagination .page-btn{min-width:30px;height:30px;padding:0 6px;border:1px solid #e3dccb;border-radius:8px;background:#fff;color:#5a4a3a;font-size:13px;cursor:pointer;}
+#fullPagination .page-btn.active{background:#c17a5a;border-color:#c17a5a;color:#fff;font-weight:700;}
+#fullPagination .page-btn:disabled{opacity:.35;cursor:not-allowed;}
 </style>
 </head>
 <body>
@@ -26,8 +36,16 @@ canvas{display:none;border-radius:12px;max-width:100%;box-shadow:0 8px 32px rgba
 <button id="btnWA">&#128242; Kirim ke WhatsApp</button>
 <button id="btnSave">Simpan ke Galeri</button>
 </div>
+<a id="linkPage" href="#" style="display:none;color:#f0c9a8;font-size:13px;text-decoration:underline;text-align:center;">&#128279; Buka halaman ini di tab baru</a>
 <div id="note"></div>
 <div id="errMsg"></div>
+<div id="fullTableWrap">
+  <h3 id="fullTableTitle"></h3>
+  <div style="overflow-x:auto;">
+    <table id="fullTable"><thead></thead><tbody></tbody></table>
+  </div>
+  <div id="fullPagination"></div>
+</div>
 
 <script src="data-loader.js"></script>
 <script src="calc.js"></script>
@@ -35,6 +53,7 @@ canvas{display:none;border-radius:12px;max-width:100%;box-shadow:0 8px 32px rgba
 const Rp=v=>v?'Rp'+Math.round(v).toLocaleString('id-ID'):'Rp0';
 const Num=v=>(v||0).toLocaleString('id-ID');
 const Pct=v=>(v||0).toFixed(1).replace('.',',')+'%';
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 const params=new URLSearchParams(location.search);
 const section=params.get('section')||'sales';
@@ -50,6 +69,7 @@ function buildSpec(m){
   const T=new Date();
   if(section==='sales'){
     const s=m.invoiceCustomerSummary;
+    const full=m.topProducts.topBySales.map(p=>[p.kode,Rp(p.sales),Num(p.qty)]);
     return {
       title:'Tren Penjualan (Sales) 2026',
       kpis:[
@@ -60,11 +80,13 @@ function buildSpec(m){
       ],
       tableTitle:'Top 10 Kode Barang Terlaris (By Sales)',
       columns:['Kode Barang','Sales','Quantity'],
-      rows:m.topProducts.topBySales.slice(0,10).map(p=>[p.kode,Rp(p.sales),Num(p.qty)]),
+      rows:full.slice(0,10),
+      fullRows:full,
     };
   }
   if(section==='revenue'){
     const r=m.revTrend;
+    const full=r.monthly.map(mo=>[mo.label,Rp(mo.value)]);
     return {
       title:'Tren Pendapatan (Revenue) 2026',
       kpis:[
@@ -74,11 +96,13 @@ function buildSpec(m){
       ],
       tableTitle:'Revenue per Bulan 2026',
       columns:['Bulan','Revenue'],
-      rows:r.monthly.map(mo=>[mo.label,Rp(mo.value)]),
+      rows:full,
+      fullRows:full,
     };
   }
   if(section==='ratio'){
     const rr=m.salesToRevenueRatio;
+    const full=rr.monthly.map(mo=>[mo.label,Rp(mo.sales),Rp(mo.revenue),Pct(mo.ratio)]);
     return {
       title:'Rasio Sales to Revenue 2026',
       kpis:[
@@ -88,12 +112,14 @@ function buildSpec(m){
       ],
       tableTitle:'Rasio per Bulan 2026',
       columns:['Bulan','Sales','Revenue','Rasio'],
-      rows:rr.monthly.map(mo=>[mo.label,Rp(mo.sales),Rp(mo.revenue),Pct(mo.ratio)]),
+      rows:full,
+      fullRows:full,
     };
   }
   if(section==='wilayah'){
     const z=m.zonaWilayah;
     const zc=z.zoneCounts||{};
+    const full=[...z.wilayahData].sort((a,b)=>b.total-a.total).map(w=>[w.nama,Num(w.total),w.zone.charAt(0).toUpperCase()+w.zone.slice(1)]);
     return {
       title:'Performa & Zona Wilayah Kabupaten/Kota',
       kpis:[
@@ -104,11 +130,13 @@ function buildSpec(m){
       ],
       tableTitle:'Top 10 Wilayah (By Total Invoice 2026)',
       columns:['Kabupaten/Kota','Total Invoice','Zona'],
-      rows:[...z.wilayahData].sort((a,b)=>b.total-a.total).slice(0,10).map(w=>[w.nama,Num(w.total),w.zone.charAt(0).toUpperCase()+w.zone.slice(1)]),
+      rows:full.slice(0,10),
+      fullRows:full,
     };
   }
   if(section==='turnover'){
     const tp=m.topProducts;
+    const full=tp.topBySales.map(p=>[p.kode,Rp(p.sales),Num(p.qty)]);
     return {
       title:'Turnover Gudang — Kode Barang Terlaris',
       kpis:[
@@ -117,11 +145,13 @@ function buildSpec(m){
       ],
       tableTitle:'Top 10 Kode Barang Terlaris (By Sales)',
       columns:['Kode Barang','Sales','Quantity'],
-      rows:tp.topBySales.slice(0,10).map(p=>[p.kode,Rp(p.sales),Num(p.qty)]),
+      rows:full.slice(0,10),
+      fullRows:full,
     };
   }
   if(section==='delivery'){
     const d=m.delivery;
+    const full=d.byEkspedisi.map(e=>[e.nama,Num(e.count),Pct(e.pct),Num(e.qty)]);
     return {
       title:'Delivery & Ekspedisi 2026',
       kpis:[
@@ -132,12 +162,14 @@ function buildSpec(m){
       ],
       tableTitle:'Top 10 Jalur Ekspedisi',
       columns:['Jalur Ekspedisi','Jumlah','Persentase','Qty'],
-      rows:d.byEkspedisi.slice(0,10).map(e=>[e.nama,Num(e.count),Pct(e.pct),Num(e.qty)]),
+      rows:full.slice(0,10),
+      fullRows:full,
     };
   }
   if(section==='ar'){
     const ar=m.ar;
     const belumLunas=ar.items.filter(i=>i.sisaSaldo>0).sort((a,b)=>agingDays(b.aging)-agingDays(a.aging));
+    const full=belumLunas.map(i=>[i.noFaktur,i.customer,Rp(i.sisaSaldo),i.aging]);
     return {
       title:'Piutang (AR) 2026',
       kpis:[
@@ -147,11 +179,13 @@ function buildSpec(m){
       ],
       tableTitle:'Top 10 Piutang (Aging Tertinggi)',
       columns:['No Faktur','Customer','Sisa Saldo','Aging'],
-      rows:belumLunas.slice(0,10).map(i=>[i.noFaktur,i.customer,Rp(i.sisaSaldo),i.aging]),
+      rows:full.slice(0,10),
+      fullRows:full,
     };
   }
   if(section==='customer'){
     const cf=m.customerFrequency;
+    const full=cf.allBySales.map(c=>[c.customer,Num(c.invoiceUnik),Rp(c.totalSales)]);
     return {
       title:'Frekuensi Pembelanjaan Customer 2026',
       kpis:[
@@ -161,11 +195,13 @@ function buildSpec(m){
       ],
       tableTitle:'Top 10 Customer (By Total Sales)',
       columns:['Customer','Frekuensi','Total Sales'],
-      rows:cf.top10BySales.slice(0,10).map(c=>[c.customer,Num(c.invoiceUnik),Rp(c.totalSales)]),
+      rows:full.slice(0,10),
+      fullRows:full,
     };
   }
   // fiber
   const fo=m.fiberOptic1Core;
+  const full=fo.byKode.map(k=>[k.kode,Rp(k.sales),Num(k.qty)]);
   return {
     title:'Fiber Optic 1-Core 2026',
     kpis:[
@@ -174,7 +210,8 @@ function buildSpec(m){
     ],
     tableTitle:'Kode Barang Fiber Optic 1-Core',
     columns:['Kode Barang','Sales','Quantity'],
-    rows:fo.byKode.slice(0,10).map(k=>[k.kode,Rp(k.sales),Num(k.qty)]),
+    rows:full.slice(0,10),
+    fullRows:full,
   };
 }
 
@@ -249,7 +286,57 @@ function cap(spec){
   const DY=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   const MO=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
   const kpiLines=spec.kpis.map(k=>k.label+': '+k.value).join('\n');
-  return '\ud83d\udcca *'+spec.title+'*\n'+DY[T.getDay()]+', '+T.getDate()+' '+MO[T.getMonth()]+' '+T.getFullYear()+'\n\n'+kpiLines;
+  const link=location.origin+location.pathname+'?section='+section;
+  return '\ud83d\udcca *'+spec.title+'*\n'+DY[T.getDay()]+', '+T.getDate()+' '+MO[T.getMonth()]+' '+T.getFullYear()+'\n\n'+kpiLines+'\n\n\ud83d\udd17 Lihat halaman lengkap:\n'+link;
+}
+
+const FULL_TABLE_PAGE_SIZE=15;
+let fullTablePage=1;
+
+function renderFullTable(spec){
+  const total=spec.fullRows.length;
+  if(total<=FULL_TABLE_PAGE_SIZE){
+    // Data sedikit (<=15) — tabel preview di gambar sudah cukup, tidak perlu tabel
+    // interaktif terpisah.
+    return;
+  }
+  document.getElementById('fullTableWrap').style.display='block';
+  document.getElementById('fullTableTitle').textContent='Data Lengkap: '+spec.tableTitle.replace(/^Top \d+\s*/,'')+' ('+Num(total)+' baris)';
+
+  const theadRow='<tr>'+spec.columns.map(c=>'<th>'+c+'</th>').join('')+'</tr>';
+  document.querySelector('#fullTable thead').innerHTML=theadRow;
+
+  function render(){
+    const totalPages=Math.max(1,Math.ceil(total/FULL_TABLE_PAGE_SIZE));
+    if(fullTablePage>totalPages) fullTablePage=totalPages;
+    const shown=spec.fullRows.slice((fullTablePage-1)*FULL_TABLE_PAGE_SIZE, fullTablePage*FULL_TABLE_PAGE_SIZE);
+    document.querySelector('#fullTable tbody').innerHTML=shown.map(row=>'<tr>'+row.map(cell=>'<td>'+esc(cell)+'</td>').join('')+'</tr>').join('');
+
+    const pages=[];
+    const windowSize=7;
+    if(totalPages<=windowSize){ for(let i=1;i<=totalPages;i++) pages.push(i); }
+    else{
+      pages.push(1);
+      let start=Math.max(2,fullTablePage-2), end=Math.min(totalPages-1,fullTablePage+2);
+      if(start>2) pages.push('...');
+      for(let i=start;i<=end;i++) pages.push(i);
+      if(end<totalPages-1) pages.push('...');
+      pages.push(totalPages);
+    }
+    const pagEl=document.getElementById('fullPagination');
+    pagEl.innerHTML=`
+      <button class="page-btn" data-page="${fullTablePage-1}" ${fullTablePage===1?'disabled':''}>&larr;</button>
+      ${pages.map(p=>p==='...' ? '<span style="padding:0 4px;color:#8a7a68;">&hellip;</span>' : `<button class="page-btn ${p===fullTablePage?'active':''}" data-page="${p}">${p}</button>`).join('')}
+      <button class="page-btn" data-page="${fullTablePage+1}" ${fullTablePage===totalPages?'disabled':''}>&rarr;</button>
+    `;
+    pagEl.querySelectorAll('.page-btn[data-page]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const p=parseInt(btn.dataset.page,10);
+        if(p>=1&&p<=totalPages){ fullTablePage=p; render(); }
+      });
+    });
+  }
+  render();
 }
 
 async function main(){
@@ -259,9 +346,14 @@ async function main(){
     document.getElementById('status').textContent='Membuat gambar\u2026';
     const spec=buildSpec(m);
     draw(spec);
+    renderFullTable(spec);
     document.getElementById('spinner').style.display='none';
     document.getElementById('status').style.display='none';
     const cv=document.getElementById('cv');cv.style.display='block';document.getElementById('btnGroup').style.display='flex';
+    const pageLink=location.origin+location.pathname+'?section='+section;
+    const linkEl=document.getElementById('linkPage');
+    linkEl.href=pageLink;
+    linkEl.style.display='block';
 
     const ts=new Date().toISOString().slice(0,10);
     const fn='MKI-'+section+'-'+ts+'.png';
