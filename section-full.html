@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="pageTitleTag">Laporan MKI Cabang Makassar</title>
+<style>
+:root{
+  --cream:#f6f1e8; --paper:#ffffff; --ink:#2a2520; --ink-soft:#8a7a68;
+  --line:#e3dccb; --terra:#c17a5a; --terra-dim:#f1ddd2; --shadow:0 1px 3px rgba(60,40,20,.06);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--cream);color:var(--ink);padding:24px 16px 60px;}
+.wrap{max-width:900px;margin:0 auto;}
+header{background:linear-gradient(135deg,#c17a5a,#a85d3f);color:#fff;border-radius:14px;padding:22px 24px;margin-bottom:20px;box-shadow:var(--shadow);}
+header .eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.7;margin-bottom:6px;}
+header h1{font-size:21px;font-weight:700;margin-bottom:8px;}
+header .meta{font-size:13px;opacity:.85;}
+.summary-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
+.summary-card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow);min-width:0;}
+.summary-card .label{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;}
+.summary-card .value{font-size:18px;font-weight:700;word-break:break-word;}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px 20px 8px;box-shadow:var(--shadow);}
+.panel h2{font-size:15px;font-weight:700;margin-bottom:2px;}
+.panel .sub{font-size:12px;color:var(--ink-soft);margin-bottom:12px;}
+.table-scroll{overflow-x:auto;margin:0 -20px;padding:0 20px 4px;}
+table{width:100%;min-width:340px;border-collapse:collapse;font-size:13px;}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);padding:8px;border-bottom:2px solid var(--line);white-space:nowrap;}
+td{padding:9px 8px;border-bottom:1px solid var(--line);}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--cream);}
+.pagination{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-items:center;padding:14px 0 4px;}
+.page-btn{min-width:32px;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font-size:13px;cursor:pointer;}
+.page-btn:hover:not(:disabled){border-color:var(--terra);color:var(--terra);}
+.page-btn.active{background:var(--terra);border-color:var(--terra);color:#fff;font-weight:700;}
+.page-btn:disabled{opacity:.35;cursor:not-allowed;}
+.page-ellipsis{color:var(--ink-soft);padding:0 2px;}
+footer{text-align:center;font-size:11.5px;color:var(--ink-soft);margin-top:24px;}
+#status{text-align:center;padding:60px 20px;color:var(--ink-soft);}
+.spinner{width:36px;height:36px;border:3px solid var(--line);border-top-color:var(--terra);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+#content{display:none;}
+.empty{padding:24px 8px;text-align:center;color:var(--ink-soft);font-style:italic;font-size:13px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="status"><div class="spinner"></div>Mengambil data dari Google Sheets&hellip;</div>
+  <div id="content">
+    <header>
+      <div class="eyebrow">MKI &mdash; Cabang Makassar</div>
+      <h1 id="pageTitle"></h1>
+      <div class="meta" id="pageMeta"></div>
+    </header>
+    <div class="summary-bar" id="summaryBar"></div>
+    <div class="panel">
+      <h2 id="tableTitle"></h2>
+      <div class="sub" id="tableSub"></div>
+      <div class="table-scroll">
+        <table id="dataTable"><thead></thead><tbody></tbody></table>
+      </div>
+      <div class="pagination" id="pagination"></div>
+    </div>
+    <footer>mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar &bull; Data langsung dari Google Sheets</footer>
+  </div>
+</div>
+
+<script src="data-loader.js"></script>
+<script src="calc.js"></script>
+<script>
+const Rp=v=>v?'Rp'+Math.round(v).toLocaleString('id-ID'):'Rp0';
+const Num=v=>(v||0).toLocaleString('id-ID');
+const Pct=v=>(v||0).toFixed(1).replace('.',',')+'%';
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const params=new URLSearchParams(location.search);
+const section=params.get('section')||'sales';
+const PAGE_SIZE=15;
+let page=1;
+
+function agingDays(txt){ const m=String(txt||'').match(/\d+/g); return m ? parseInt(m[m.length-1],10) : 0; }
+
+// Menyusun judul + KPI + tabel per section, dari objek metrics `m` yang SAMA
+// PERSIS dipakai dashboard (computeAllMetrics) — supaya angka selalu konsisten.
+function buildSpec(m){
+  if(section==='sales'){
+    const s=m.invoiceCustomerSummary;
+    return {
+      title:'Tren Penjualan (Sales) 2026',
+      kpis:[
+        {label:'Total Sales 2026',value:Rp(s.totalSales)},
+        {label:'Total Qty Terjual',value:Num(s.totalQty)},
+        {label:'Total Invoice Unik',value:Num(s.totalInvoiceUnik)},
+        {label:'Total Customer Unik',value:Num(s.totalCustomerUnik)},
+      ],
+      tableTitle:'Kode Barang Terlaris (By Sales)',
+      columns:['Kode Barang','Sales','Quantity'],
+      rows:m.topProducts.topBySales.map(p=>[p.kode,Rp(p.sales),Num(p.qty)]),
+    };
+  }
+  if(section==='revenue'){
+    const r=m.revTrend;
+    return {
+      title:'Tren Pendapatan (Revenue) 2026',
+      kpis:[
+        {label:'Total Revenue 2026',value:Rp(r.total)},
+        {label:'Invoice Unik',value:Num(r.invoiceUnik)},
+        {label:'Customer Unik',value:Num(r.customerUnik)},
+      ],
+      tableTitle:'Revenue per Bulan 2026',
+      columns:['Bulan','Revenue'],
+      rows:r.monthly.map(mo=>[mo.label,Rp(mo.value)]),
+    };
+  }
+  if(section==='ratio'){
+    const rr=m.salesToRevenueRatio;
+    return {
+      title:'Rasio Sales to Revenue 2026',
+      kpis:[
+        {label:'Total Sales',value:Rp(rr.totalSales)},
+        {label:'Total Revenue',value:Rp(rr.totalRevenue)},
+        {label:'Rasio Keseluruhan',value:Pct(rr.totalRatio)},
+      ],
+      tableTitle:'Rasio per Bulan 2026',
+      columns:['Bulan','Sales','Revenue','Rasio'],
+      rows:rr.monthly.map(mo=>[mo.label,Rp(mo.sales),Rp(mo.revenue),Pct(mo.ratio)]),
+    };
+  }
+  if(section==='wilayah'){
+    const z=m.zonaWilayah;
+    const zc=z.zoneCounts||{};
+    return {
+      title:'Performa & Zona Wilayah Kabupaten/Kota',
+      kpis:[
+        {label:'Total Wilayah',value:Num(z.totalWilayah)},
+        {label:'Wilayah Aktif',value:Num(z.wilayahAktif.length)},
+        {label:'Zona Hijau',value:Num(zc.hijau||0)},
+        {label:'Zona Merah',value:Num(zc.merah||0)},
+      ],
+      tableTitle:'Wilayah (By Total Invoice 2026)',
+      columns:['Kabupaten/Kota','Total Invoice','Zona'],
+      rows:[...z.wilayahData].sort((a,b)=>b.total-a.total).map(w=>[w.nama,Num(w.total),w.zone.charAt(0).toUpperCase()+w.zone.slice(1)]),
+    };
+  }
+  if(section==='turnover'){
+    const tp=m.topProducts;
+    return {
+      title:'Turnover Gudang \u2014 Kode Barang Terlaris',
+      kpis:[
+        {label:'Total Kode Barang',value:Num(tp.totalProductCount)},
+        {label:'Terlaris (Sales)',value:tp.topBySales[0]?tp.topBySales[0].kode:'-'},
+      ],
+      tableTitle:'Kode Barang Terlaris (By Sales)',
+      columns:['Kode Barang','Sales','Quantity'],
+      rows:tp.topBySales.map(p=>[p.kode,Rp(p.sales),Num(p.qty)]),
+    };
+  }
+  if(section==='delivery'){
+    const d=m.delivery;
+    return {
+      title:'Delivery & Ekspedisi 2026',
+      kpis:[
+        {label:'Total Transaksi',value:Num(d.total)},
+        {label:'Hand Carry',value:Pct(d.handCarry.pct)},
+        {label:'Ekspedisi Luar',value:Pct(d.ekspedisiLuar.pct)},
+        {label:'Total Koli',value:Num(d.totalKoli)},
+      ],
+      tableTitle:'Jalur Ekspedisi',
+      columns:['Jalur Ekspedisi','Jumlah','Persentase','Qty'],
+      rows:d.byEkspedisi.map(e=>[e.nama,Num(e.count),Pct(e.pct),Num(e.qty)]),
+    };
+  }
+  if(section==='ar'){
+    const ar=m.ar;
+    const belumLunas=ar.items.filter(i=>i.sisaSaldo>0).sort((a,b)=>agingDays(b.aging)-agingDays(a.aging));
+    return {
+      title:'Piutang (AR) 2026',
+      kpis:[
+        {label:'Total Sisa Saldo',value:Rp(ar.totalSisaSaldo)},
+        {label:'Piutang >60 Hari',value:Rp(ar.totalPiutangDiatas60Hari)},
+        {label:'Rasio AR / Sales',value:Pct(ar.ratioARtoSales)},
+      ],
+      tableTitle:'Piutang Belum Lunas (Aging Tertinggi)',
+      columns:['No Faktur','Customer','Sisa Saldo','Aging'],
+      rows:belumLunas.map(i=>[i.noFaktur,i.customer,Rp(i.sisaSaldo),i.aging]),
+    };
+  }
+  if(section==='customer'){
+    const cf=m.customerFrequency;
+    return {
+      title:'Frekuensi Pembelanjaan Customer 2026',
+      kpis:[
+        {label:'Total Customer Unik',value:Num(cf.totalCustomer)},
+        {label:'Rata-rata Frekuensi',value:cf.avgFrequency.toFixed(1)+'x'},
+        {label:'Customer Tidak Aktif',value:Num(cf.churnedCustomers.length)},
+      ],
+      tableTitle:'Customer (By Total Sales)',
+      columns:['Customer','Frekuensi','Total Sales'],
+      rows:cf.allBySales.map(c=>[c.customer,Num(c.invoiceUnik),Rp(c.totalSales)]),
+    };
+  }
+  const fo=m.fiberOptic1Core;
+  return {
+    title:'Fiber Optic 1-Core 2026',
+    kpis:[
+      {label:'Total Sales',value:Rp(fo.totalSales)},
+      {label:'Total Qty',value:Num(fo.totalQty)},
+    ],
+    tableTitle:'Kode Barang Fiber Optic 1-Core',
+    columns:['Kode Barang','Sales','Quantity'],
+    rows:fo.byKode.map(k=>[k.kode,Rp(k.sales),Num(k.qty)]),
+  };
+}
+
+function renderPagination(spec){
+  const total=spec.rows.length;
+  const totalPages=Math.max(1,Math.ceil(total/PAGE_SIZE));
+  if(page>totalPages) page=totalPages;
+  const el=document.getElementById('pagination');
+  if(totalPages<=1){ el.innerHTML=''; return; }
+  const pages=[];
+  const windowSize=7;
+  if(totalPages<=windowSize){ for(let i=1;i<=totalPages;i++) pages.push(i); }
+  else{
+    pages.push(1);
+    let start=Math.max(2,page-2), end=Math.min(totalPages-1,page+2);
+    if(start>2) pages.push('...');
+    for(let i=start;i<=end;i++) pages.push(i);
+    if(end<totalPages-1) pages.push('...');
+    pages.push(totalPages);
+  }
+  el.innerHTML=`
+    <button class="page-btn" data-page="${page-1}" ${page===1?'disabled':''}>&larr;</button>
+    ${pages.map(p=>p==='...' ? '<span class="page-ellipsis">&hellip;</span>' : `<button class="page-btn ${p===page?'active':''}" data-page="${p}">${p}</button>`).join('')}
+    <button class="page-btn" data-page="${page+1}" ${page===totalPages?'disabled':''}>&rarr;</button>
+  `;
+  el.querySelectorAll('.page-btn[data-page]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const p=parseInt(btn.dataset.page,10);
+      if(p>=1&&p<=totalPages){ page=p; render(spec); window.scrollTo({top:0,behavior:'smooth'}); }
+    });
+  });
+}
+
+let currentSpec=null;
+function render(spec){
+  currentSpec=spec;
+  document.getElementById('pageTitleTag').textContent=spec.title+' \u2014 MKI Cabang Makassar';
+  document.getElementById('pageTitle').textContent=spec.title;
+  document.getElementById('pageMeta').textContent=new Date().toLocaleString('id-ID',{dateStyle:'full',timeStyle:'short'});
+  document.getElementById('summaryBar').innerHTML=spec.kpis.map(k=>`<div class="summary-card"><div class="label">${esc(k.label)}</div><div class="value">${esc(k.value)}</div></div>`).join('');
+  document.getElementById('tableTitle').textContent=spec.tableTitle;
+  document.getElementById('tableSub').textContent=Num(spec.rows.length)+' baris data';
+  document.querySelector('#dataTable thead').innerHTML='<tr>'+spec.columns.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr>';
+
+  const totalPages=Math.max(1,Math.ceil(spec.rows.length/PAGE_SIZE));
+  if(page>totalPages) page=totalPages;
+  const shown=spec.rows.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE);
+  document.querySelector('#dataTable tbody').innerHTML=shown.length
+    ? shown.map(row=>'<tr>'+row.map(cell=>'<td>'+esc(cell)+'</td>').join('')+'</tr>').join('')
+    : `<tr><td colspan="${spec.columns.length}" class="empty">Belum ada data.</td></tr>`;
+  renderPagination(spec);
+}
+
+async function main(){
+  try{
+    const {data,errors}=await loadAllSheetData();
+    const m=computeAllMetrics(data);
+    const spec=buildSpec(m);
+    document.getElementById('status').style.display='none';
+    document.getElementById('content').style.display='block';
+    render(spec);
+  }catch(err){
+    document.getElementById('status').innerHTML='<div style="color:#b84040;">Gagal memuat data: '+esc(err.message)+'</div>';
+    console.error(err);
+  }
+}
+main();
+</script>
+</body>
+</html>
