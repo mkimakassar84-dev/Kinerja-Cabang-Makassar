@@ -200,9 +200,9 @@ function buildSpec(m){
       tableTitle:'Pendapatan per Bulan & Komparasi 2025 vs 2026',
       columns:['Bulan','Revenue 2025','Revenue 2026','Growth','Target','Capaian'],
       rows,
-      isMonthTxDrill:true,
+      isMonthRevDrill:true,
       hideSearch:true,
-      rowClickHint:'Klik nama bulan untuk melihat semua transaksi bulan tersebut.',
+      rowClickHint:'Klik nama bulan untuk melihat semua pelunasan bulan tersebut.',
     };
   }
   if(section==='ratio'){
@@ -514,7 +514,7 @@ function render(spec){
   if(page>totalPages) page=totalPages;
   const shown=filtered.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE);
   const nCols=spec.columns.length;
-  const clickable=spec.isMonthTxDrill||spec.rowClickable;
+  const clickable=spec.isMonthTxDrill||spec.isMonthRevDrill||spec.rowClickable;
   document.querySelector('#dataTable tbody').innerHTML=shown.length
     ? shown.map(row=>{
         const cells=row.slice(0,nCols).map(cell=>'<td>'+esc(cell)+'</td>').join('');
@@ -529,6 +529,7 @@ function render(spec){
     document.querySelectorAll('#dataTable tbody tr[data-meta]').forEach(tr=>{
       tr.addEventListener('click',()=>{
         if(spec.isMonthTxDrill) showMonthDrilldown(parseInt(tr.dataset.meta,10));
+        else if(spec.isMonthRevDrill) showMonthDrilldownRev(parseInt(tr.dataset.meta,10));
         else showGenericDrilldown(spec,tr.dataset.meta);
       });
     });
@@ -536,7 +537,7 @@ function render(spec){
 
   // Kalau hasil pencarian tinggal cocok 1 baris, langsung tampilkan drill-down-nya
   // (tanpa perlu klik lagi) — memudahkan saat user langsung ketik nama spesifik.
-  if(!spec.isMonthTxDrill && spec.getDrillData && searchQuery.trim() && filtered.length===1){
+  if(!spec.isMonthTxDrill && !spec.isMonthRevDrill && spec.getDrillData && searchQuery.trim() && filtered.length===1){
     showGenericDrilldown(spec, filtered[0][nCols]);
   }
 }
@@ -555,6 +556,7 @@ function fitCardValues(){
 }
 
 let tx2026Global=[];
+let rev2026Global=[];
 let drillMonthIdx=null;
 let drillSearch='';
 let drillPage=1;
@@ -620,6 +622,67 @@ function renderDrilldown(){
   });
 }
 
+// ---- Drill-down khusus Revenue: data ASLI dari sheet Rev SUM (bukan Grand
+// Data/Sales) — Tanggal Pelunasan, No Invoice, Nama Customer, Nominal
+// Pelunasan, Company. Dengan search (No Invoice/Customer) + pagination. ----
+function showMonthDrilldownRev(monthIdx){
+  drillMonthIdx=monthIdx;
+  drillSearch='';
+  drillPage=1;
+  document.getElementById('drillSearch').value='';
+  document.getElementById('drillSearch').placeholder='Cari No Invoice atau nama customer\u2026';
+  document.getElementById('drillSearch').closest('.search-box').classList.remove('hidden');
+  document.getElementById('drillPanel').style.display='block';
+  renderDrilldownRev();
+  document.getElementById('drillPanel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function renderDrilldownRev(){
+  if(drillMonthIdx==null) return;
+  const monthRev=rev2026Global.filter(r=>r.paymentDate.getMonth()===drillMonthIdx)
+    .sort((a,b)=>a.paymentDate-b.paymentDate || a.noFaktur.localeCompare(b.noFaktur,undefined,{numeric:true}));
+
+  document.getElementById('drillTitle').textContent='Pelunasan Bulan '+MONTH_NAMES_ID[drillMonthIdx]+' 2026';
+
+  const q=drillSearch.trim().toUpperCase();
+  const filtered=q ? monthRev.filter(r=>r.noFaktur.toUpperCase().includes(q)||r.customer.toUpperCase().includes(q)) : monthRev;
+  document.getElementById('drillSub').textContent=Num(filtered.length)+' pelunasan'+(q?' (dari total '+Num(monthRev.length)+')':'');
+
+  document.querySelector('#drillTable thead').innerHTML='<tr><th>Tanggal Pelunasan</th><th>No Invoice</th><th>Nama Customer</th><th>Nominal Pelunasan</th><th>Company</th></tr>';
+
+  const totalPages=Math.max(1,Math.ceil(filtered.length/DRILL_PAGE_SIZE));
+  if(drillPage>totalPages) drillPage=totalPages;
+  const shown=filtered.slice((drillPage-1)*DRILL_PAGE_SIZE,drillPage*DRILL_PAGE_SIZE);
+  document.querySelector('#drillTable tbody').innerHTML=shown.length
+    ? shown.map(r=>`<tr><td>${esc(fmtDateShort(r.paymentDate))}</td><td>${esc(r.noFaktur)}</td><td>${esc(r.customer)}</td><td>${Rp(r.pelunasan)}</td><td>${esc(r.company)}</td></tr>`).join('')
+    : `<tr><td colspan="5" class="empty">${q?'Tidak ada pelunasan yang cocok.':'Belum ada pelunasan bulan ini.'}</td></tr>`;
+
+  const el=document.getElementById('drillPagination');
+  if(totalPages<=1){ el.innerHTML=''; return; }
+  const pages=[];
+  const windowSize=7;
+  if(totalPages<=windowSize){ for(let i=1;i<=totalPages;i++) pages.push(i); }
+  else{
+    pages.push(1);
+    let start=Math.max(2,drillPage-2), end=Math.min(totalPages-1,drillPage+2);
+    if(start>2) pages.push('...');
+    for(let i=start;i<=end;i++) pages.push(i);
+    if(end<totalPages-1) pages.push('...');
+    pages.push(totalPages);
+  }
+  el.innerHTML=`
+    <button class="page-btn" data-page="${drillPage-1}" ${drillPage===1?'disabled':''}>&larr;</button>
+    ${pages.map(p=>p==='...' ? '<span class="page-ellipsis">&hellip;</span>' : `<button class="page-btn ${p===drillPage?'active':''}" data-page="${p}">${p}</button>`).join('')}
+    <button class="page-btn" data-page="${drillPage+1}" ${drillPage===totalPages?'disabled':''}>&rarr;</button>
+  `;
+  el.querySelectorAll('.page-btn[data-page]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const p=parseInt(btn.dataset.page,10);
+      if(p>=1&&p<=totalPages){ drillPage=p; renderDrilldownRev(); }
+    });
+  });
+}
+
 // ---- Drill-down generik: dipakai turnover/wilayah/delivery/ar/fiber — tabel
 // tetap (mis. 12 baris per bulan), tanpa search/pagination. ----
 function showGenericDrilldown(spec,metaKey){
@@ -641,6 +704,7 @@ async function main(){
     const {data,errors}=await loadAllSheetData();
     const m=computeAllMetrics(data);
     tx2026Global=filterYear(m.transactions,CURRENT_YEAR);
+    rev2026Global=m.revAllNormalized.filter(r=>r.paymentDate.getFullYear()===CURRENT_YEAR);
     const spec=buildSpec(m);
     document.getElementById('status').style.display='none';
     document.getElementById('content').style.display='block';
@@ -677,7 +741,7 @@ async function main(){
     document.getElementById('drillSearch').addEventListener('input',(e)=>{
       drillSearch=e.target.value;
       drillPage=1;
-      renderDrilldown();
+      if(section==='revenue') renderDrilldownRev(); else renderDrilldown();
     });
   }catch(err){
     document.getElementById('status').innerHTML='<div style="color:#b84040;">Gagal memuat data: '+esc(err.message)+'</div>';
