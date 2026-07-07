@@ -171,6 +171,7 @@ function buildSpec(m){
       columns:['Bulan','Sales 2025','Sales 2026','Growth','Target','Capaian'],
       rows,
       isMonthTxDrill:true,
+      hideSearch:true,
       rowClickHint:'Klik nama bulan untuk melihat semua transaksi bulan tersebut.',
     };
   }
@@ -200,6 +201,7 @@ function buildSpec(m){
       columns:['Bulan','Revenue 2025','Revenue 2026','Growth','Target','Capaian'],
       rows,
       isMonthTxDrill:true,
+      hideSearch:true,
       rowClickHint:'Klik nama bulan untuk melihat semua transaksi bulan tersebut.',
     };
   }
@@ -222,12 +224,12 @@ function buildSpec(m){
     const z=m.zonaWilayah;
     const zc=z.zoneCounts||{};
     const monthlyMap=buildMonthlyAgg(tx2026Global, t=>t.lokasi);
-    const computeRowsFor=(zoneKey,mf)=>{
+    const computeRowsFor=(zoneKey)=>{
       let list=z.wilayahData;
       if(zoneKey!=='Semua') list=list.filter(w=>w.zone===zoneKey.toLowerCase());
       const withAgg=list.map(w=>{
         const monthly=monthlyMap.get(w.nama)||Array.from({length:12},()=>({sales:0,qty:0,koli:0,invSet:new Set()}));
-        const agg=aggForMonth(monthly,mf);
+        const agg=aggForMonth(monthly,'Semua');
         return {nama:w.nama,zone:w.zone,sales:agg.sales,invoiceUnik:agg.invoiceUnik};
       }).sort((a,b)=>b.sales-a.sales);
       return withAgg.map(x=>[x.nama,Num(x.invoiceUnik),Rp(x.sales),x.zone.charAt(0).toUpperCase()+x.zone.slice(1),x.nama]);
@@ -244,13 +246,13 @@ function buildSpec(m){
       columns:['Kabupaten/Kota','Invoice Unik','Sales','Zona'],
       filterLabel:'Zona',
       filterOptions:['Semua','Hijau','Kuning','Merah'],
-      monthFilterEnabled:true,
-      computeVariants:(mf)=>({
-        Semua:computeRowsFor('Semua',mf),
-        Hijau:computeRowsFor('Hijau',mf),
-        Kuning:computeRowsFor('Kuning',mf),
-        Merah:computeRowsFor('Merah',mf),
-      }),
+      rowsByFilter:{
+        Semua:computeRowsFor('Semua'),
+        Hijau:computeRowsFor('Hijau'),
+        Kuning:computeRowsFor('Kuning'),
+        Merah:computeRowsFor('Merah'),
+      },
+      rows:computeRowsFor('Semua'),
       rowClickable:true,
       rowClickHint:'Klik nama wilayah untuk melihat invoice unik & sales per bulan.',
       getDrillData:(nama)=>{
@@ -268,9 +270,9 @@ function buildSpec(m){
     const monthlyMapAll=buildMonthlyAgg(tx2026Global, t=>t.kodeBarang);
     const monthlyMapMKI=buildMonthlyAgg(tx2026Global.filter(t=>t.company==='MKI'), t=>t.kodeBarang);
     const monthlyMapCFN=buildMonthlyAgg(tx2026Global.filter(t=>t.company==='CFN'), t=>t.kodeBarang);
-    const computeRowsFor=(monthlyMap,mf)=>{
+    const computeRowsFor=(mf)=>{
       const list=[];
-      monthlyMap.forEach((monthly,kode)=>{
+      monthlyMapAll.forEach((monthly,kode)=>{
         const agg=aggForMonth(monthly,mf);
         list.push({kode,sales:agg.sales,qty:agg.qty});
       });
@@ -285,35 +287,32 @@ function buildSpec(m){
       ],
       tableTitle:'Kode Barang Terlaris (By Sales)',
       columns:['Kode Barang','Sales','Quantity'],
-      filterLabel:'Company',
-      filterOptions:['Semua','MKI','CFN'],
       monthFilterEnabled:true,
-      computeVariants:(mf)=>({
-        Semua:computeRowsFor(monthlyMapAll,mf),
-        MKI:computeRowsFor(monthlyMapMKI,mf),
-        CFN:computeRowsFor(monthlyMapCFN,mf),
-      }),
+      computeVariants:(mf)=>({Semua:computeRowsFor(mf)}),
       rowClickable:true,
-      rowClickHint:'Klik kode barang untuk melihat quantity & sales per bulan.',
+      rowClickHint:'Klik kode barang untuk melihat quantity, company & sales per bulan.',
       getDrillData:(kode)=>{
-        const monthly=monthlyMapAll.get(kode)||Array.from({length:12},()=>({sales:0,qty:0}));
+        const monthlyMKI=monthlyMapMKI.get(kode)||Array.from({length:12},()=>({sales:0,qty:0}));
+        const monthlyCFN=monthlyMapCFN.get(kode)||Array.from({length:12},()=>({sales:0,qty:0}));
+        const rows=[];
+        for(let i=0;i<12;i++){
+          rows.push([MONTH_NAMES_ID[i],'MKI',Num(monthlyMKI[i].qty),Rp(monthlyMKI[i].sales)]);
+          rows.push([MONTH_NAMES_ID[i],'CFN',Num(monthlyCFN[i].qty),Rp(monthlyCFN[i].sales)]);
+        }
         return {
-          title:'Tren Bulanan \u2014 '+kode,
-          columns:['Bulan','Quantity','Sales'],
-          rows:monthly.map((b,i)=>[MONTH_NAMES_ID[i],Num(b.qty),Rp(b.sales)]),
+          title:'Tren Bulanan by Company \u2014 '+kode,
+          columns:['Bulan','Company','Quantity','Sales'],
+          rows,
         };
       },
     };
   }
   if(section==='delivery'){
     const d=m.delivery;
-    const isHandCarry=t=>(t.statusEkspedisi||'').toUpperCase().includes('HAND CARRY');
     const monthlyMapAll=buildMonthlyAgg(tx2026Global, t=>t.statusEkspedisi||'TIDAK TERCATAT');
-    const monthlyMapHC=buildMonthlyAgg(tx2026Global.filter(isHandCarry), t=>t.statusEkspedisi||'TIDAK TERCATAT');
-    const monthlyMapLuar=buildMonthlyAgg(tx2026Global.filter(t=>!isHandCarry(t)), t=>t.statusEkspedisi||'TIDAK TERCATAT');
-    const computeRowsFor=(monthlyMap,mf)=>{
+    const computeRowsFor=(mf)=>{
       const list=[];
-      monthlyMap.forEach((monthly,nama)=>{
+      monthlyMapAll.forEach((monthly,nama)=>{
         const agg=aggForMonth(monthly,mf);
         list.push({nama,invoiceUnik:agg.invoiceUnik,qty:agg.qty,koli:agg.koli,sales:agg.sales});
       });
@@ -330,14 +329,8 @@ function buildSpec(m){
       ],
       tableTitle:'Jalur Ekspedisi (Invoice Unik, Qty, Koli & Sales)',
       columns:['Jalur Ekspedisi','Invoice Unik','Quantity','Koli','Sales'],
-      filterLabel:'Jenis',
-      filterOptions:['Semua','Hand Carry','Ekspedisi Luar'],
       monthFilterEnabled:true,
-      computeVariants:(mf)=>({
-        Semua:computeRowsFor(monthlyMapAll,mf),
-        'Hand Carry':computeRowsFor(monthlyMapHC,mf),
-        'Ekspedisi Luar':computeRowsFor(monthlyMapLuar,mf),
-      }),
+      computeVariants:(mf)=>({Semua:computeRowsFor(mf)}),
       rowClickable:true,
       rowClickHint:'Klik nama jalur ekspedisi untuk melihat invoice unik, qty, koli & sales per bulan.',
       getDrillData:(nama)=>{
@@ -357,7 +350,7 @@ function buildSpec(m){
       {key:'Semua', test:()=>true},
       {key:'0-13 Hari', test:d=>d>=0&&d<=13},
       {key:'14-30 Hari', test:d=>d>=14&&d<=30},
-      {key:'>30 Hari', test:d=>d>30},
+      {key:'>30 Hari', test:d=>d>30&&d<=60},
       {key:'>60 Hari', test:d=>d>60},
     ];
     const byCustomer=new Map();
@@ -365,17 +358,14 @@ function buildSpec(m){
       if(!byCustomer.has(i.customer)) byCustomer.set(i.customer,[]);
       byCustomer.get(i.customer).push(i);
     });
-    function filterByMonth(list,mf){
-      if(mf==='Semua'||mf==null) return list;
-      return list.filter(i=>i.tanggal && i.tanggal.getMonth()===mf);
-    }
-    function computeRowsFor(bucketKey,mf){
+    function computeRowsFor(bucketKey){
       const bucket=AGING_BUCKETS.find(b=>b.key===bucketKey)||AGING_BUCKETS[0];
       let list=belumLunas.filter(i=>bucket.test(agingDays(i.aging)));
-      list=filterByMonth(list,mf);
       list=list.slice().sort((a,b)=>agingDays(b.aging)-agingDays(a.aging));
       return list.map(i=>[i.noFaktur,i.customer,Rp(i.sisaSaldo),i.aging,i.customer]);
     }
+    const rowsByFilterAR={};
+    AGING_BUCKETS.forEach(b=>{ rowsByFilterAR[b.key]=computeRowsFor(b.key); });
     return {
       title:'Piutang (AR) 2026',
       kpis:[
@@ -387,22 +377,16 @@ function buildSpec(m){
       columns:['No Faktur','Customer','Sisa Saldo','Aging'],
       filterLabel:'Aging',
       filterOptions:AGING_BUCKETS.map(b=>b.key),
-      monthFilterEnabled:true,
-      computeVariants:(mf)=>{
-        const out={};
-        AGING_BUCKETS.forEach(b=>{ out[b.key]=computeRowsFor(b.key,mf); });
-        return out;
-      },
-      extraKpiForMonth:(mf)=>{
-        const list=filterByMonth(belumLunas,mf);
-        return {label:'Sisa Saldo Bulan Terpilih',value:Rp(list.reduce((s,i)=>s+i.sisaSaldo,0))};
-      },
+      rowsByFilter:rowsByFilterAR,
+      rows:rowsByFilterAR.Semua,
       rowClickable:true,
       rowClickHint:'Klik baris untuk melihat riwayat piutang customer tersebut per bulan.',
       getDrillData:(customerName)=>{
         const items=(byCustomer.get(customerName)||[]).slice().sort((a,b)=>(a.tanggal&&b.tanggal?a.tanggal-b.tanggal:0));
+        const total=items.reduce((s,i)=>s+i.sisaSaldo,0);
         return {
           title:'Riwayat Piutang \u2014 '+customerName,
+          sub:'Total Sisa Saldo Piutang Customer Ini: '+Rp(total),
           columns:['Bulan','No Invoice','Sisa Saldo'],
           rows:items.map(i=>[i.tanggal?MONTH_NAMES_ID[i.tanggal.getMonth()]:'-',i.noFaktur,Rp(i.sisaSaldo)]),
         };
@@ -440,8 +424,6 @@ function buildSpec(m){
   // fiber
   const fo=m.fiberOptic1Core;
   const mapKodeRow=k=>[k.kode,Rp(k.sales),Num(k.qty),k.kode];
-  const rowsByFilterFiber={Semua:fo.byKode.map(mapKodeRow)};
-  fo.byKode.forEach(k=>{ rowsByFilterFiber[k.kode]=[mapKodeRow(k)]; });
   return {
     title:'Fiber Optic 1-Core 2026',
     kpis:[
@@ -450,10 +432,8 @@ function buildSpec(m){
     ],
     tableTitle:'Kode Barang Fiber Optic 1-Core',
     columns:['Kode Barang','Sales','Quantity'],
-    filterLabel:'Kode Produk',
-    filterOptions:['Semua',...fo.byKode.map(k=>k.kode)],
-    rowsByFilter:rowsByFilterFiber,
-    rows:rowsByFilterFiber.Semua,
+    hideSearch:true,
+    rows:fo.byKode.map(mapKodeRow),
     rowClickable:true,
     rowClickHint:'Klik kode barang untuk melihat quantity & sales per bulan.',
     getDrillData:(kode)=>{
@@ -645,7 +625,7 @@ function renderDrilldown(){
 function showGenericDrilldown(spec,metaKey){
   const data=spec.getDrillData(metaKey);
   document.getElementById('drillTitle').textContent=data.title;
-  document.getElementById('drillSub').textContent='';
+  document.getElementById('drillSub').textContent=data.sub||'';
   document.getElementById('drillSearch').closest('.search-box').classList.add('hidden');
   document.getElementById('drillPagination').innerHTML='';
   document.querySelector('#drillTable thead').innerHTML='<tr>'+data.columns.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr>';
