@@ -57,8 +57,8 @@ function buildSpec(m){
     const yoy=m.yoyComparison;
     const rows=yoy.months.map(mo=>[
       mo.label,
-      Rp(mo.sales2026),
       Rp(mo.sales2025),
+      Rp(mo.sales2026),
       Pct(growthPct(mo.sales2026,mo.sales2025)),
       Rp(mo.targetSalesRevenue),
       Pct(mo.targetSalesRevenue>0 ? (mo.sales2026/mo.targetSalesRevenue)*100 : 0),
@@ -72,7 +72,7 @@ function buildSpec(m){
         {label:'Sales CFN',value:Rp(cfn?cfn.sales:0)},
       ],
       tableTitle:'Penjualan per Bulan & Komparasi 2025 vs 2026',
-      columns:['Bulan','Sales 2026','Sales 2025','Growth','Target','Capaian'],
+      columns:['Bulan','Sales 2025','Sales 2026','Growth','Target','Capaian'],
       rows,
       fullRows:rows,
     };
@@ -234,9 +234,11 @@ function draw(spec){
     cx.fillStyle='#fff';cx.strokeStyle='#e3dccb';cx.lineWidth=1;
     cx.beginPath();cx.roundRect(kx,kpiY,kpiW,kpiH,10);cx.fill();cx.stroke();
     cx.fillStyle='#8a7a68';cx.font='600 11px system-ui';cx.fillText(k.label,kx+14,kpiY+24);
-    cx.fillStyle='#2a2520';cx.font='bold 19px system-ui';
+    cx.fillStyle='#2a2520';
     let val=String(k.value);
-    if(cx.measureText(val).width>kpiW-28){cx.font='bold 15px system-ui';}
+    let fs=19;
+    cx.font='bold '+fs+'px system-ui';
+    while(cx.measureText(val).width>kpiW-28 && fs>11){ fs-=1; cx.font='bold '+fs+'px system-ui'; }
     cx.fillText(val,kx+14,kpiY+56);
   });
 

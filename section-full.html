@@ -19,7 +19,12 @@ header .meta{font-size:13px;opacity:.85;}
 .summary-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
 .summary-card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow);min-width:0;}
 .summary-card .label{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;}
-.summary-card .value{font-size:18px;font-weight:700;word-break:break-word;}
+.summary-card .value{font-size:18px;font-weight:700;word-break:break-word;white-space:nowrap;overflow:hidden;}
+.data-table-row-clickable{cursor:pointer;}
+.data-table-row-clickable:hover td{background:var(--terra-dim);}
+#drillPanel{display:none;margin-top:20px;}
+#drillPanel h2{font-size:15px;font-weight:700;margin-bottom:2px;}
+#drillPanel .sub{font-size:12px;color:var(--ink-soft);margin-bottom:12px;}
 .panel{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px 20px 8px;box-shadow:var(--shadow);}
 .panel h2{font-size:15px;font-weight:700;margin-bottom:2px;}
 .panel .sub{font-size:12px;color:var(--ink-soft);margin-bottom:12px;}
@@ -75,6 +80,17 @@ footer{text-align:center;font-size:11.5px;color:var(--ink-soft);margin-top:24px;
       </div>
       <div class="pagination" id="pagination"></div>
     </div>
+    <div class="panel" id="drillPanel">
+      <h2 id="drillTitle"></h2>
+      <div class="sub" id="drillSub"></div>
+      <div class="search-box">
+        <input type="text" id="drillSearch" placeholder="Cari No Invoice atau nama customer&hellip;" />
+      </div>
+      <div class="table-scroll">
+        <table id="drillTable"><thead></thead><tbody></tbody></table>
+      </div>
+      <div class="pagination" id="drillPagination"></div>
+    </div>
     <footer>mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar &bull; Data langsung dari Google Sheets</footer>
   </div>
 </div>
@@ -102,13 +118,14 @@ function buildSpec(m){
     const mki=sc.companies.find(c=>c.company==='MKI');
     const cfn=sc.companies.find(c=>c.company==='CFN');
     const yoy=m.yoyComparison;
-    const rows=yoy.months.map(mo=>[
+    const rows=yoy.months.map((mo,idx)=>[
       mo.label,
-      Rp(mo.sales2026),
       Rp(mo.sales2025),
+      Rp(mo.sales2026),
       Pct(growthPct(mo.sales2026,mo.sales2025)),
       Rp(mo.targetSalesRevenue),
       Pct(mo.targetSalesRevenue>0 ? (mo.sales2026/mo.targetSalesRevenue)*100 : 0),
+      idx,
     ]);
     return {
       title:'Tren Penjualan (Sales) 2026',
@@ -119,8 +136,10 @@ function buildSpec(m){
         {label:'Sales CFN',value:Rp(cfn?cfn.sales:0)},
       ],
       tableTitle:'Penjualan per Bulan & Komparasi 2025 vs 2026',
-      columns:['Bulan','Sales 2026','Sales 2025','Growth','Target','Capaian'],
+      columns:['Bulan','Sales 2025','Sales 2026','Growth','Target','Capaian'],
       rows,
+      rowClickable:true,
+      rowClickHint:'Klik nama bulan untuk melihat semua transaksi bulan tersebut.',
     };
   }
   if(section==='revenue'){
@@ -316,25 +335,117 @@ function render(spec){
   document.getElementById('pageTitle').textContent=spec.title;
   document.getElementById('pageMeta').textContent=new Date().toLocaleString('id-ID',{dateStyle:'full',timeStyle:'short'});
   document.getElementById('summaryBar').innerHTML=spec.kpis.map(k=>`<div class="summary-card"><div class="label">${esc(k.label)}</div><div class="value">${esc(k.value)}</div></div>`).join('');
+  fitCardValues();
   document.getElementById('tableTitle').textContent=spec.tableTitle;
   const filtered=getFilteredRows(spec);
   const baseCount=getBaseRows(spec).length;
-  document.getElementById('tableSub').textContent=Num(filtered.length)+' baris data'+(searchQuery.trim()?' (dari total '+Num(baseCount)+')':'');
+  let subText=Num(filtered.length)+' baris data'+(searchQuery.trim()?' (dari total '+Num(baseCount)+')':'');
+  if(spec.rowClickHint) subText+=' \u2014 '+spec.rowClickHint;
+  document.getElementById('tableSub').textContent=subText;
   document.querySelector('#dataTable thead').innerHTML='<tr>'+spec.columns.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr>';
 
   const totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
   if(page>totalPages) page=totalPages;
   const shown=filtered.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE);
+  const nCols=spec.columns.length;
   document.querySelector('#dataTable tbody').innerHTML=shown.length
-    ? shown.map(row=>'<tr>'+row.map(cell=>'<td>'+esc(cell)+'</td>').join('')+'</tr>').join('')
-    : `<tr><td colspan="${spec.columns.length}" class="empty">${searchQuery.trim() ? 'Tidak ada data yang cocok.' : 'Belum ada data.'}</td></tr>`;
+    ? shown.map(row=>{
+        const cells=row.slice(0,nCols).map(cell=>'<td>'+esc(cell)+'</td>').join('');
+        const cls=spec.rowClickable?' class="data-table-row-clickable"':'';
+        const meta=spec.rowClickable?` data-meta="${esc(row[nCols])}"`:'';
+        return `<tr${cls}${meta}>${cells}</tr>`;
+      }).join('')
+    : `<tr><td colspan="${nCols}" class="empty">${searchQuery.trim() ? 'Tidak ada data yang cocok.' : 'Belum ada data.'}</td></tr>`;
   renderPagination(spec,filtered);
+
+  if(spec.rowClickable){
+    document.querySelectorAll('#dataTable tbody tr[data-meta]').forEach(tr=>{
+      tr.addEventListener('click',()=>showMonthDrilldown(parseInt(tr.dataset.meta,10)));
+    });
+  }
+}
+
+// Beberapa angka Rupiah besar bisa melebihi lebar cardbox — kecilkan font
+// bertahap sampai muat dalam satu baris, supaya tidak terpotong ke baris kedua.
+function fitCardValues(){
+  document.querySelectorAll('.summary-card .value').forEach(el=>{
+    let size=18;
+    el.style.fontSize=size+'px';
+    while(el.scrollWidth>el.clientWidth && size>11){
+      size-=1;
+      el.style.fontSize=size+'px';
+    }
+  });
+}
+
+let tx2026Global=[];
+let drillMonthIdx=null;
+let drillSearch='';
+let drillPage=1;
+const DRILL_PAGE_SIZE=10;
+// MONTH_NAMES_ID sudah dideklarasikan secara global oleh calc.js, dipakai ulang di sini.
+
+function showMonthDrilldown(monthIdx){
+  drillMonthIdx=monthIdx;
+  drillSearch='';
+  drillPage=1;
+  document.getElementById('drillSearch').value='';
+  document.getElementById('drillPanel').style.display='block';
+  renderDrilldown();
+  document.getElementById('drillPanel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function renderDrilldown(){
+  if(drillMonthIdx==null) return;
+  const monthTx=tx2026Global.filter(t=>t.orderDate.getMonth()===drillMonthIdx && !t.isRetur)
+    .sort((a,b)=>a.orderDate-b.orderDate || a.noInvoice.localeCompare(b.noInvoice,undefined,{numeric:true}));
+
+  document.getElementById('drillTitle').textContent='Transaksi Bulan '+MONTH_NAMES_ID[drillMonthIdx]+' 2026';
+
+  const q=drillSearch.trim().toUpperCase();
+  const filtered=q ? monthTx.filter(t=>t.noInvoice.toUpperCase().includes(q)||t.customer.toUpperCase().includes(q)) : monthTx;
+  document.getElementById('drillSub').textContent=Num(filtered.length)+' transaksi'+(q?' (dari total '+Num(monthTx.length)+')':'');
+
+  document.querySelector('#drillTable thead').innerHTML='<tr><th>No Invoice</th><th>Customer</th><th>Kode Barang</th><th>Qty</th><th>Amount</th><th>Company</th></tr>';
+
+  const totalPages=Math.max(1,Math.ceil(filtered.length/DRILL_PAGE_SIZE));
+  if(drillPage>totalPages) drillPage=totalPages;
+  const shown=filtered.slice((drillPage-1)*DRILL_PAGE_SIZE,drillPage*DRILL_PAGE_SIZE);
+  document.querySelector('#drillTable tbody').innerHTML=shown.length
+    ? shown.map(t=>`<tr><td>${esc(t.noInvoice)}</td><td>${esc(t.customer)}</td><td>${esc(t.kodeBarang)}</td><td>${Num(t.qty)}</td><td>${Rp(t.amount)}</td><td>${esc(t.company)}</td></tr>`).join('')
+    : `<tr><td colspan="6" class="empty">${q?'Tidak ada transaksi yang cocok.':'Belum ada transaksi bulan ini.'}</td></tr>`;
+
+  const el=document.getElementById('drillPagination');
+  if(totalPages<=1){ el.innerHTML=''; return; }
+  const pages=[];
+  const windowSize=7;
+  if(totalPages<=windowSize){ for(let i=1;i<=totalPages;i++) pages.push(i); }
+  else{
+    pages.push(1);
+    let start=Math.max(2,drillPage-2), end=Math.min(totalPages-1,drillPage+2);
+    if(start>2) pages.push('...');
+    for(let i=start;i<=end;i++) pages.push(i);
+    if(end<totalPages-1) pages.push('...');
+    pages.push(totalPages);
+  }
+  el.innerHTML=`
+    <button class="page-btn" data-page="${drillPage-1}" ${drillPage===1?'disabled':''}>&larr;</button>
+    ${pages.map(p=>p==='...' ? '<span class="page-ellipsis">&hellip;</span>' : `<button class="page-btn ${p===drillPage?'active':''}" data-page="${p}">${p}</button>`).join('')}
+    <button class="page-btn" data-page="${drillPage+1}" ${drillPage===totalPages?'disabled':''}>&rarr;</button>
+  `;
+  el.querySelectorAll('.page-btn[data-page]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const p=parseInt(btn.dataset.page,10);
+      if(p>=1&&p<=totalPages){ drillPage=p; renderDrilldown(); }
+    });
+  });
 }
 
 async function main(){
   try{
     const {data,errors}=await loadAllSheetData();
     const m=computeAllMetrics(data);
+    tx2026Global=filterYear(m.transactions,CURRENT_YEAR);
     const spec=buildSpec(m);
     document.getElementById('status').style.display='none';
     document.getElementById('content').style.display='block';
@@ -356,6 +467,11 @@ async function main(){
       searchQuery=e.target.value;
       page=1;
       render(spec);
+    });
+    document.getElementById('drillSearch').addEventListener('input',(e)=>{
+      drillSearch=e.target.value;
+      drillPage=1;
+      renderDrilldown();
     });
   }catch(err){
     document.getElementById('status').innerHTML='<div style="color:#b84040;">Gagal memuat data: '+esc(err.message)+'</div>';
