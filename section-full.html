@@ -406,14 +406,14 @@ function renderDrilldown(){
   const filtered=q ? monthTx.filter(t=>t.noInvoice.toUpperCase().includes(q)||t.customer.toUpperCase().includes(q)) : monthTx;
   document.getElementById('drillSub').textContent=Num(filtered.length)+' transaksi'+(q?' (dari total '+Num(monthTx.length)+')':'');
 
-  document.querySelector('#drillTable thead').innerHTML='<tr><th>No Invoice</th><th>Customer</th><th>Kode Barang</th><th>Qty</th><th>Amount</th><th>Company</th></tr>';
+  document.querySelector('#drillTable thead').innerHTML='<tr><th>Tanggal</th><th>No Invoice</th><th>Customer</th><th>Kode Barang</th><th>Qty</th><th>Amount</th><th>Company</th></tr>';
 
   const totalPages=Math.max(1,Math.ceil(filtered.length/DRILL_PAGE_SIZE));
   if(drillPage>totalPages) drillPage=totalPages;
   const shown=filtered.slice((drillPage-1)*DRILL_PAGE_SIZE,drillPage*DRILL_PAGE_SIZE);
   document.querySelector('#drillTable tbody').innerHTML=shown.length
-    ? shown.map(t=>`<tr><td>${esc(t.noInvoice)}</td><td>${esc(t.customer)}</td><td>${esc(t.kodeBarang)}</td><td>${Num(t.qty)}</td><td>${Rp(t.amount)}</td><td>${esc(t.company)}</td></tr>`).join('')
-    : `<tr><td colspan="6" class="empty">${q?'Tidak ada transaksi yang cocok.':'Belum ada transaksi bulan ini.'}</td></tr>`;
+    ? shown.map(t=>`<tr><td>${esc(fmtDateShort(t.orderDate))}</td><td>${esc(t.noInvoice)}</td><td>${esc(t.customer)}</td><td>${esc(t.kodeBarang)}</td><td>${Num(t.qty)}</td><td>${Rp(t.amount)}</td><td>${esc(t.company)}</td></tr>`).join('')
+    : `<tr><td colspan="7" class="empty">${q?'Tidak ada transaksi yang cocok.':'Belum ada transaksi bulan ini.'}</td></tr>`;
 
   const el=document.getElementById('drillPagination');
   if(totalPages<=1){ el.innerHTML=''; return; }
