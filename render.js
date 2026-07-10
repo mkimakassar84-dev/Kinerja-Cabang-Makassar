@@ -2672,14 +2672,35 @@ function renderARSection(m) {
 
 function renderAgingChart(ar) {
   const sorted = [...ar.agingBuckets].sort((a, b) => b.sisaSaldo - a.sisaSaldo);
+  const totalAging = sum(sorted, b => b.sisaSaldo);
+  const pctOf = v => totalAging > 0 ? (v / totalAging) * 100 : 0;
   makeChart('chartAging', {
     type: 'bar',
     data: { labels: sorted.map(b => b.kategori), datasets: [{ label: 'Sisa Saldo Piutang', data: sorted.map(b => b.sisaSaldo), backgroundColor: PALETTE.red, borderRadius: 4 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } } },
+      layout: { padding: { top: 24 } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${fmtRupiah(ctx.parsed.y)} (${fmtPct(pctOf(ctx.parsed.y))})` } } },
       scales: { y: { ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
     },
+    plugins: [{
+      id: 'agingPctLabels',
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        const meta = chart.getDatasetMeta(0);
+        ctx.save();
+        ctx.fillStyle = '#3a3530';
+        ctx.font = '600 12px "IBM Plex Sans", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        chart.data.datasets[0].data.forEach((val, i) => {
+          const bar = meta.data[i];
+          if (!bar) return;
+          ctx.fillText(fmtPct(pctOf(val)), bar.x, bar.y - 6);
+        });
+        ctx.restore();
+      },
+    }],
   });
 }
 
