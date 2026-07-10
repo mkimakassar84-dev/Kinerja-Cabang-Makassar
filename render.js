@@ -1832,14 +1832,17 @@ function renderZonaSection(m) {
       <div class="kpi-card kpi-card-zone-hijau">
         <div class="kpi-label">Zona Hijau (&gt;50 invoice)</div>
         <div class="kpi-value">${fmtNum(z.zoneCounts.hijau)}</div>
+        <div class="kpi-sub">${fmtPct(z.totalWilayah > 0 ? (z.zoneCounts.hijau / z.totalWilayah) * 100 : 0)} dari total wilayah</div>
       </div>
       <div class="kpi-card kpi-card-zone-kuning">
         <div class="kpi-label">Zona Kuning (20&ndash;50 invoice)</div>
         <div class="kpi-value">${fmtNum(z.zoneCounts.kuning)}</div>
+        <div class="kpi-sub">${fmtPct(z.totalWilayah > 0 ? (z.zoneCounts.kuning / z.totalWilayah) * 100 : 0)} dari total wilayah</div>
       </div>
       <div class="kpi-card kpi-card-zone-merah">
         <div class="kpi-label">Zona Merah (0&ndash;20 invoice)</div>
         <div class="kpi-value">${fmtNum(z.zoneCounts.merah)}</div>
+        <div class="kpi-sub">${fmtPct(z.totalWilayah > 0 ? (z.zoneCounts.merah / z.totalWilayah) * 100 : 0)} dari total wilayah</div>
       </div>
     </div>
 
