@@ -3090,18 +3090,39 @@ function renderFOByKodeChart(fo, kodeFilter) {
 }
 
 function renderFOByCompanyChart(fo) {
+  const coTotal = fo.byCompany.MKI.sales + fo.byCompany.CFN.sales;
+  const coPct = {
+    MKI: coTotal > 0 ? (fo.byCompany.MKI.sales / coTotal) * 100 : 0,
+    CFN: coTotal > 0 ? (fo.byCompany.CFN.sales / coTotal) * 100 : 0,
+  };
   makeChart('chartFOByCompany', {
     type: 'doughnut',
     data: { labels: ['MKI', 'CFN'], datasets: [{ data: [fo.byCompany.MKI.sales, fo.byCompany.CFN.sales], backgroundColor: [PALETTE.terra, PALETTE.sage], borderWidth: 0 }] },
-    options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtRupiah(ctx.parsed)}` } } } },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '60%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            generateLabels: chart => chart.data.labels.map((label, i) => ({
+              text: `${label}: ${fmtPct(coPct[label])}`,
+              fillStyle: chart.data.datasets[0].backgroundColor[i],
+              strokeStyle: chart.data.datasets[0].backgroundColor[i],
+              index: i,
+            })),
+          },
+        },
+        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtRupiah(ctx.parsed)} (${fmtPct(coPct[ctx.label])})` } },
+      },
+    },
   });
 }
 
 function renderFOSummaryTable(fo) {
   document.getElementById('tblFOByKode').innerHTML = `
-    <thead><tr><th>Kode Barang</th><th>Total Sales</th><th>Total Quantity</th></tr></thead>
-    <tbody>${fo.byKode.map(k => `<tr><td>${escapeHtml(k.kode)}</td><td>${fmtRupiah(k.sales)}</td><td>${fmtNum(k.qty)}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td>Total</td><td>${fmtRupiah(fo.totalSales)}</td><td>${fmtNum(fo.totalQty)}</td></tr></tfoot>
+    <thead><tr><th>Kode Barang</th><th>Total Sales</th><th>Total Quantity</th><th>Kontribusi by Total Sales</th></tr></thead>
+    <tbody>${fo.byKode.map(k => `<tr><td>${escapeHtml(k.kode)}</td><td>${fmtRupiah(k.sales)}</td><td>${fmtNum(k.qty)}</td><td>${fmtPct(fo.totalSales > 0 ? (k.sales / fo.totalSales) * 100 : 0)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>Total</td><td>${fmtRupiah(fo.totalSales)}</td><td>${fmtNum(fo.totalQty)}</td><td>${fmtPct(100)}</td></tr></tfoot>
   `;
 }
 
