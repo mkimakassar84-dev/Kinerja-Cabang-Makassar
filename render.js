@@ -3033,7 +3033,7 @@ function renderFiberOpticSection(m) {
   renderFOTrendChart(fo);
   renderFOByKodeChart(fo, fo1coreKodeFilter);
   renderFOByCompanyChart(fo);
-  renderFOSummaryTable(fo);
+  renderFOSummaryTable(fo, m.invoiceCustomerSummary.totalSales);
   renderFOQtyMatrixTable(fo);
 
   document.querySelectorAll('#fo1coreToggle .toggle-btn').forEach(btn => {
@@ -3118,11 +3118,11 @@ function renderFOByCompanyChart(fo) {
   });
 }
 
-function renderFOSummaryTable(fo) {
+function renderFOSummaryTable(fo, grandTotalSales) {
   document.getElementById('tblFOByKode').innerHTML = `
     <thead><tr><th>Kode Barang</th><th>Total Sales</th><th>Total Quantity</th><th>Kontribusi by Total Sales</th></tr></thead>
-    <tbody>${fo.byKode.map(k => `<tr><td>${escapeHtml(k.kode)}</td><td>${fmtRupiah(k.sales)}</td><td>${fmtNum(k.qty)}</td><td>${fmtPct(fo.totalSales > 0 ? (k.sales / fo.totalSales) * 100 : 0)}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td>Total</td><td>${fmtRupiah(fo.totalSales)}</td><td>${fmtNum(fo.totalQty)}</td><td>${fmtPct(100)}</td></tr></tfoot>
+    <tbody>${fo.byKode.map(k => `<tr><td>${escapeHtml(k.kode)}</td><td>${fmtRupiah(k.sales)}</td><td>${fmtNum(k.qty)}</td><td>${fmtPct(grandTotalSales > 0 ? (k.sales / grandTotalSales) * 100 : 0)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>Total</td><td>${fmtRupiah(fo.totalSales)}</td><td>${fmtNum(fo.totalQty)}</td><td>${fmtPct(grandTotalSales > 0 ? (fo.totalSales / grandTotalSales) * 100 : 0)}</td></tr></tfoot>
   `;
 }
 
