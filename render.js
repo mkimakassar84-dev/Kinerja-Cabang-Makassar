@@ -2081,7 +2081,8 @@ function renderTopProductsSection(m) {
   `;
   document.getElementById('s5').innerHTML = html;
 
-  renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
+  const grandTotalSales = m.invoiceCustomerSummary.totalSales;
+  renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter, grandTotalSales);
   renderStockMovementTables(st);
 
   document.querySelectorAll('#topProductMetricToggle .toggle-btn').forEach(btn => {
@@ -2090,7 +2091,7 @@ function renderTopProductsSection(m) {
       btn.classList.add('active');
       topProductMetric = btn.dataset.metric;
       topProductsTablePage = 1;
-      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
+      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter, grandTotalSales);
     });
   });
   document.querySelectorAll('#topProductCompanyToggle .toggle-btn').forEach(btn => {
@@ -2099,7 +2100,7 @@ function renderTopProductsSection(m) {
       btn.classList.add('active');
       topProductCompanyFilter = btn.dataset.co;
       topProductsTablePage = 1;
-      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
+      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter, grandTotalSales);
     });
   });
 
@@ -2109,7 +2110,7 @@ function renderTopProductsSection(m) {
     topProductsSearchEl.addEventListener('input', (e) => {
       topProductsSearch = e.target.value;
       topProductsTablePage = 1;
-      renderTopProductsTable(getTopProductData(tp, topProductMetric, topProductCompanyFilter));
+      renderTopProductsTable(getTopProductData(tp, topProductMetric, topProductCompanyFilter), grandTotalSales);
     });
   }
 }
@@ -2151,7 +2152,7 @@ function getTopProductData(tp, metric, coFilter) {
   return source;
 }
 
-function renderTopProductsChart(tp, metric, coFilter) {
+function renderTopProductsChart(tp, metric, coFilter, grandTotalSales) {
   const full = getTopProductData(tp, metric, coFilter);
   const data = full.slice(0, 10);
   makeChart('chartTopProducts', {
@@ -2171,10 +2172,10 @@ function renderTopProductsChart(tp, metric, coFilter) {
     },
   });
 
-  renderTopProductsTable(full);
+  renderTopProductsTable(full, grandTotalSales);
 }
 
-function renderTopProductsTable(fullData) {
+function renderTopProductsTable(fullData, grandTotalSales) {
   const PAGE = 10;
   const render = () => {
     const q = topProductsSearch.trim().toUpperCase();
@@ -2184,8 +2185,8 @@ function renderTopProductsTable(fullData) {
     if (topProductsTablePage > totalPages) topProductsTablePage = totalPages;
     const shown = data.slice((topProductsTablePage - 1) * PAGE, topProductsTablePage * PAGE);
     document.getElementById('tblTopProducts').outerHTML = `<table class="data-table" id="tblTopProducts">
-      <thead><tr><th>Peringkat</th><th>Kode Barang</th><th>Sales</th><th>Quantity</th></tr></thead>
-      <tbody>${shown.length ? shown.map((p, i) => `<tr><td>${(topProductsTablePage - 1) * PAGE + i + 1}</td><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">Tidak ada kode barang yang cocok.</td></tr>'}</tbody>
+      <thead><tr><th>Peringkat</th><th>Kode Barang</th><th>Sales</th><th>Quantity</th><th>Kontribusi by Total Sales</th></tr></thead>
+      <tbody>${shown.length ? shown.map((p, i) => `<tr><td>${(topProductsTablePage - 1) * PAGE + i + 1}</td><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td><td>${fmtPct(grandTotalSales > 0 ? (p.sales / grandTotalSales) * 100 : 0)}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-row">Tidak ada kode barang yang cocok.</td></tr>'}</tbody>
     </table>`;
     const pagHtml = makePagBtns('pagTopProducts', topProductsTablePage, totalPages, p => { topProductsTablePage = p; render(); });
     const pagEl = document.getElementById('pagTopProducts');
