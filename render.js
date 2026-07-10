@@ -433,16 +433,18 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     // 3. SALES TO REVENUE RATIO
     const collectionRate = totalSales > 0 ? (totalRevenue / totalSales) * 100 : 0;
 
-    // 4. OTD — dihitung dari SEMUA invoice, termasuk Hand Carry.
-    const invoiceUnikTotal = uniqueCount(txMonth, t => t.noInvoice);
-    const invoiceOTD       = uniqueCount(txMonth.filter(t => (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'), t => t.noInvoice);
+    // 4. OTD — dihitung dari SEMUA invoice, termasuk Hand Carry, TAPI TIDAK
+    // termasuk invoice retur (kode "R-.../R/..." atau amount negatif, lihat
+    // t.isRetur) karena retur bukan pengiriman baru yang perlu dinilai OTD-nya.
+    const invoiceUnikTotal = uniqueCount(txMonth.filter(t => !t.isRetur), t => t.noInvoice);
+    const invoiceOTD       = uniqueCount(txMonth.filter(t => !t.isRetur && (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'), t => t.noInvoice);
     const otdPct           = invoiceUnikTotal > 0 ? (invoiceOTD / invoiceUnikTotal) * 100 : 0;
     const otdTarget        = 80;
-    const invTodayTotal    = uniqueCount(txToday, t => t.noInvoice);
-    const invTodayOTD      = uniqueCount(txToday.filter(t => (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'), t => t.noInvoice);
+    const invTodayTotal    = uniqueCount(txToday.filter(t => !t.isRetur), t => t.noInvoice);
+    const invTodayOTD      = uniqueCount(txToday.filter(t => !t.isRetur && (t.stage || '').toLowerCase() === 'complete' && t.statusKirim === 'Same Day'), t => t.noInvoice);
     const otdPctToday      = invTodayTotal > 0 ? (invTodayOTD / invTodayTotal) * 100 : null;
-    const totalQtyNoHC     = sum(txMonth, t => t.qty);
-    const totalKoliNoHC    = sum(txMonth, t => t.koli);
+    const totalQtyNoHC     = sum(txMonth.filter(t => !t.isRetur), t => t.qty);
+    const totalKoliNoHC    = sum(txMonth.filter(t => !t.isRetur), t => t.koli);
 
     // 5. INVOICE — invoice retur (kode "R-.../R/..." atau amount negatif, lihat
     // t.isRetur) TIDAK dihitung sebagai invoice unik, karena bukan invoice
@@ -1832,17 +1834,14 @@ function renderZonaSection(m) {
       <div class="kpi-card kpi-card-zone-hijau">
         <div class="kpi-label">Zona Hijau (&gt;50 invoice)</div>
         <div class="kpi-value">${fmtNum(z.zoneCounts.hijau)}</div>
-        <div class="kpi-sub">${fmtPct(z.totalWilayah > 0 ? (z.zoneCounts.hijau / z.totalWilayah) * 100 : 0)} dari total wilayah</div>
       </div>
       <div class="kpi-card kpi-card-zone-kuning">
         <div class="kpi-label">Zona Kuning (20&ndash;50 invoice)</div>
         <div class="kpi-value">${fmtNum(z.zoneCounts.kuning)}</div>
-        <div class="kpi-sub">${fmtPct(z.totalWilayah > 0 ? (z.zoneCounts.kuning / z.totalWilayah) * 100 : 0)} dari total wilayah</div>
       </div>
       <div class="kpi-card kpi-card-zone-merah">
         <div class="kpi-label">Zona Merah (0&ndash;20 invoice)</div>
         <div class="kpi-value">${fmtNum(z.zoneCounts.merah)}</div>
-        <div class="kpi-sub">${fmtPct(z.totalWilayah > 0 ? (z.zoneCounts.merah / z.totalWilayah) * 100 : 0)} dari total wilayah</div>
       </div>
     </div>
 
@@ -2081,8 +2080,7 @@ function renderTopProductsSection(m) {
   `;
   document.getElementById('s5').innerHTML = html;
 
-  const grandTotalSales = m.invoiceCustomerSummary.totalSales;
-  renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter, grandTotalSales);
+  renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
   renderStockMovementTables(st);
 
   document.querySelectorAll('#topProductMetricToggle .toggle-btn').forEach(btn => {
@@ -2091,7 +2089,7 @@ function renderTopProductsSection(m) {
       btn.classList.add('active');
       topProductMetric = btn.dataset.metric;
       topProductsTablePage = 1;
-      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter, grandTotalSales);
+      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
     });
   });
   document.querySelectorAll('#topProductCompanyToggle .toggle-btn').forEach(btn => {
@@ -2100,7 +2098,7 @@ function renderTopProductsSection(m) {
       btn.classList.add('active');
       topProductCompanyFilter = btn.dataset.co;
       topProductsTablePage = 1;
-      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter, grandTotalSales);
+      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter);
     });
   });
 
@@ -2110,7 +2108,7 @@ function renderTopProductsSection(m) {
     topProductsSearchEl.addEventListener('input', (e) => {
       topProductsSearch = e.target.value;
       topProductsTablePage = 1;
-      renderTopProductsTable(getTopProductData(tp, topProductMetric, topProductCompanyFilter), grandTotalSales);
+      renderTopProductsTable(getTopProductData(tp, topProductMetric, topProductCompanyFilter));
     });
   }
 }
@@ -2152,7 +2150,7 @@ function getTopProductData(tp, metric, coFilter) {
   return source;
 }
 
-function renderTopProductsChart(tp, metric, coFilter, grandTotalSales) {
+function renderTopProductsChart(tp, metric, coFilter) {
   const full = getTopProductData(tp, metric, coFilter);
   const data = full.slice(0, 10);
   makeChart('chartTopProducts', {
@@ -2172,10 +2170,10 @@ function renderTopProductsChart(tp, metric, coFilter, grandTotalSales) {
     },
   });
 
-  renderTopProductsTable(full, grandTotalSales);
+  renderTopProductsTable(full);
 }
 
-function renderTopProductsTable(fullData, grandTotalSales) {
+function renderTopProductsTable(fullData) {
   const PAGE = 10;
   const render = () => {
     const q = topProductsSearch.trim().toUpperCase();
@@ -2185,8 +2183,8 @@ function renderTopProductsTable(fullData, grandTotalSales) {
     if (topProductsTablePage > totalPages) topProductsTablePage = totalPages;
     const shown = data.slice((topProductsTablePage - 1) * PAGE, topProductsTablePage * PAGE);
     document.getElementById('tblTopProducts').outerHTML = `<table class="data-table" id="tblTopProducts">
-      <thead><tr><th>Peringkat</th><th>Kode Barang</th><th>Sales</th><th>Quantity</th><th>Kontribusi by Total Sales</th></tr></thead>
-      <tbody>${shown.length ? shown.map((p, i) => `<tr><td>${(topProductsTablePage - 1) * PAGE + i + 1}</td><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td><td>${fmtPct(grandTotalSales > 0 ? (p.sales / grandTotalSales) * 100 : 0)}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-row">Tidak ada kode barang yang cocok.</td></tr>'}</tbody>
+      <thead><tr><th>Peringkat</th><th>Kode Barang</th><th>Sales</th><th>Quantity</th></tr></thead>
+      <tbody>${shown.length ? shown.map((p, i) => `<tr><td>${(topProductsTablePage - 1) * PAGE + i + 1}</td><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">Tidak ada kode barang yang cocok.</td></tr>'}</tbody>
     </table>`;
     const pagHtml = makePagBtns('pagTopProducts', topProductsTablePage, totalPages, p => { topProductsTablePage = p; render(); });
     const pagEl = document.getElementById('pagTopProducts');
@@ -2673,35 +2671,14 @@ function renderARSection(m) {
 
 function renderAgingChart(ar) {
   const sorted = [...ar.agingBuckets].sort((a, b) => b.sisaSaldo - a.sisaSaldo);
-  const totalAging = sum(sorted, b => b.sisaSaldo);
-  const pctOf = v => totalAging > 0 ? (v / totalAging) * 100 : 0;
   makeChart('chartAging', {
     type: 'bar',
     data: { labels: sorted.map(b => b.kategori), datasets: [{ label: 'Sisa Saldo Piutang', data: sorted.map(b => b.sisaSaldo), backgroundColor: PALETTE.red, borderRadius: 4 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 24 } },
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${fmtRupiah(ctx.parsed.y)} (${fmtPct(pctOf(ctx.parsed.y))})` } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } } },
       scales: { y: { ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
     },
-    plugins: [{
-      id: 'agingPctLabels',
-      afterDatasetsDraw(chart) {
-        const { ctx } = chart;
-        const meta = chart.getDatasetMeta(0);
-        ctx.save();
-        ctx.fillStyle = '#3a3530';
-        ctx.font = '600 12px "IBM Plex Sans", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        chart.data.datasets[0].data.forEach((val, i) => {
-          const bar = meta.data[i];
-          if (!bar) return;
-          ctx.fillText(fmtPct(pctOf(val)), bar.x, bar.y - 6);
-        });
-        ctx.restore();
-      },
-    }],
   });
 }
 
@@ -3058,7 +3035,7 @@ function renderFiberOpticSection(m) {
   renderFOTrendChart(fo);
   renderFOByKodeChart(fo, fo1coreKodeFilter);
   renderFOByCompanyChart(fo);
-  renderFOSummaryTable(fo, m.invoiceCustomerSummary.totalSales);
+  renderFOSummaryTable(fo);
   renderFOQtyMatrixTable(fo);
 
   document.querySelectorAll('#fo1coreToggle .toggle-btn').forEach(btn => {
@@ -3115,39 +3092,18 @@ function renderFOByKodeChart(fo, kodeFilter) {
 }
 
 function renderFOByCompanyChart(fo) {
-  const coTotal = fo.byCompany.MKI.sales + fo.byCompany.CFN.sales;
-  const coPct = {
-    MKI: coTotal > 0 ? (fo.byCompany.MKI.sales / coTotal) * 100 : 0,
-    CFN: coTotal > 0 ? (fo.byCompany.CFN.sales / coTotal) * 100 : 0,
-  };
   makeChart('chartFOByCompany', {
     type: 'doughnut',
     data: { labels: ['MKI', 'CFN'], datasets: [{ data: [fo.byCompany.MKI.sales, fo.byCompany.CFN.sales], backgroundColor: [PALETTE.terra, PALETTE.sage], borderWidth: 0 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false, cutout: '60%',
-      plugins: {
-        legend: {
-          position: 'bottom',
-          labels: {
-            generateLabels: chart => chart.data.labels.map((label, i) => ({
-              text: `${label}: ${fmtPct(coPct[label])}`,
-              fillStyle: chart.data.datasets[0].backgroundColor[i],
-              strokeStyle: chart.data.datasets[0].backgroundColor[i],
-              index: i,
-            })),
-          },
-        },
-        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtRupiah(ctx.parsed)} (${fmtPct(coPct[ctx.label])})` } },
-      },
-    },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtRupiah(ctx.parsed)}` } } } },
   });
 }
 
-function renderFOSummaryTable(fo, grandTotalSales) {
+function renderFOSummaryTable(fo) {
   document.getElementById('tblFOByKode').innerHTML = `
-    <thead><tr><th>Kode Barang</th><th>Total Sales</th><th>Total Quantity</th><th>Kontribusi by Total Sales</th></tr></thead>
-    <tbody>${fo.byKode.map(k => `<tr><td>${escapeHtml(k.kode)}</td><td>${fmtRupiah(k.sales)}</td><td>${fmtNum(k.qty)}</td><td>${fmtPct(grandTotalSales > 0 ? (k.sales / grandTotalSales) * 100 : 0)}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td>Total</td><td>${fmtRupiah(fo.totalSales)}</td><td>${fmtNum(fo.totalQty)}</td><td>${fmtPct(grandTotalSales > 0 ? (fo.totalSales / grandTotalSales) * 100 : 0)}</td></tr></tfoot>
+    <thead><tr><th>Kode Barang</th><th>Total Sales</th><th>Total Quantity</th></tr></thead>
+    <tbody>${fo.byKode.map(k => `<tr><td>${escapeHtml(k.kode)}</td><td>${fmtRupiah(k.sales)}</td><td>${fmtNum(k.qty)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>Total</td><td>${fmtRupiah(fo.totalSales)}</td><td>${fmtNum(fo.totalQty)}</td></tr></tfoot>
   `;
 }
 

@@ -54,15 +54,16 @@ async function load(){
   const monthParam=params.get('month');
   const isAll=monthParam==='all';
   const mi=isAll ? null : (monthParam!==null ? parseInt(monthParam,10) : T.getMonth());
-  const tx=gR.slice(1).map(r=>({dt:pDate(r[0]),inv:r[1],amt:N(r[6]),qty:N(r[5]),kol:N(r[9]),stg:(r[10]||'').toLowerCase(),eks:(r[11]||'').toUpperCase(),sts:r[7]||'',co:r[8]||'',lok:(r[12]||'').trim()})).filter(t=>t.dt);
+  const tx=gR.slice(1).map(r=>({dt:pDate(r[0]),inv:r[1],amt:N(r[6]),qty:N(r[5]),kol:N(r[9]),stg:(r[10]||'').toLowerCase(),eks:(r[11]||'').toUpperCase(),sts:r[7]||'',co:r[8]||'',lok:(r[12]||'').trim(),isRetur:/^R[-\/]/i.test(r[1])||N(r[6])<0})).filter(t=>t.dt);
   const tM=isAll ? tx : tx.filter(t=>t.dt.getMonth()===mi),tD=tM.filter(t=>Iso(t.dt)===ts);
   const sM=S(tM,t=>t.amt),sD=S(tD,t=>t.amt);
   const sMKI=S(tM.filter(t=>t.co==='MKI'),t=>t.amt),sCFN=S(tM.filter(t=>t.co==='CFN'),t=>t.amt);
   const sDMKI=S(tD.filter(t=>t.co==='MKI'),t=>t.amt),sDCFN=S(tD.filter(t=>t.co==='CFN'),t=>t.amt);
-  const iM=U(tM,t=>t.inv),iD=U(tD,t=>t.inv);
-  const iMKI=U(tM.filter(t=>t.co==='MKI'),t=>t.inv),iCFN=U(tM.filter(t=>t.co==='CFN'),t=>t.inv);
-  const iDMKI=U(tD.filter(t=>t.co==='MKI'),t=>t.inv),iDCFN=U(tD.filter(t=>t.co==='CFN'),t=>t.inv);
-  const nh=tM,nhD=tD; // OTD dihitung dari SEMUA invoice, termasuk Hand Carry
+  const tMnr=tM.filter(t=>!t.isRetur), tDnr=tD.filter(t=>!t.isRetur);
+  const iM=U(tMnr,t=>t.inv),iD=U(tDnr,t=>t.inv);
+  const iMKI=U(tMnr.filter(t=>t.co==='MKI'),t=>t.inv),iCFN=U(tMnr.filter(t=>t.co==='CFN'),t=>t.inv);
+  const iDMKI=U(tDnr.filter(t=>t.co==='MKI'),t=>t.inv),iDCFN=U(tDnr.filter(t=>t.co==='CFN'),t=>t.inv);
+  const nh=tMnr,nhD=tDnr; // OTD dihitung dari SEMUA invoice non-retur, termasuk Hand Carry
   const oT=U(nh,t=>t.inv),oH=U(nh.filter(t=>t.stg==='complete'&&t.sts==='Same Day'),t=>t.inv);
   const oPct=oT>0?(oH/oT)*100:0;
   const oDt=U(nhD,t=>t.inv),oDh=U(nhD.filter(t=>t.stg==='complete'&&t.sts==='Same Day'),t=>t.inv);
