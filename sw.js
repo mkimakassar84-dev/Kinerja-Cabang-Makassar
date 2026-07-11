@@ -1,5 +1,5 @@
 // Service Worker untuk PWA Dashboard KPI MKI Makassar
-const CACHE_NAME = 'mki-kinerja-v3';
+const CACHE_NAME = 'mki-kinerja-v4';
 const STATIC_ASSETS = [
   '/Kinerja-Cabang-Makassar/',
   '/Kinerja-Cabang-Makassar/index.html',
@@ -9,10 +9,16 @@ const STATIC_ASSETS = [
   '/Kinerja-Cabang-Makassar/data-loader.js',
 ];
 
-// Install: cache file statis
+// Install: cache file statis (bypass HTTP cache biar gak ke-poison sama versi lama)
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS))
+    caches.open(CACHE_NAME).then(cache =>
+      Promise.all(STATIC_ASSETS.map(url =>
+        fetch(new Request(url, { cache: 'reload' })).then(res => {
+          if (res.ok) return cache.put(url, res);
+        }).catch(() => {})
+      ))
+    )
   );
   self.skipWaiting();
 });
