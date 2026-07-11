@@ -885,6 +885,43 @@ function buildFiberOptic1Core(transactions) {
 /* ==========================================================================
    ORKESTRASI — Menyatukan seluruh perhitungan menjadi satu objek metrics
    ========================================================================== */
+/**
+ * Mengolah data checklist harian dari sheet "KPI Tracker MKS" (sumber data
+ * kedua, lihat data-loader.js) menjadi metrik siap-tampil untuk Section
+ * "Rekap Kinerja Cabang Makassar". Setiap bulan berisi 10 item checklist
+ * dengan persentase & jumlah hari tercapai yang sudah dihitung oleh sheet
+ * itu sendiri (dibaca apa adanya, bukan dihitung ulang di sini).
+ */
+function buildKinerjaRekap(months) {
+  const processed = months.map(mo => {
+    const hasData = mo.items.some(it => it.countTotal > 0);
+    const avgPct = mo.items.length ? sum(mo.items, it => it.percentage) / mo.items.length : 0;
+    const sorted = [...mo.items].sort((a, b) => b.percentage - a.percentage);
+    return {
+      ...mo,
+      hasData,
+      avgPct,
+      bestItem: hasData ? sorted[0] : null,
+      worstItem: hasData ? sorted[sorted.length - 1] : null,
+    };
+  });
+
+  // Nama-nama item diambil dari bulan mana pun yang sudah ada datanya (semua
+  // bulan pakai daftar item yang sama persis).
+  const referenceMonth = processed.find(mo => mo.items.length > 0) || processed[0] || { items: [] };
+  const itemNames = referenceMonth.items.map(it => it.name);
+
+  const monthsWithData = processed.filter(mo => mo.hasData);
+  const overallAvgPct = monthsWithData.length
+    ? sum(monthsWithData, mo => mo.avgPct) / monthsWithData.length
+    : 0;
+
+  const currentMonthIdx = TODAY.getFullYear() === CURRENT_YEAR ? TODAY.getMonth() : null;
+  const currentMonth = currentMonthIdx !== null ? processed.find(mo => mo.monthIdx === currentMonthIdx) : null;
+
+  return { months: processed, itemNames, overallAvgPct, currentMonthIdx, currentMonth };
+}
+
 function computeAllMetrics(sheetData) {
   const transactions = normalizeGrandData(sheetData.grandData.rows);
   const revRows = sheetData.revSum.rows;

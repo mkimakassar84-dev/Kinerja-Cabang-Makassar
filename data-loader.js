@@ -228,3 +228,93 @@ async function loadAllSheetData() {
 
   return { data, errors };
 }
+
+/* ==========================================================================
+   SUMBER DATA KEDUA — "KPI Tracker MKS" (spreadsheet TERPISAH dari sumber
+   data utama di atas), dipakai khusus untuk Section "Rekap Kinerja Cabang
+   Makassar". Formatnya BUKAN tabel header+baris biasa, melainkan checklist
+   grid per-bulan (12 tab: JAN..DES) dengan posisi sel TETAP di setiap tab:
+
+   - Baris 13-22 (index 12-21): 10 item checklist harian
+     Kolom C (index 2)  = nama item (mis. "Target Sales Harian Tercapai")
+     Kolom I..AM (index 8-38) = 31 kolom TRUE/FALSE untuk tanggal 1..31
+       (bulan yang harinya <31 otomatis kosong di kolom sisanya)
+     Kolom AQ (index 42) = PERCENTAGE tercapai bulan itu (mis. "26%")
+     Kolom AU, AW (index 46, 48) = COUNT tercapai / total hari (mis. "7" / "27")
+   - Tab "Statistics" berisi chart visual saja (tidak ada data sel yang bisa
+     diambil via CSV export), jadi tidak diikutkan.
+   ========================================================================== */
+const KINERJA_REKAP_SID = '1dUvbZqh-n6NswAOQiZj0rCMj6eWwH2rf4Ge1dTUygu8';
+const KINERJA_REKAP_TABS = {
+  jan: { gid: '1250964320', label: 'Januari',   monthIdx: 0 },
+  feb: { gid: '1231289730', label: 'Februari',  monthIdx: 1 },
+  mar: { gid: '1078687801', label: 'Maret',     monthIdx: 2 },
+  apr: { gid: '1721808626', label: 'April',     monthIdx: 3 },
+  mei: { gid: '704243615',  label: 'Mei',       monthIdx: 4 },
+  jun: { gid: '847693626',  label: 'Juni',      monthIdx: 5 },
+  jul: { gid: '1359628584', label: 'Juli',      monthIdx: 6 },
+  agu: { gid: '2126899562', label: 'Agustus',   monthIdx: 7 },
+  sep: { gid: '687911869',  label: 'September', monthIdx: 8 },
+  okt: { gid: '541154288',  label: 'Oktober',   monthIdx: 9 },
+  nov: { gid: '115710225',  label: 'November',  monthIdx: 10 },
+  des: { gid: '762671891',  label: 'Desember',  monthIdx: 11 },
+};
+
+function kinerjaRekapCsvUrl(gid) {
+  return `https://docs.google.com/spreadsheets/d/${KINERJA_REKAP_SID}/export?format=csv&gid=${gid}&_=${Date.now()}`;
+}
+
+async function fetchKinerjaRekapMonth(cfg) {
+  const url = kinerjaRekapCsvUrl(cfg.gid);
+  let res;
+  try {
+    res = await fetch(url, { cache: 'no-store' });
+  } catch (e) {
+    throw new Error(`Gagal menghubungi sheet KPI Tracker untuk tab "${cfg.label}".`);
+  }
+  if (!res.ok) throw new Error(`Tab checklist "${cfg.label}" tidak bisa diakses (HTTP ${res.status}).`);
+  const text = await res.text();
+  const rawRows = parseCsv(text).map(r => r.map(cell => parseCsvCell(cell)));
+
+  const items = [];
+  for (let i = 12; i <= 21; i++) {
+    const row = rawRows[i] || [];
+    const name = row[2] !== null && row[2] !== undefined ? String(row[2]).trim() : '';
+    if (!name) continue;
+    const pctRaw = row[42];
+    const percentage = pctRaw !== null && pctRaw !== undefined
+      ? parseFloat(String(pctRaw).replace('%', '').replace(',', '.')) || 0
+      : 0;
+    const countDone = parseInt(row[46], 10) || 0;
+    const countTotal = parseInt(row[48], 10) || 0;
+    const daily = [];
+    for (let d = 0; d < 31; d++) {
+      const v = row[8 + d];
+      daily.push(v === true || v === 'TRUE');
+    }
+    items.push({ name, percentage, countDone, countTotal, daily });
+  }
+  return { label: cfg.label, monthIdx: cfg.monthIdx, items };
+}
+
+/**
+ * Memuat semua 12 tab bulanan dari sheet "KPI Tracker MKS" (sumber data
+ * kedua, terpisah dari SHEET_ID utama). Mengembalikan { months: [...], errors: [...] }
+ */
+async function loadKinerjaRekapData() {
+  const entries = Object.values(KINERJA_REKAP_TABS);
+  const settled = await Promise.allSettled(entries.map(cfg => fetchKinerjaRekapMonth(cfg)));
+
+  const months = [];
+  const errors = [];
+  settled.forEach((result, idx) => {
+    const cfg = entries[idx];
+    if (result.status === 'fulfilled') {
+      months.push(result.value);
+    } else {
+      errors.push({ label: cfg.label, message: result.reason ? result.reason.message : 'Gagal memuat' });
+    }
+  });
+  months.sort((a, b) => a.monthIdx - b.monthIdx);
+  return { months, errors };
+}

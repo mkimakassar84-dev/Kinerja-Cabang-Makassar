@@ -3144,6 +3144,122 @@ function renderFOQtyMatrixTable(fo) {
 /* ==========================================================================
    ORKESTRASI RENDER — Memanggil seluruh render section secara berurutan
    ========================================================================== */
+/* ==========================================================================
+   SECTION 12 — REKAP KINERJA CABANG MAKASSAR
+   Sumber data TERPISAH dari spreadsheet utama: sheet "KPI Tracker MKS"
+   (checklist harian 10 item, lihat data-loader.js/calc.js buildKinerjaRekap).
+   ========================================================================== */
+let kinerjaRekapMonthIdx = null; // diisi otomatis ke bulan berjalan saat render pertama
+
+function renderKinerjaRekapSection(m) {
+  const kr = m.kinerjaRekap;
+  if (!kr || !kr.months.length) return;
+
+  if (kinerjaRekapMonthIdx === null) {
+    kinerjaRekapMonthIdx = kr.currentMonthIdx !== null ? kr.currentMonthIdx : 0;
+  }
+
+  const html = `
+    <div class="section-head">
+      <div class="eyebrow">12 &mdash; Kinerja Harian</div>
+      <h2>Rekap Kinerja Cabang Makassar</h2>
+      <p class="lede">Checklist pencapaian target &amp; kedisiplinan harian (absensi, target sales/revenue/invoice, delivery, report), dari sheet "KPI Tracker MKS" &mdash; diisi otomatis lewat Google Form setiap hari.</p>
+    </div>
+
+    <div class="kpi-grid kpi-grid-3">
+      <div class="kpi-card">
+        <div class="kpi-label">Rata-rata Capaian Tahun 2026</div>
+        <div class="kpi-value">${fmtPct(kr.overallAvgPct)}</div>
+      </div>
+      <div class="kpi-card" id="krCardBest">
+        <div class="kpi-label">Item Terbaik Bulan Ini</div>
+        <div class="kpi-value">&mdash;</div>
+      </div>
+      <div class="kpi-card" id="krCardWorst">
+        <div class="kpi-label">Item Perlu Perhatian</div>
+        <div class="kpi-value">&mdash;</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Checklist Harian per Item</h3>
+        <div class="filter-field">
+          <label for="krMonthSelect">Bulan</label>
+          <select id="krMonthSelect" class="select-input">
+            ${kr.months.map(mo => `<option value="${mo.monthIdx}" ${mo.monthIdx === kinerjaRekapMonthIdx ? 'selected' : ''}>${mo.label}${mo.hasData ? '' : ' (belum ada data)'}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <p class="panel-note" id="krMonthNote"></p>
+      <table class="data-table" id="tblKinerjaItems"></table>
+    </div>
+
+    <div class="panel">
+      <h3>Tren Rata-rata Capaian per Bulan (2026)</h3>
+      <div class="chart-wrap chart-wrap-sm"><canvas id="chartKinerjaTrend"></canvas></div>
+    </div>
+  `;
+  document.getElementById('s11').innerHTML = html;
+
+  renderKinerjaMonthDetail(kr);
+  renderKinerjaTrendChart(kr);
+
+  document.getElementById('krMonthSelect').addEventListener('change', (e) => {
+    kinerjaRekapMonthIdx = parseInt(e.target.value, 10);
+    renderKinerjaMonthDetail(kr);
+  });
+}
+
+function renderKinerjaMonthDetail(kr) {
+  const mo = kr.months.find(x => x.monthIdx === kinerjaRekapMonthIdx) || kr.months[0];
+
+  document.getElementById('krCardBest').querySelector('.kpi-value').innerHTML =
+    mo.bestItem ? `${fmtPct(mo.bestItem.percentage)}<div class="kpi-sub">${escapeHtml(mo.bestItem.name)}</div>` : '&mdash;';
+  document.getElementById('krCardWorst').querySelector('.kpi-value').innerHTML =
+    mo.worstItem ? `${fmtPct(mo.worstItem.percentage)}<div class="kpi-sub">${escapeHtml(mo.worstItem.name)}</div>` : '&mdash;';
+
+  document.getElementById('krMonthNote').textContent = mo.hasData
+    ? `Rata-rata capaian ${mo.label}: ${fmtPct(mo.avgPct)} dari ${mo.items.length} item checklist.`
+    : `Belum ada data checklist untuk ${mo.label}.`;
+
+  const sorted = [...mo.items].sort((a, b) => b.percentage - a.percentage);
+  document.getElementById('tblKinerjaItems').innerHTML = `
+    <thead><tr><th>Item Checklist</th><th>Tercapai</th><th>Persentase</th></tr></thead>
+    <tbody>${sorted.length ? sorted.map(it => `
+      <tr>
+        <td>${escapeHtml(it.name)}</td>
+        <td>${fmtNum(it.countDone)} / ${fmtNum(it.countTotal)} hari</td>
+        <td>
+          <div class="kmc-bar-wrap" style="max-width:160px;">
+            <div class="kmc-bar ${it.percentage >= 80 ? 'kmc-bar-hit' : it.percentage >= 50 ? 'kmc-bar-warn' : 'kmc-bar-miss'}" style="width:${Math.min(it.percentage,100).toFixed(1)}%"></div>
+          </div>
+          <span style="font-size:12px; color:var(--slate);">${fmtPct(it.percentage)}</span>
+        </td>
+      </tr>`).join('') : '<tr><td colspan="3" class="empty-row">Belum ada data untuk bulan ini.</td></tr>'}</tbody>
+  `;
+}
+
+function renderKinerjaTrendChart(kr) {
+  makeChart('chartKinerjaTrend', {
+    type: 'line',
+    data: {
+      labels: kr.months.map(mo => mo.label.slice(0, 3)),
+      datasets: [{
+        label: 'Rata-rata Capaian',
+        data: kr.months.map(mo => mo.hasData ? Math.round(mo.avgPct * 10) / 10 : null),
+        borderColor: PALETTE.terra, backgroundColor: PALETTE.terra, tension: 0.3,
+        spanGaps: true,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y === null ? 'Belum ada data' : fmtPct(ctx.parsed.y) } } },
+      scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+}
+
 function renderDashboard(metrics) {
   applyChartDefaults();
 
@@ -3162,6 +3278,7 @@ function renderDashboard(metrics) {
   renderARSection(metrics);
   renderCustFreqSection(metrics);
   renderFiberOpticSection(metrics);
+  renderKinerjaRekapSection(metrics);
 
   wrapTablesForMobileScroll();
 
