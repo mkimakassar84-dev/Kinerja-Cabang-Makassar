@@ -8,14 +8,10 @@ const AUTO_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 menit
 
 async function initDashboard() {
   try {
-    const [{ data, errors }, kinerjaResult] = await Promise.all([
-      loadAllSheetData(),
-      loadKinerjaRekapData().catch(err => ({ months: [], errors: [{ label: 'Rekap Kinerja', message: err.message }] })),
-    ]);
+    const { data, errors } = await loadAllSheetData();
     renderErrorPanel(errors);
 
     const metrics = computeAllMetrics(data);
-    metrics.kinerjaRekap = buildKinerjaRekap(kinerjaResult.months);
     renderDashboard(metrics);
   } catch (err) {
     showFatalError(err);
