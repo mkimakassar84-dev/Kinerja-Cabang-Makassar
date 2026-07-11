@@ -1,5 +1,5 @@
 // Service Worker untuk PWA Dashboard KPI MKI Makassar
-const CACHE_NAME = 'mki-kinerja-v2';
+const CACHE_NAME = 'mki-kinerja-v3';
 const STATIC_ASSETS = [
   '/Kinerja-Cabang-Makassar/',
   '/Kinerja-Cabang-Makassar/index.html',
@@ -34,8 +34,12 @@ self.addEventListener('fetch', (e) => {
   if (url.includes('docs.google.com') || url.includes('spreadsheets')) {
     return; // biarkan browser handle, tidak di-cache
   }
+  // File statis dashboard (html/js) selalu ambil versi terbaru dari network,
+  // bypass HTTP cache browser agar update selalu langsung tersedia (termasuk di HP)
+  const isStaticAsset = url.includes('/Kinerja-Cabang-Makassar/') && /\.(html|js)$/.test(url.split('?')[0]) || url.endsWith('/Kinerja-Cabang-Makassar/');
+  const fetchReq = isStaticAsset ? new Request(e.request, { cache: 'no-store' }) : e.request;
   e.respondWith(
-    fetch(e.request)
+    fetch(fetchReq)
       .then(res => {
         // Update cache dengan versi terbaru
         if (res.ok && !url.includes('chrome-extension')) {
