@@ -1,0 +1,92 @@
+<!--
+  SUB-SECTION: DAILY PERFORMANCE (per personel)
+  ================================================
+  Cara pasang di dashboard "Kinerja Cabang Makassar":
+
+  1) Salin blok <div id="daily-performance-section">...</div> di bawah ini
+     dan tempel ke index.html, di dalam Section "Daily Performance"
+     (sebagai sub-section baru).
+
+  2) Salin blok <style> ke file CSS dashboard (atau biarkan inline di sini).
+
+  3) Salin blok <script> ke render.js ATAU sertakan file ini via <script>
+     terpisah sebelum app.js. Fungsi initDailyPerformanceSection() akan
+     otomatis fetch data dan render begitu dipanggil.
+
+  4) Panggil initDailyPerformanceSection() di app.js, sama seperti
+     section-section lain di-init.
+
+  Sumber data: Apps Script Web App yang sama dengan form input KPI harian,
+  endpoint GET ?action=summary -- membaca AP7 (persentase) dan AT5 (count)
+  langsung dari tiap sheet personel (ASTRID, ADI, REZA, BURHAMIN, ZUL,
+  ASPAR, TAUFIK, PUTRI) di Google Sheet "KPI Personel Cabang MKS".
+-->
+
+<div id="daily-performance-section">
+  <h3 class="dp-title">Kinerja Personel Harian</h3>
+  <p class="dp-sub">Persentase checklist kinerja harian per personel, bulan berjalan</p>
+  <div id="dp-grid" class="dp-grid">
+    <div class="dp-loading">Memuat data personel...</div>
+  </div>
+</div>
+
+<style>
+  #daily-performance-section{ margin-top: 24px; }
+  .dp-title{ font-size:15px; font-weight:700; margin:0 0 2px; color:#1c2733; }
+  .dp-sub{ font-size:12px; color:#7a8794; margin:0 0 14px; }
+  .dp-grid{
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr));
+    gap:12px;
+  }
+  .dp-card{
+    background:#fff; border:1px solid #e6e9ee; border-radius:14px;
+    padding:14px 14px 12px;
+  }
+  .dp-card .dp-name{ font-size:13px; font-weight:700; color:#1c2733; margin-bottom:8px; }
+  .dp-bar-track{ background:#eef1f5; border-radius:8px; height:8px; overflow:hidden; margin-bottom:8px; }
+  .dp-bar-fill{ height:100%; border-radius:8px; background:#3b5a7d; transition:width .4s; }
+  .dp-bar-fill.warn{ background:#e0a53f; }
+  .dp-bar-fill.low{ background:#e05a4e; }
+  .dp-pct{ font-size:18px; font-weight:800; color:#1c2733; }
+  .dp-count{ font-size:11px; color:#9aa5b1; }
+  .dp-loading, .dp-error{ font-size:13px; color:#9aa5b1; grid-column:1/-1; padding:12px 0; }
+</style>
+
+<script>
+(function(){
+  // Ganti sesuai URL Web App Apps Script yang sudah di-deploy
+  var DP_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyZjdcOqCzQZ3i54Y2pAZVfbnMfuaEHmPFOaMhlpPqBgD958CWKTN5iujN4lPOkvJ43/exec";
+
+  window.initDailyPerformanceSection = function(){
+    var grid = document.getElementById("dp-grid");
+    if (!grid) return;
+
+    fetch(DP_WEBAPP_URL + "?action=summary")
+      .then(function(r){ return r.json(); })
+      .then(function(list){
+        if (!Array.isArray(list) || !list.length){
+          grid.innerHTML = '<div class="dp-error">Belum ada data.</div>';
+          return;
+        }
+        grid.innerHTML = list.map(function(p){
+          var pct = Math.round((p.persen || 0) * 100);
+          var barClass = pct >= 80 ? "" : (pct >= 50 ? "warn" : "low");
+          return ''
+            + '<div class="dp-card">'
+            +   '<div class="dp-name">' + p.nama + '</div>'
+            +   '<div class="dp-pct">' + pct + '%</div>'
+            +   '<div class="dp-bar-track"><div class="dp-bar-fill ' + barClass + '" style="width:' + pct + '%"></div></div>'
+            +   '<div class="dp-count">' + (p.countLabel || "") + '</div>'
+            + '</div>';
+        }).join("");
+      })
+      .catch(function(){
+        grid.innerHTML = '<div class="dp-error">Gagal memuat data personel.</div>';
+      });
+  };
+
+  // Auto-init jika dipanggil langsung tanpa integrasi ke app.js
+  if (document.readyState !== "loading") { window.initDailyPerformanceSection(); }
+  else { document.addEventListener("DOMContentLoaded", window.initDailyPerformanceSection); }
+})();
+</script>
