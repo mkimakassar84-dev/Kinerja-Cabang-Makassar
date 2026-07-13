@@ -1,0 +1,25 @@
+{
+  "name": "Laporan Stock Gudang — MKI Makassar",
+  "short_name": "Stock Gudang",
+  "description": "Laporan lengkap stock gudang MKI & CFN Cabang Makassar — data langsung dari Google Sheets",
+  "start_url": "/Kinerja-Cabang-Makassar/stock-full.html",
+  "scope": "/Kinerja-Cabang-Makassar/",
+  "display": "standalone",
+  "background_color": "#f6f1e8",
+  "theme_color": "#8a6a4a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon-stock-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-stock-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
