@@ -1,6 +1,7 @@
 {
   "name": "Dashboard Kinerja MKI Makassar",
   "short_name": "KPI MKI MKS",
+  "id": "/Kinerja-Cabang-Makassar/",
   "description": "Dashboard Kinerja Bisnis Cabang Makassar — MKI & CFN 2026",
   "start_url": "/Kinerja-Cabang-Makassar/",
   "scope": "/Kinerja-Cabang-Makassar/",
