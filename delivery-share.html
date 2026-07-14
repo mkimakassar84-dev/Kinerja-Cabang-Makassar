@@ -48,11 +48,13 @@ async function load(){
     qty:N(r[5]), amt:N(r[6]), status:r[7]||'', company:(r[8]||'').toUpperCase(), koli:N(r[9]),
     stage:(r[10]||'').toLowerCase(), eks:(r[11]||'').toUpperCase(), lok:(r[12]||'').trim(),
     tglTerkirim:pDate(r[13]),
+    isRetur:/^R[-\/]/i.test(r[1]||'')||N(r[6])<0,
   })).filter(t=>t.dt);
   // Terkirim hari ini = Tanggal Terkirim (kolom N) hari ini, BUKAN tanggal input
   // invoice (Order Date) — invoice yang diinput hari sebelumnya tapi baru
-  // terkirim hari ini tetap terhitung.
-  const rows=tx.filter(t=>t.stage==='complete'&&t.tglTerkirim&&Iso(t.tglTerkirim)===ts)
+  // terkirim hari ini tetap terhitung. Invoice retur/kode "R-"/"R/" TIDAK
+  // dimasukkan ke daftar antaran (bukan pengiriman baru, melainkan pengembalian).
+  const rows=tx.filter(t=>t.stage==='complete'&&t.tglTerkirim&&Iso(t.tglTerkirim)===ts&&!t.isRetur)
     .sort((a,b)=>a.inv.localeCompare(b.inv,undefined,{numeric:true}));
   return {T,ts,rows};
 }
