@@ -2174,12 +2174,35 @@ function renderTopProductsSection(m) {
         </div>
       </div>
     </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Peringkat Kode Barang per Bulan</h3>
+        <div class="filter-field">
+          <label for="kodeBarangMonthFilter">Bulan</label>
+          <select id="kodeBarangMonthFilter" class="select-input">
+            <option value="semua" ${kodeBarangMonthFilter === 'semua' ? 'selected' : ''}>Semua Bulan</option>
+            ${MONTH_NAMES_ID.map((mo, i) => `<option value="${i}" ${String(i) === String(kodeBarangMonthFilter) ? 'selected' : ''}>${mo}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <p class="panel-note">Peringkat kode barang berdasarkan total penjualan pada bulan yang dipilih.</p>
+      <table class="data-table" id="tblKodeBarangMonthRank"></table>
+      <div class="pagination" id="pagKodeBarangMonthRank"></div>
+    </div>
   `;
   document.getElementById('s5').innerHTML = html;
 
   const grandTotalSales = m.invoiceCustomerSummary.totalSales;
   renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter, grandTotalSales, kodeBarangMonthlyAgg);
   renderStockMovementTables(st);
+  renderKodeBarangMonthRankTable(kodeBarangMonthlyAgg, kodeBarangMonthFilter);
+
+  document.getElementById('kodeBarangMonthFilter').addEventListener('change', (e) => {
+    kodeBarangMonthFilter = e.target.value;
+    kodeBarangMonthRankPage = 1;
+    renderKodeBarangMonthRankTable(kodeBarangMonthlyAgg, kodeBarangMonthFilter);
+  });
 
   document.querySelectorAll('#topProductMetricToggle .toggle-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -2249,6 +2272,48 @@ function getTopProductData(tp, metric, coFilter) {
 }
 
 let kodeBarangDrillSelected = null; // kode barang yang sedang dibuka drill-down-nya
+let kodeBarangMonthFilter = 'semua'; // 'semua' atau index bulan 0-11
+let kodeBarangMonthRankPage = 1;
+const KODE_BARANG_MONTH_RANK_PAGE_SIZE = 10;
+
+function renderKodeBarangMonthRankTable(kodeBarangMonthlyAgg, monthFilter) {
+  const PAGE = KODE_BARANG_MONTH_RANK_PAGE_SIZE;
+
+  // Susun {kode, sales, qty} untuk bulan terpilih (atau total tahunan kalau "Semua Bulan").
+  const list = Object.keys(kodeBarangMonthlyAgg.byKey).map(kode => {
+    const monthly = kodeBarangMonthlyAgg.byKey[kode];
+    if (monthFilter === 'semua') {
+      const sales = sum(monthly, mo => mo.sales);
+      const qty = sum(monthly, mo => mo.qty);
+      return { kode, sales, qty };
+    }
+    const mo = monthly[parseInt(monthFilter, 10)];
+    return { kode, sales: mo.sales, qty: mo.qty };
+  }).filter(p => p.sales !== 0 || p.qty !== 0).sort((a, b) => b.sales - a.sales);
+
+  const grandTotalForScope = monthFilter === 'semua'
+    ? sum(kodeBarangMonthlyAgg.totalsByMonth, mo => mo.sales)
+    : kodeBarangMonthlyAgg.totalsByMonth[parseInt(monthFilter, 10)].sales;
+
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE));
+  if (kodeBarangMonthRankPage > totalPages) kodeBarangMonthRankPage = totalPages;
+  const shown = list.slice((kodeBarangMonthRankPage - 1) * PAGE, kodeBarangMonthRankPage * PAGE);
+
+  const rows = shown.map((p, i) => {
+    const rank = (kodeBarangMonthRankPage - 1) * PAGE + i + 1;
+    const contribPct = grandTotalForScope > 0 ? (p.sales / grandTotalForScope) * 100 : 0;
+    return `<tr><td>${rank}</td><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td><td>${fmtPct(contribPct)}</td></tr>`;
+  }).join('');
+
+  document.getElementById('tblKodeBarangMonthRank').innerHTML = `
+    <thead><tr><th>Peringkat</th><th>Kode Barang</th><th>Sales</th><th>Quantity</th><th>Kontribusi by Total Sales</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="5" class="empty-row">Belum ada transaksi pada bulan ini.</td></tr>'}</tbody>
+  `;
+
+  const pagHtml = makePagBtns('pagKodeBarangMonthRank', kodeBarangMonthRankPage, totalPages, p => { kodeBarangMonthRankPage = p; renderKodeBarangMonthRankTable(kodeBarangMonthlyAgg, monthFilter); });
+  document.getElementById('pagKodeBarangMonthRank').innerHTML = pagHtml;
+  attachPagBtns('pagKodeBarangMonthRank', p => { kodeBarangMonthRankPage = p; renderKodeBarangMonthRankTable(kodeBarangMonthlyAgg, monthFilter); });
+}
 
 function renderTopProductsChart(tp, metric, coFilter, grandTotalSales, kodeBarangMonthlyAgg) {
   const full = getTopProductData(tp, metric, coFilter);
