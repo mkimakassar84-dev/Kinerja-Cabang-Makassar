@@ -3265,6 +3265,12 @@ function renderFiberOpticSection(m) {
     </div>
 
     <div class="panel">
+      <h3>Total Sales per Bulan per Kode Barang</h3>
+      <p class="panel-note">Rincian nilai penjualan setiap bulan untuk masing-masing kode barang FO 1-Core sepanjang tahun 2026.</p>
+      <div class="table-scroll"><table class="data-table data-table-compact" id="tblFOSalesMatrix"></table></div>
+    </div>
+
+    <div class="panel">
       <h3>Total Quantity per Bulan per Kode Barang</h3>
       <p class="panel-note">Rincian unit terjual setiap bulan untuk masing-masing kode barang FO 1-Core sepanjang tahun 2026.</p>
       <div class="table-scroll"><table class="data-table data-table-compact" id="tblFOQtyMatrix"></table></div>
@@ -3281,6 +3287,7 @@ function renderFiberOpticSection(m) {
   renderFOByKodeChart(fo, fo1coreKodeFilter);
   renderFOByCompanyChart(fo);
   renderFOSummaryTable(fo, m.invoiceCustomerSummary.totalSales);
+  renderFOSalesMatrixTable(fo);
   renderFOQtyMatrixTable(fo);
 
   document.querySelectorAll('#fo1coreToggle .toggle-btn').forEach(btn => {
@@ -3370,6 +3377,25 @@ function renderFOSummaryTable(fo, grandTotalSales) {
     <thead><tr><th>Kode Barang</th><th>Total Sales</th><th>Total Quantity</th><th>Kontribusi by Total Sales</th></tr></thead>
     <tbody>${fo.byKode.map(k => `<tr><td>${escapeHtml(k.kode)}</td><td>${fmtRupiah(k.sales)}</td><td>${fmtNum(k.qty)}</td><td>${fmtPct(grandTotalSales > 0 ? (k.sales / grandTotalSales) * 100 : 0)}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td>Total</td><td>${fmtRupiah(fo.totalSales)}</td><td>${fmtNum(fo.totalQty)}</td><td>${fmtPct(grandTotalSales > 0 ? (fo.totalSales / grandTotalSales) * 100 : 0)}</td></tr></tfoot>
+  `;
+}
+
+function renderFOSalesMatrixTable(fo) {
+  // Sama seperti renderFOQtyMatrixTable, tapi sel-nya nilai Sales (Rupiah)
+  // bukan Quantity. Baris = kode barang, kolom = bulan.
+  const monthHeaders = MONTH_NAMES_SHORT_ID.map(m => `<th>${m}</th>`).join('');
+  const rows = fo.byKode.map(k => {
+    const cells = k.monthly.map(mo => `<td>${mo.sales > 0 ? fmtRupiah(mo.sales) : '&ndash;'}</td>`).join('');
+    return `<tr><td>${escapeHtml(k.kode)}</td>${cells}<td><strong>${fmtRupiah(k.sales)}</strong></td></tr>`;
+  }).join('');
+
+  const totalPerBulan = MONTH_NAMES_ID.map((_, idx) => sum(fo.byKode, k => k.monthly[idx].sales));
+  const totalCells = totalPerBulan.map(s => `<td>${s > 0 ? fmtRupiah(s) : '&ndash;'}</td>`).join('');
+
+  document.getElementById('tblFOSalesMatrix').innerHTML = `
+    <thead><tr><th>Kode Barang</th>${monthHeaders}<th>Total</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td>Total</td>${totalCells}<td><strong>${fmtRupiah(fo.totalSales)}</strong></td></tr></tfoot>
   `;
 }
 
