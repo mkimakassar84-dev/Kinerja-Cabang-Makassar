@@ -489,6 +489,10 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
 
   function showSlide(idx) {
     currentIdx = Math.max(0, Math.min(allSlides.length - 1, idx));
+    const activeEl = allSlides[currentIdx];
+    if (activeEl && activeEl.id && window.ensureSectionRendered) {
+      window.ensureSectionRendered(activeEl.id);
+    }
     allSlides.forEach((slide, i) => {
       if (slide) slide.classList.toggle('active', i === currentIdx);
     });

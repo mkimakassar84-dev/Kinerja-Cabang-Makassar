@@ -3422,30 +3422,65 @@ function renderFOQtyMatrixTable(fo) {
 /* ==========================================================================
    ORKESTRASI RENDER — Memanggil seluruh render section secara berurutan
    ========================================================================== */
+// Peta section id -> fungsi render-nya. Dipakai untuk render "malas" (lazy):
+// section HANYA benar-benar dirender (bangun HTML + bikin chart) begitu
+// pertama kali dibuka usernya, bukan semua sekaligus saat load — supaya buka
+// dashboard, refresh, dan pindah-pindah section terasa jauh lebih ringan.
+const SECTION_RENDER_MAP = {
+  s0: renderDailyPerformanceSection,
+  s1: renderSalesSection,
+  s2: renderRevenueSection,
+  s3: renderRatioSection,
+  s4: renderZonaSection,
+  s5: renderTopProductsSection,
+  s6: renderStockSection,
+  s7: renderDeliverySection,
+  s8: renderARSection,
+  s9: renderCustFreqSection,
+  s10: renderFiberOpticSection,
+};
+let renderedSectionIds = new Set(); // section yang sudah pernah benar-benar dirender
+let latestMetrics = null;
+
 function renderDashboard(metrics) {
   applyChartDefaults();
+  latestMetrics = metrics;
 
   document.getElementById('lastUpdated').textContent = metrics.generatedAt.toLocaleString('id-ID', {
     day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
-  renderDailyPerformanceSection(metrics);
-  renderSalesSection(metrics);
-  renderRevenueSection(metrics);
-  renderRatioSection(metrics);
-  renderZonaSection(metrics);
-  renderTopProductsSection(metrics);
-  renderStockSection(metrics);
-  renderDeliverySection(metrics);
-  renderARSection(metrics);
-  renderCustFreqSection(metrics);
-  renderFiberOpticSection(metrics);
+  if (renderedSectionIds.size === 0) {
+    // Load pertama kali: cukup render Section 01 (Daily Performance, tampilan
+    // default setelah cover) supaya dashboard langsung terasa siap. Section
+    // lainnya baru dirender saat pertama kali dibuka (lihat ensureSectionRendered).
+    SECTION_RENDER_MAP.s0(metrics);
+    renderedSectionIds.add('s0');
+  } else {
+    // Update data (auto-refresh): render ulang HANYA section yang memang
+    // sudah pernah dibuka user, supaya datanya tetap ter-update — section
+    // yang belum pernah dibuka akan otomatis dapat data terbaru saat nanti
+    // pertama kali dibuka (ensureSectionRendered selalu pakai latestMetrics).
+    renderedSectionIds.forEach(id => { SECTION_RENDER_MAP[id](metrics); });
+  }
 
   wrapTablesForMobileScroll();
 
   document.getElementById('loadingOverlay').classList.add('hidden');
   document.getElementById('mainContent').classList.add('visible');
 }
+
+// Dipanggil dari index.html setiap kali user pindah ke section tertentu.
+// Kalau section itu belum pernah dirender, render sekarang (pakai data
+// terbaru yang sudah ada); kalau sudah pernah, tidak melakukan apa-apa
+// (hindari kerja render ulang yang tidak perlu).
+function ensureSectionRendered(sectionId) {
+  if (!sectionId || renderedSectionIds.has(sectionId) || !SECTION_RENDER_MAP[sectionId] || !latestMetrics) return;
+  SECTION_RENDER_MAP[sectionId](latestMetrics);
+  renderedSectionIds.add(sectionId);
+  wrapTablesForMobileScroll();
+}
+window.ensureSectionRendered = ensureSectionRendered;
 
 // Membungkus setiap <table class="data-table"> yang belum punya wrapper
 // scroll (.table-scroll) dengan div pembungkus baru, agar di layar mobile

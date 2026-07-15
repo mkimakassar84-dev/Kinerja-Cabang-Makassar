@@ -1,19 +1,19 @@
 /* ==========================================================================
    APP — Titik masuk utama. Memuat data, menghitung metrik, merender
    dashboard, dan memeriksa perubahan data secara berkala agar dashboard
-   terasa real-time mengikuti perubahan di Google Sheets — TANPA perlu
-   deploy ulang ATAU refresh manual oleh user.
+   otomatis mengikuti perubahan di Google Sheets — TANPA perlu deploy ulang
+   ATAU refresh manual oleh user.
 
    Catatan: situs statis seperti ini tidak bisa menerima "push notification"
    langsung dari Google Sheets begitu ada yang mengedit (itu perlu server/
    webhook terpisah). Solusi paling dekat yang bisa dilakukan murni dari
-   browser: cek data ke Google Sheets secara berkala (tiap 20 detik), lalu
-   HANYA render ulang dashboard kalau datanya benar-benar berubah — supaya
-   terasa otomatis mengikuti perubahan sheet, tanpa render ulang yang
-   mengganggu kalau memang tidak ada perubahan apa pun.
+   browser: cek data ke Google Sheets secara berkala (tiap 10 menit — dibuat
+   tidak terlalu sering supaya dashboard tetap ringan), lalu HANYA render
+   ulang section yang sedang/pernah dibuka kalau datanya benar-benar berubah.
+   Refresh halaman (hard refresh) selalu ambil data terbaru dari awal.
    ========================================================================== */
 
-const AUTO_CHECK_INTERVAL_MS = 20 * 1000; // cek perubahan data tiap 20 detik
+const AUTO_CHECK_INTERVAL_MS = 10 * 60 * 1000; // cek perubahan data tiap 10 menit
 let lastDataSnapshot = null;
 
 async function initDashboard() {
