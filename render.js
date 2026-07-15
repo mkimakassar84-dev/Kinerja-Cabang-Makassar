@@ -1816,6 +1816,8 @@ const WILAYAH_PAGE_SIZE = 15;
 
 function renderZonaSection(m) {
   const z = m.zonaWilayah;
+  const grandTotalSales = m.invoiceCustomerSummary.totalSales;
+  const wilayahMonthlyAgg = buildMonthlyAggByKey(m.transactions, t => t.lokasi);
 
   const html = `
     <div class="section-head">
@@ -1884,7 +1886,21 @@ function renderZonaSection(m) {
           <input type="text" id="wilayahSearch" class="text-input" placeholder="Ketik nama kabupaten/kota&hellip;" />
         </div>
       </div>
+      <p class="panel-note">Klik nama kabupaten/kota untuk melihat tren penjualan bulanannya.</p>
       <table class="data-table" id="tblWilayah"></table>
+      <div class="pagination" id="pagWilayah"></div>
+      <div id="wilayahDrillPanel" class="drill-panel hidden">
+        <h4 class="sub-heading" id="wilayahDrillTitle"></h4>
+        <p class="panel-note" id="wilayahDrillNote"></p>
+        <div class="two-col">
+          <div class="chart-wrap chart-wrap-sm"><canvas id="chartWilayahDrillSales"></canvas></div>
+          <div class="chart-wrap chart-wrap-sm"><canvas id="chartWilayahDrillInvoice"></canvas></div>
+        </div>
+        <div class="drill-contribution hidden" id="wilayahDrillContribution">
+          <div class="kpi-label" id="wilayahDrillContribLabel"></div>
+          <div class="kpi-value" id="wilayahDrillContribValue"></div>
+        </div>
+      </div>
     </div>
 
     <div class="panel">
@@ -1902,7 +1918,7 @@ function renderZonaSection(m) {
   renderCoverageChart(z, zonaCoverageMode);
   renderZonaDistChart(z);
   renderTop10WilayahChart(z);
-  renderWilayahTable(z, zonaFilter);
+  renderWilayahTable(z, zonaFilter, grandTotalSales, wilayahMonthlyAgg);
 
   document.querySelectorAll('#zonaCoverageToggle .toggle-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1919,7 +1935,7 @@ function renderZonaSection(m) {
       btn.classList.add('active');
       zonaFilter = btn.dataset.zone;
       wilayahTablePage = 1;
-      renderWilayahTable(z, zonaFilter);
+      renderWilayahTable(z, zonaFilter, grandTotalSales, wilayahMonthlyAgg);
     });
   });
 
@@ -1929,7 +1945,7 @@ function renderZonaSection(m) {
     wilayahSearchEl.addEventListener('input', (e) => {
       wilayahSearch = e.target.value;
       wilayahTablePage = 1;
-      renderWilayahTable(z, zonaFilter);
+      renderWilayahTable(z, zonaFilter, grandTotalSales, wilayahMonthlyAgg);
     });
   }
 }
@@ -1974,7 +1990,9 @@ function renderTop10WilayahChart(z) {
   });
 }
 
-function renderWilayahTable(z, filter) {
+let wilayahDrillSelected = null; // nama wilayah yang sedang dibuka drill-down-nya
+
+function renderWilayahTable(z, filter, grandTotalSales, wilayahMonthlyAgg) {
   const PAGE = WILAYAH_PAGE_SIZE;
   let data = filter === 'semua' ? z.wilayahData : z.wilayahData.filter(w => w.zone === filter);
   const q = wilayahSearch.trim().toUpperCase();
@@ -1987,28 +2005,92 @@ function renderWilayahTable(z, filter) {
 
   const rows = shown.map(w => {
     const salesInfo = salesMap.get(w.nama);
-    return `<tr>
+    const salesVal = salesInfo ? salesInfo.sales : 0;
+    const contribPct = grandTotalSales > 0 ? (salesVal / grandTotalSales) * 100 : 0;
+    return `<tr class="clickable-row" data-wilayah="${escapeHtml(w.nama)}">
       <td>${escapeHtml(w.nama)}</td>
       <td>${fmtNum(w.total)}</td>
       <td>${zonePillHtml(w.zone)}</td>
-      <td>${salesInfo ? fmtRupiah(salesInfo.sales) : fmtRupiah(0)}</td>
+      <td>${fmtRupiah(salesVal)}</td>
+      <td>${fmtPct(contribPct)}</td>
     </tr>`;
   }).join('');
   document.getElementById('tblWilayah').outerHTML = `<table class="data-table" id="tblWilayah">
-    <thead><tr><th>Kabupaten/Kota</th><th>Total Invoice 2026</th><th>Zona</th><th>Total Sales</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="4" class="empty-row">Tidak ada data untuk filter ini.</td></tr>'}</tbody>
+    <thead><tr><th>Kabupaten/Kota</th><th>Total Invoice 2026</th><th>Zona</th><th>Total Sales</th><th>Kontribusi by Total Sales</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="5" class="empty-row">Tidak ada data untuk filter ini.</td></tr>'}</tbody>
   </table>`;
 
-  const pagHtml = makePagBtns('pagWilayah', wilayahTablePage, totalPages, p => { wilayahTablePage = p; renderWilayahTable(z, zonaFilter); });
-  let pagEl = document.getElementById('pagWilayah');
-  if (!pagEl) {
-    pagEl = document.createElement('div');
-    pagEl.id = 'pagWilayah';
-    pagEl.className = 'pagination';
-    document.getElementById('tblWilayah').insertAdjacentElement('afterend', pagEl);
+  const pagHtml = makePagBtns('pagWilayah', wilayahTablePage, totalPages, p => { wilayahTablePage = p; renderWilayahTable(z, zonaFilter, grandTotalSales, wilayahMonthlyAgg); });
+  document.getElementById('pagWilayah').innerHTML = pagHtml;
+  attachPagBtns('pagWilayah', p => { wilayahTablePage = p; renderWilayahTable(z, zonaFilter, grandTotalSales, wilayahMonthlyAgg); });
+
+  document.querySelectorAll('#tblWilayah tbody tr[data-wilayah]').forEach(tr => {
+    tr.addEventListener('click', () => showWilayahDrilldown(tr.dataset.wilayah, wilayahMonthlyAgg));
+  });
+
+  // Kalau wilayah yang lagi dibuka drill-down-nya masih ada di daftar yang
+  // ditampilkan sekarang, refresh drill-down-nya juga (mis. setelah pindah halaman).
+  if (wilayahDrillSelected && data.some(w => w.nama === wilayahDrillSelected)) {
+    showWilayahDrilldown(wilayahDrillSelected, wilayahMonthlyAgg);
+  } else if (wilayahDrillSelected) {
+    document.getElementById('wilayahDrillPanel').classList.add('hidden');
+    wilayahDrillSelected = null;
   }
-  pagEl.innerHTML = pagHtml;
-  attachPagBtns('pagWilayah', p => { wilayahTablePage = p; renderWilayahTable(z, zonaFilter); });
+}
+
+function showWilayahDrilldown(nama, wilayahMonthlyAgg) {
+  wilayahDrillSelected = nama;
+  const monthly = wilayahMonthlyAgg.byKey[nama] || Array.from({ length: 12 }, () => ({ sales: 0, qty: 0, invoiceUnik: 0 }));
+
+  document.querySelectorAll('#tblWilayah tbody tr[data-wilayah]').forEach(tr => {
+    tr.classList.toggle('row-selected', tr.dataset.wilayah === nama);
+  });
+
+  const panel = document.getElementById('wilayahDrillPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('wilayahDrillTitle').textContent = `Tren Penjualan Bulanan — ${nama}`;
+  document.getElementById('wilayahDrillNote').textContent = 'Klik salah satu titik/batang grafik untuk melihat persentase kontribusi wilayah ini pada bulan tersebut.';
+  document.getElementById('wilayahDrillContribution').classList.add('hidden');
+
+  makeChart('chartWilayahDrillSales', {
+    type: 'bar',
+    data: {
+      labels: MONTH_NAMES_SHORT_ID,
+      datasets: [{ label: 'Sales', data: monthly.map(mo => mo.sales), backgroundColor: PALETTE.terra, borderRadius: 4 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      onClick: (evt, els) => { if (els.length) showWilayahMonthContribution(nama, els[0].index, wilayahMonthlyAgg); },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+
+  makeChart('chartWilayahDrillInvoice', {
+    type: 'line',
+    data: {
+      labels: MONTH_NAMES_SHORT_ID,
+      datasets: [{ label: 'Invoice Unik', data: monthly.map(mo => mo.invoiceUnik), borderColor: PALETTE.sage, backgroundColor: PALETTE.sage, tension: 0.3 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      onClick: (evt, els) => { if (els.length) showWilayahMonthContribution(nama, els[0].index, wilayahMonthlyAgg); },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtNum(ctx.parsed.y) + ' invoice' } } },
+      scales: { y: { beginAtZero: true, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function showWilayahMonthContribution(nama, monthIdx, wilayahMonthlyAgg) {
+  const monthly = wilayahMonthlyAgg.byKey[nama];
+  const salesInMonth = monthly ? monthly[monthIdx].sales : 0;
+  const totalInMonth = wilayahMonthlyAgg.totalsByMonth[monthIdx].sales;
+  const pct = totalInMonth > 0 ? (salesInMonth / totalInMonth) * 100 : 0;
+  document.getElementById('wilayahDrillContribLabel').textContent = `Kontribusi ${nama} — ${MONTH_NAMES_ID[monthIdx]} 2026`;
+  document.getElementById('wilayahDrillContribValue').textContent = `${fmtPct(pct)}  (${fmtRupiah(salesInMonth)} dari ${fmtRupiah(totalInMonth)} total sales seluruh wilayah)`;
+  document.getElementById('wilayahDrillContribution').classList.remove('hidden');
 }
 
 /* ==========================================================================
@@ -2023,6 +2105,7 @@ const STOCK_MOVEMENT_PAGE_SIZE = 10;
 function renderTopProductsSection(m) {
   const tp = m.topProducts;
   const st = m.stock;
+  const kodeBarangMonthlyAgg = buildMonthlyAggByKey(m.transactions, t => t.kodeBarang);
 
   const html = `
     <div class="section-head">
@@ -2053,8 +2136,21 @@ function renderTopProductsSection(m) {
           <input type="text" id="topProductsSearch" class="text-input" placeholder="Ketik kode barang&hellip;" />
         </div>
       </div>
+      <p class="panel-note">Klik kode barang untuk melihat tren penjualan bulanannya.</p>
       <table class="data-table" id="tblTopProducts"></table>
       <div class="pagination" id="pagTopProducts"></div>
+      <div id="kodeBarangDrillPanel" class="drill-panel hidden">
+        <h4 class="sub-heading" id="kodeBarangDrillTitle"></h4>
+        <p class="panel-note" id="kodeBarangDrillNote"></p>
+        <div class="two-col">
+          <div class="chart-wrap chart-wrap-sm"><canvas id="chartKodeBarangDrillSales"></canvas></div>
+          <div class="chart-wrap chart-wrap-sm"><canvas id="chartKodeBarangDrillQty"></canvas></div>
+        </div>
+        <div class="drill-contribution hidden" id="kodeBarangDrillContribution">
+          <div class="kpi-label" id="kodeBarangDrillContribLabel"></div>
+          <div class="kpi-value" id="kodeBarangDrillContribValue"></div>
+        </div>
+      </div>
     </div>
 
     <div class="panel">
@@ -2082,7 +2178,7 @@ function renderTopProductsSection(m) {
   document.getElementById('s5').innerHTML = html;
 
   const grandTotalSales = m.invoiceCustomerSummary.totalSales;
-  renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter, grandTotalSales);
+  renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter, grandTotalSales, kodeBarangMonthlyAgg);
   renderStockMovementTables(st);
 
   document.querySelectorAll('#topProductMetricToggle .toggle-btn').forEach(btn => {
@@ -2091,7 +2187,7 @@ function renderTopProductsSection(m) {
       btn.classList.add('active');
       topProductMetric = btn.dataset.metric;
       topProductsTablePage = 1;
-      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter, grandTotalSales);
+      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter, grandTotalSales, kodeBarangMonthlyAgg);
     });
   });
   document.querySelectorAll('#topProductCompanyToggle .toggle-btn').forEach(btn => {
@@ -2100,7 +2196,7 @@ function renderTopProductsSection(m) {
       btn.classList.add('active');
       topProductCompanyFilter = btn.dataset.co;
       topProductsTablePage = 1;
-      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter, grandTotalSales);
+      renderTopProductsChart(tp, topProductMetric, topProductCompanyFilter, grandTotalSales, kodeBarangMonthlyAgg);
     });
   });
 
@@ -2110,7 +2206,7 @@ function renderTopProductsSection(m) {
     topProductsSearchEl.addEventListener('input', (e) => {
       topProductsSearch = e.target.value;
       topProductsTablePage = 1;
-      renderTopProductsTable(getTopProductData(tp, topProductMetric, topProductCompanyFilter), grandTotalSales);
+      renderTopProductsTable(getTopProductData(tp, topProductMetric, topProductCompanyFilter), grandTotalSales, kodeBarangMonthlyAgg);
     });
   }
 }
@@ -2152,7 +2248,9 @@ function getTopProductData(tp, metric, coFilter) {
   return source;
 }
 
-function renderTopProductsChart(tp, metric, coFilter, grandTotalSales) {
+let kodeBarangDrillSelected = null; // kode barang yang sedang dibuka drill-down-nya
+
+function renderTopProductsChart(tp, metric, coFilter, grandTotalSales, kodeBarangMonthlyAgg) {
   const full = getTopProductData(tp, metric, coFilter);
   const data = full.slice(0, 10);
   makeChart('chartTopProducts', {
@@ -2172,10 +2270,10 @@ function renderTopProductsChart(tp, metric, coFilter, grandTotalSales) {
     },
   });
 
-  renderTopProductsTable(full, grandTotalSales);
+  renderTopProductsTable(full, grandTotalSales, kodeBarangMonthlyAgg);
 }
 
-function renderTopProductsTable(fullData, grandTotalSales) {
+function renderTopProductsTable(fullData, grandTotalSales, kodeBarangMonthlyAgg) {
   const PAGE = 10;
   const render = () => {
     const q = topProductsSearch.trim().toUpperCase();
@@ -2186,13 +2284,79 @@ function renderTopProductsTable(fullData, grandTotalSales) {
     const shown = data.slice((topProductsTablePage - 1) * PAGE, topProductsTablePage * PAGE);
     document.getElementById('tblTopProducts').outerHTML = `<table class="data-table" id="tblTopProducts">
       <thead><tr><th>Peringkat</th><th>Kode Barang</th><th>Sales</th><th>Quantity</th><th>Kontribusi by Total Sales</th></tr></thead>
-      <tbody>${shown.length ? shown.map((p, i) => `<tr><td>${(topProductsTablePage - 1) * PAGE + i + 1}</td><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td><td>${fmtPct(grandTotalSales > 0 ? (p.sales / grandTotalSales) * 100 : 0)}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-row">Tidak ada kode barang yang cocok.</td></tr>'}</tbody>
+      <tbody>${shown.length ? shown.map((p, i) => `<tr class="clickable-row" data-kode="${escapeHtml(p.kode)}"><td>${(topProductsTablePage - 1) * PAGE + i + 1}</td><td>${escapeHtml(p.kode)}</td><td>${fmtRupiah(p.sales)}</td><td>${fmtNum(p.qty)}</td><td>${fmtPct(grandTotalSales > 0 ? (p.sales / grandTotalSales) * 100 : 0)}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-row">Tidak ada kode barang yang cocok.</td></tr>'}</tbody>
     </table>`;
     const pagHtml = makePagBtns('pagTopProducts', topProductsTablePage, totalPages, p => { topProductsTablePage = p; render(); });
     const pagEl = document.getElementById('pagTopProducts');
     if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagTopProducts', p => { topProductsTablePage = p; render(); }); }
+
+    document.querySelectorAll('#tblTopProducts tbody tr[data-kode]').forEach(tr => {
+      tr.addEventListener('click', () => showKodeBarangDrilldown(tr.dataset.kode, kodeBarangMonthlyAgg));
+    });
+
+    if (kodeBarangDrillSelected && shown.some(p => p.kode === kodeBarangDrillSelected)) {
+      showKodeBarangDrilldown(kodeBarangDrillSelected, kodeBarangMonthlyAgg);
+    } else if (kodeBarangDrillSelected) {
+      document.getElementById('kodeBarangDrillPanel').classList.add('hidden');
+      kodeBarangDrillSelected = null;
+    }
   };
   render();
+}
+
+function showKodeBarangDrilldown(kode, kodeBarangMonthlyAgg) {
+  kodeBarangDrillSelected = kode;
+  const monthly = kodeBarangMonthlyAgg.byKey[kode] || Array.from({ length: 12 }, () => ({ sales: 0, qty: 0, invoiceUnik: 0 }));
+
+  document.querySelectorAll('#tblTopProducts tbody tr[data-kode]').forEach(tr => {
+    tr.classList.toggle('row-selected', tr.dataset.kode === kode);
+  });
+
+  const panel = document.getElementById('kodeBarangDrillPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('kodeBarangDrillTitle').textContent = `Tren Penjualan Bulanan — ${kode}`;
+  document.getElementById('kodeBarangDrillNote').textContent = 'Klik salah satu titik/batang grafik untuk melihat persentase kontribusi kode barang ini pada bulan tersebut.';
+  document.getElementById('kodeBarangDrillContribution').classList.add('hidden');
+
+  makeChart('chartKodeBarangDrillSales', {
+    type: 'bar',
+    data: {
+      labels: MONTH_NAMES_SHORT_ID,
+      datasets: [{ label: 'Sales', data: monthly.map(mo => mo.sales), backgroundColor: PALETTE.amber, borderRadius: 4 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      onClick: (evt, els) => { if (els.length) showKodeBarangMonthContribution(kode, els[0].index, kodeBarangMonthlyAgg); },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+
+  makeChart('chartKodeBarangDrillQty', {
+    type: 'line',
+    data: {
+      labels: MONTH_NAMES_SHORT_ID,
+      datasets: [{ label: 'Quantity', data: monthly.map(mo => mo.qty), borderColor: PALETTE.sage, backgroundColor: PALETTE.sage, tension: 0.3 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      onClick: (evt, els) => { if (els.length) showKodeBarangMonthContribution(kode, els[0].index, kodeBarangMonthlyAgg); },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtNum(ctx.parsed.y) + ' unit' } } },
+      scales: { y: { beginAtZero: true, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function showKodeBarangMonthContribution(kode, monthIdx, kodeBarangMonthlyAgg) {
+  const monthly = kodeBarangMonthlyAgg.byKey[kode];
+  const salesInMonth = monthly ? monthly[monthIdx].sales : 0;
+  const totalInMonth = kodeBarangMonthlyAgg.totalsByMonth[monthIdx].sales;
+  const pct = totalInMonth > 0 ? (salesInMonth / totalInMonth) * 100 : 0;
+  document.getElementById('kodeBarangDrillContribLabel').textContent = `Kontribusi ${kode} — ${MONTH_NAMES_ID[monthIdx]} 2026`;
+  document.getElementById('kodeBarangDrillContribValue').textContent = `${fmtPct(pct)}  (${fmtRupiah(salesInMonth)} dari ${fmtRupiah(totalInMonth)} total sales seluruh kode barang)`;
+  document.getElementById('kodeBarangDrillContribution').classList.remove('hidden');
 }
 
 /* ==========================================================================
@@ -2792,12 +2956,18 @@ function renderCustFreqSection(m) {
 
     <div class="panel">
       <h3>Distribusi Customer berdasarkan Frekuensi Transaksi</h3>
-      <p class="panel-note">Pembagian jumlah customer unik dan total nominal pembelanjaan berdasarkan seberapa sering mereka bertransaksi sepanjang 2026.</p>
+      <p class="panel-note">Pembagian jumlah customer unik dan total nominal pembelanjaan berdasarkan seberapa sering mereka bertransaksi sepanjang 2026. Klik salah satu baris frekuensi untuk melihat daftar customernya.</p>
       <div class="two-col">
         <div class="chart-wrap chart-wrap-sm"><canvas id="chartFreqDist"></canvas></div>
         <div class="chart-wrap chart-wrap-sm"><canvas id="chartFreqDistSales"></canvas></div>
       </div>
       <table class="data-table" id="tblFreqDist"></table>
+      <div id="freqDistDrillPanel" class="drill-panel hidden">
+        <h4 class="sub-heading" id="freqDistDrillTitle"></h4>
+        <p class="panel-note" id="freqDistDrillNote"></p>
+        <table class="data-table" id="tblFreqDistCustomers"></table>
+        <div class="pagination" id="pagFreqDistCustomers"></div>
+      </div>
     </div>
 
     <div class="panel">
@@ -2910,8 +3080,60 @@ function renderFreqDistCharts(dist) {
 
   document.getElementById('tblFreqDist').innerHTML = `
     <thead><tr><th>Frekuensi Belanja</th><th>Jumlah Customer</th><th>Persentase</th><th>Total Nominal</th></tr></thead>
-    <tbody>${dist.map(d => `<tr><td>${escapeHtml(d.label)}</td><td>${fmtNum(d.customerCount)}</td><td>${fmtPct(d.pct)}</td><td>${fmtRupiah(d.totalSales)}</td></tr>`).join('')}</tbody>
+    <tbody>${dist.map(d => `<tr class="clickable-row" data-bucket="${escapeHtml(d.key)}"><td>${escapeHtml(d.label)}</td><td>${fmtNum(d.customerCount)}</td><td>${fmtPct(d.pct)}</td><td>${fmtRupiah(d.totalSales)}</td></tr>`).join('')}</tbody>
   `;
+
+  document.querySelectorAll('#tblFreqDist tbody tr[data-bucket]').forEach(tr => {
+    tr.addEventListener('click', () => {
+      freqDistDrillPage = 1;
+      showFreqDistDrilldown(dist, tr.dataset.bucket);
+    });
+  });
+
+  if (freqDistDrillSelected && dist.some(d => d.key === freqDistDrillSelected)) {
+    showFreqDistDrilldown(dist, freqDistDrillSelected);
+  }
+}
+
+let freqDistDrillSelected = null;
+let freqDistDrillPage = 1;
+const FREQ_DIST_DRILL_PAGE_SIZE = 15;
+
+function showFreqDistDrilldown(dist, bucketKey) {
+  freqDistDrillSelected = bucketKey;
+  const bucket = dist.find(d => d.key === bucketKey);
+  if (!bucket) return;
+
+  document.querySelectorAll('#tblFreqDist tbody tr[data-bucket]').forEach(tr => {
+    tr.classList.toggle('row-selected', tr.dataset.bucket === bucketKey);
+  });
+
+  const panel = document.getElementById('freqDistDrillPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('freqDistDrillTitle').textContent = `Daftar Customer — ${bucket.label}`;
+  document.getElementById('freqDistDrillNote').textContent = `${fmtNum(bucket.customerCount)} customer dalam kategori ini.`;
+
+  const isSingle = bucketKey === 'b1';
+  const PAGE = FREQ_DIST_DRILL_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(bucket.customers.length / PAGE));
+  if (freqDistDrillPage > totalPages) freqDistDrillPage = totalPages;
+  const shown = bucket.customers.slice((freqDistDrillPage - 1) * PAGE, freqDistDrillPage * PAGE);
+
+  const headCols = isSingle
+    ? '<th>Nama Customer</th><th>Total Sales</th><th>Tanggal Terakhir Berbelanja</th>'
+    : '<th>Nama Customer</th><th>Total Invoice Unik</th><th>Total Nilai Sales</th>';
+  const rowsHtml = shown.length ? shown.map(c => isSingle
+    ? `<tr><td>${escapeHtml(c.customer)}</td><td>${fmtRupiah(c.totalSales)}</td><td>${c.lastPurchase ? fmtDateShort(c.lastPurchase) : '-'}</td></tr>`
+    : `<tr><td>${escapeHtml(c.customer)}</td><td>${fmtNum(c.invoiceUnik)}</td><td>${fmtRupiah(c.totalSales)}</td></tr>`
+  ).join('') : `<tr><td colspan="3" class="empty-row">Tidak ada customer.</td></tr>`;
+
+  document.getElementById('tblFreqDistCustomers').innerHTML = `<thead><tr>${headCols}</tr></thead><tbody>${rowsHtml}</tbody>`;
+
+  const pagHtml = makePagBtns('pagFreqDistCustomers', freqDistDrillPage, totalPages, p => { freqDistDrillPage = p; showFreqDistDrilldown(dist, bucketKey); });
+  document.getElementById('pagFreqDistCustomers').innerHTML = pagHtml;
+  attachPagBtns('pagFreqDistCustomers', p => { freqDistDrillPage = p; showFreqDistDrilldown(dist, bucketKey); });
+
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 let top10CustomerTablePage = 1;

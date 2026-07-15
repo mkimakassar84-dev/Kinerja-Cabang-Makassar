@@ -827,13 +827,14 @@ function buildCustomerFrequency(transactions, asOfDate = TODAY) {
   ];
   const totalCustomerForDist = byCustomer.length;
   const frequencyDistribution = FREQ_BUCKETS.map(b => {
-    const custs = byCustomer.filter(c => b.test(c.invoiceUnik));
+    const custs = byCustomer.filter(c => b.test(c.invoiceUnik)).sort((a, b2) => b2.totalSales - a.totalSales);
     return {
       key: b.key,
       label: b.label,
       customerCount: custs.length,
       pct: totalCustomerForDist > 0 ? (custs.length / totalCustomerForDist) * 100 : 0,
       totalSales: sum(custs, c => c.totalSales),
+      customers: custs,
     };
   });
 
@@ -885,7 +886,45 @@ function buildFiberOptic1Core(transactions) {
 /* ==========================================================================
    ORKESTRASI — Menyatukan seluruh perhitungan menjadi satu objek metrics
    ========================================================================== */
+/**
+ * Agregasi transaksi 2026 per KEY (mis. nama wilayah / kode barang) DAN per
+ * bulan sekaligus — dipakai untuk fitur drill-down "klik baris tabel, lihat
+ * tren bulanan" di Section 05 (Wilayah) & Section 06 (Kode Barang).
+ * Mengembalikan:
+ *   byKey: { [key]: [ {sales, qty, invoiceUnik} x 12 bulan ] }
+ *   totalsByMonth: [ {sales, qty, invoiceUnik} x 12 bulan ] (semua key digabung,
+ *     dipakai untuk menghitung persentase kontribusi per bulan)
+ */
+function buildMonthlyAggByKey(transactions, keyFn) {
+  const tx2026 = filterYear(transactions, CURRENT_YEAR);
+  const byKeyRaw = {};
+  const totalsByMonthRaw = Array.from({ length: 12 }, () => ({ sales: 0, qty: 0, invSet: new Set() }));
+
+  tx2026.forEach(t => {
+    const key = keyFn(t);
+    if (!key) return;
+    const mi = t.orderDate.getMonth();
+    if (!byKeyRaw[key]) byKeyRaw[key] = Array.from({ length: 12 }, () => ({ sales: 0, qty: 0, invSet: new Set() }));
+    const bucket = byKeyRaw[key][mi];
+    bucket.sales += t.amount;
+    bucket.qty += t.qty;
+    bucket.invSet.add(t.noInvoice);
+    const totalBucket = totalsByMonthRaw[mi];
+    totalBucket.sales += t.amount;
+    totalBucket.qty += t.qty;
+    totalBucket.invSet.add(t.noInvoice);
+  });
+
+  const finalize = arr => arr.map(b => ({ sales: b.sales, qty: b.qty, invoiceUnik: b.invSet.size }));
+  const byKey = {};
+  Object.keys(byKeyRaw).forEach(key => { byKey[key] = finalize(byKeyRaw[key]); });
+  const totalsByMonth = finalize(totalsByMonthRaw);
+
+  return { byKey, totalsByMonth };
+}
+
 function computeAllMetrics(sheetData) {
+
   const transactions = normalizeGrandData(sheetData.grandData.rows);
   const revRows = sheetData.revSum.rows;
   const salesSumRows = sheetData.salesSum.rows;

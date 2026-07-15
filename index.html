@@ -212,6 +212,15 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
 .data-table tbody tr.row-selected{background:var(--terra-dim); box-shadow:inset 3px 0 0 var(--terra);}
 .data-table tfoot td{font-weight:700; background:var(--cream-deep); border-top:2px solid var(--line);}
 .data-table-compact th, .data-table-compact td{padding:7px 10px; font-size:12.5px;}
+.drill-panel{margin-top:16px; padding:16px; background:var(--cream-deep); border:1px solid var(--line); border-radius:10px;}
+.drill-panel .chart-wrap{cursor:pointer;}
+.drill-contribution{margin-top:14px; padding:12px 14px; background:var(--paper); border:1px solid var(--terra-light); border-radius:8px;}
+.drill-contribution .kpi-label{font-size:11px; font-weight:600; color:var(--slate); text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px;}
+.drill-contribution .kpi-value{font-size:15px; font-weight:700; color:var(--terra); line-height:1.4;}
+@media (max-width:640px){
+  .data-table tbody tr.clickable-row td{padding-top:12px; padding-bottom:12px;}
+  .drill-panel{padding:12px;}
+}
 .table-scroll{overflow-x:auto; max-width:100%; -webkit-overflow-scrolling:touch; margin-top:8px;}
 .po-month-detail{margin-top:18px; padding-top:18px; border-top:1px dashed var(--line);}
 .po-month-detail.hidden{display:none;}
