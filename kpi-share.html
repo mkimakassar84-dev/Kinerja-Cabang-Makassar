@@ -107,6 +107,11 @@ function draw(d){
   cx.fillText(d.isElapsed ? (MO[d.mi]+' '+d.T.getFullYear()) : (DY[d.T.getDay()]+', '+d.T.getDate()+' '+MO[d.T.getMonth()]+' '+d.T.getFullYear()),W-44,62);cx.textAlign='left';
   function bar(x,y,w,p,t){const h=p>=(t||100);cx.fillStyle='#e8e0d4';cx.fillRect(x,y,w,7);const f=Math.min(p/100,1)*w;if(f>0){cx.fillStyle=h?'#4d8a5c':'#b84040';cx.fillRect(x,y,f,7);}}
   function bdg(x,y,p,t){const h=p>=(t||100);const s=h?'\u2713 TARGET HIT':'\u26a0 BELUM ACHIEVE';cx.font='bold 13px system-ui';const bw=cx.measureText(s).width+20;cx.fillStyle=h?'#dceede':'#f3dad6';cx.fillRect(x,y,bw,24);cx.fillStyle=h?'#4d6b46':'#8c3c30';cx.fillText(s,x+10,y+16);}
+  // Versi 3-tingkat (dipakai khusus Sales/Revenue/Invoice): merah <65%, kuning
+  // 65%-<100% (ON PROGRESS), hijau >=100% (ACHIEVED).
+  function tier3(p,t){const target=t||100;return p>=target?'hit':(p>=65?'progress':'miss');}
+  function bar3(x,y,w,p,t){const lvl=tier3(p,t);const color=lvl==='hit'?'#4d8a5c':lvl==='progress'?'#c99a3a':'#b84040';cx.fillStyle='#e8e0d4';cx.fillRect(x,y,w,7);const f=Math.min(p/100,1)*w;if(f>0){cx.fillStyle=color;cx.fillRect(x,y,f,7);}}
+  function bdg3(x,y,p,t){const lvl=tier3(p,t);const s=lvl==='hit'?'\u2713 ACHIEVED':lvl==='progress'?'\u23f3 ON PROGRESS':'\u26a0 BELUM ACHIEVE';const bg=lvl==='hit'?'#dceede':lvl==='progress'?'#faf0d3':'#f3dad6';const fg=lvl==='hit'?'#4d6b46':lvl==='progress'?'#8a6d1f':'#8c3c30';cx.font='bold 13px system-ui';const bw=cx.measureText(s).width+20;cx.fillStyle=bg;cx.fillRect(x,y,bw,24);cx.fillStyle=fg;cx.fillText(s,x+10,y+16);}
   function co(x,y,vm,vc){cx.fillStyle='#c17a5a';cx.font='bold 14px system-ui';cx.fillText('MKI',x,y);cx.fillStyle='#2a2520';cx.font='400 14px system-ui';cx.fillText(vm,x+30,y);cx.fillStyle='#7a9872';cx.font='bold 14px system-ui';cx.fillText('CFN',x+210,y);cx.fillStyle='#2a2520';cx.font='400 14px system-ui';cx.fillText(vc,x+240,y);}
   // Box "TARGET HARIAN": label + Hari ini + (opsional target/hari) + badge
   // hijau/merah Daily Achieved/Not Achieved + (opsional) breakdown MKI/CFN.
@@ -152,7 +157,7 @@ function draw(d){
     if(o.co){co(x+22,yy,o.co[0],o.co[1]);yy+=20;}
     if(o.s2){cx.fillStyle='#6a5a4a';cx.font='400 13px system-ui';cx.fillText(o.s2,x+22,yy);yy+=18;}
     if(o.s3){cx.fillStyle='#6a5a4a';cx.font='400 13px system-ui';cx.fillText(o.s3,x+22,yy);yy+=18;}
-    if(o.pct!==undefined){yy+=4;bar(x+22,yy,w-44,o.pct,o.tgt);yy+=14;bdg(x+22,yy,o.pct,o.tgt);yy+=32;}
+    if(o.pct!==undefined){yy+=4;(o.threeTier?bar3:bar)(x+22,yy,w-44,o.pct,o.tgt);yy+=14;(o.threeTier?bdg3:bdg)(x+22,yy,o.pct,o.tgt);yy+=32;}
     if(o.daily){dailyBox(x+22,yy,w-44,o.daily);}
     else if(o.dailyNote){cx.fillStyle='#8a7d6a';cx.font='italic 12px system-ui';cx.fillText(o.dailyNote,x+22,yy+14);}
   }
@@ -177,15 +182,15 @@ function draw(d){
   const noTargetNote='Target tersedia per bulan \u2014 pilih bulan spesifik di dashboard';
   card(L,T1,CW,CH1,{lbl:'TOTAL SALES \u2014 '+moLabel,val:Rp(d.sM),co:[Rp(d.sMKI),Rp(d.sCFN)],
     s2:d.targetSM>0?('Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct((d.sM/d.targetSM)*100)):(d.isAll?noTargetNote:null),
-    pct:d.targetSM>0?(d.sM/d.targetSM)*100:undefined,
+    pct:d.targetSM>0?(d.sM/d.targetSM)*100:undefined, threeTier:true,
     daily:(d.targetSM>0 && !d.isElapsed)?{todayValue:Rp(d.sD),todayLabel:todayDM,targetPerDay:Rp(dTgtSales),achieved:isSundayToday?undefined:Math.round(d.sD)>=Math.round(dTgtSales),note:isSundayToday?'Hari Minggu \u2014 tidak dihitung sebagai target harian':null,breakdown:[Rp(d.sDMKI),Rp(d.sDCFN)]}:null});
   card(L+CW+GAP,T1,CW,CH1,{lbl:'TOTAL REVENUE \u2014 '+moLabel,val:Rp(d.rM),co:[Rp(d.rMKI),Rp(d.rCFN)],
     s2:d.targetSM>0?('Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct((d.rM/d.targetSM)*100)):(d.isAll?noTargetNote:null),
-    pct:d.targetSM>0?(d.rM/d.targetSM)*100:undefined,
+    pct:d.targetSM>0?(d.rM/d.targetSM)*100:undefined, threeTier:true,
     daily:(d.targetSM>0 && !d.isElapsed)?{todayValue:Rp(d.rD),todayLabel:todayDM,targetPerDay:Rp(dTgtRev),achieved:isSundayToday?undefined:Math.round(d.rD)>=Math.round(dTgtRev),note:isSundayToday?'Hari Minggu \u2014 tidak dihitung sebagai target harian':null,breakdown:[Rp(d.rDMKI),Rp(d.rDCFN)]}:null});
   card(L,T2,CW,CH2,{lbl:'TOTAL INVOICE \u2014 '+moLabel,val:Num(d.iM),fs:44,co:[Num(d.iMKI)+' inv',Num(d.iCFN)+' inv'],
     s2:d.isAll?noTargetNote:null,
-    pct:d.isAll?undefined:(d.iM>0?(d.iM/280)*100:0),
+    pct:d.isAll?undefined:(d.iM>0?(d.iM/280)*100:0), threeTier:true,
     daily:(d.isAll||d.isElapsed)?null:{todayValue:Num(d.iD)+' invoice',todayLabel:todayDM,targetPerDay:Num(Math.round(iTgt)),achieved:isSundayToday?undefined:Math.round(d.iD)>=Math.round(iTgt),note:isSundayToday?'Hari Minggu \u2014 tidak dihitung sebagai target harian':null,breakdown:[Num(d.iDMKI),Num(d.iDCFN)]}});
   card(L+CW+GAP,T2,CW,CH2,{lbl:'OTD ACCURACY \u2014 '+moLabel,val:Pct(d.oPct),fs:44,vc:d.oPct>=80?'#4d8a5c':'#b84040',s2:Num(d.oH)+' Same Day / '+Num(d.oT)+' invoice (termasuk HC)',s3:'Total Qty: '+Num(d.qty)+'  |  Total Koli: '+Num(d.kol),pct:d.oPct,tgt:80,daily:(d.isAll||d.isElapsed)?null:{todayValue:(d.oDt>0?Pct(d.oDpct):'\u2014')+' ('+Num(d.oDh)+'/'+Num(d.oDt)+' inv)',achieved:d.oDt>=1?(d.oDpct>=80):undefined,note:d.oDt===0?'Belum ada invoice hari ini':null}});
   card(L,T3,CW,CH3,{lbl:'SALES TO REVENUE RATIO',val:Pct(d.col),fs:44,s1:'Sales: '+Rp(d.sM),s2:'Revenue: '+Rp(d.rM)});
