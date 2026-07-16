@@ -2873,6 +2873,12 @@ function renderARSection(m) {
       </div>
       <div id="arCompanyDrillPanel" class="drill-panel hidden">
         <h4 class="sub-heading" id="arCompanyDrillTitle"></h4>
+        <div class="panel-head daily-perf-controls" style="margin-bottom:12px;">
+          <div class="filter-field filter-field-grow">
+            <label for="arCompanyDrillSearch">Cari Customer / No Invoice</label>
+            <input type="text" id="arCompanyDrillSearch" class="text-input" placeholder="Ketik nama customer atau no invoice&hellip;" />
+          </div>
+        </div>
         <table class="data-table" id="tblARCompanyDrill"></table>
         <div class="pagination" id="pagARCompanyDrill"></div>
       </div>
@@ -2962,27 +2968,42 @@ let arSearch = '';
 
 let arCompanyDrillSelected = null;
 let arCompanyDrillPage = 1;
+let arCompanyDrillSearch = '';
 const AR_COMPANY_DRILL_PAGE_SIZE = 15;
 
 function showARCompanyDrilldown(ar, company) {
   arCompanyDrillSelected = company;
   arCompanyDrillPage = 1;
+  arCompanyDrillSearch = '';
 
   document.querySelectorAll('.company-card[data-company]').forEach(card => {
     card.classList.toggle('row-selected', card.dataset.company === company);
   });
 
   document.getElementById('arCompanyDrillPanel').classList.remove('hidden');
+  const searchEl = document.getElementById('arCompanyDrillSearch');
+  if (searchEl) {
+    searchEl.value = '';
+    searchEl.oninput = (e) => {
+      arCompanyDrillSearch = e.target.value;
+      arCompanyDrillPage = 1;
+      renderARCompanyDrillTable(ar);
+    };
+  }
   renderARCompanyDrillTable(ar);
   document.getElementById('arCompanyDrillPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function renderARCompanyDrillTable(ar) {
   const PAGE = AR_COMPANY_DRILL_PAGE_SIZE;
-  const items = ar.items.filter(i => i.company === arCompanyDrillSelected)
-    .sort((a, b) => (b.tanggal && a.tanggal ? b.tanggal - a.tanggal : 0));
+  const parseAgingDays = (aging) => { const m = String(aging).match(/\d+/); return m ? parseInt(m[0], 10) : 0; };
+  let items = ar.items.filter(i => i.company === arCompanyDrillSelected)
+    .sort((a, b) => parseAgingDays(b.aging) - parseAgingDays(a.aging));
 
-  document.getElementById('arCompanyDrillTitle').textContent = `Rincian Piutang — ${arCompanyDrillSelected} (${fmtNum(items.length)} faktur)`;
+  const q = arCompanyDrillSearch.trim().toUpperCase();
+  if (q) items = items.filter(i => (i.customer || '').toUpperCase().includes(q) || (i.noFaktur || '').toUpperCase().includes(q));
+
+  document.getElementById('arCompanyDrillTitle').textContent = `Rincian Piutang — ${arCompanyDrillSelected} (${fmtNum(items.length)} faktur${q ? ', hasil pencarian' : ''})`;
 
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE));
   if (arCompanyDrillPage > totalPages) arCompanyDrillPage = totalPages;
@@ -2999,7 +3020,7 @@ function renderARCompanyDrillTable(ar) {
 
   document.getElementById('tblARCompanyDrill').innerHTML = `
     <thead><tr><th>Tanggal Faktur</th><th>No Faktur</th><th>Nama Customer</th><th>Nilai Faktur</th><th>Sisa Saldo Piutang</th><th>Aging</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="6" class="empty-row">Tidak ada data faktur.</td></tr>'}</tbody>
+    <tbody>${rows || `<tr><td colspan="6" class="empty-row">${q ? 'Tidak ada faktur yang cocok.' : 'Tidak ada data faktur.'}</td></tr>`}</tbody>
   `;
 
   const pagHtml = makePagBtns('pagARCompanyDrill', arCompanyDrillPage, totalPages, p => { arCompanyDrillPage = p; renderARCompanyDrillTable(ar); });
