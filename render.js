@@ -2846,6 +2846,7 @@ function renderARSection(m) {
 
     <div class="panel">
       <h3>Piutang by Company &mdash; MKI vs CFN</h3>
+      <p class="panel-note">Klik salah satu cardbox untuk melihat rincian piutang company tersebut.</p>
       <div class="two-col">
         <div class="chart-wrap chart-wrap-sm"><canvas id="chartARByCompany"></canvas></div>
         <div class="company-cards">
@@ -2856,7 +2857,7 @@ function renderARSection(m) {
               const pct = totalSisaSaldo > 0 ? (d.sisaSaldo / totalSisaSaldo) * 100 : 0;
               const invUnikCo = new Set(belumLunas.filter(i => i.company === co).map(i => i.noFaktur)).size;
               return `
-                <div class="company-card company-${co.toLowerCase()}">
+                <div class="company-card company-${co.toLowerCase()} clickable-row" data-company="${co}">
                   <div class="company-card-head">
                     <span class="company-badge company-badge-${co.toLowerCase()}">${co}</span>
                     <span style="font-size:12px; font-weight:600; color:var(--ink-soft); margin-left:auto;">${fmtPct(pct)} dari total piutang</span>
@@ -2869,6 +2870,11 @@ function renderARSection(m) {
             }).join('');
           })()}
         </div>
+      </div>
+      <div id="arCompanyDrillPanel" class="drill-panel hidden">
+        <h4 class="sub-heading" id="arCompanyDrillTitle"></h4>
+        <table class="data-table" id="tblARCompanyDrill"></table>
+        <div class="pagination" id="pagARCompanyDrill"></div>
       </div>
     </div>
 
@@ -2889,6 +2895,14 @@ function renderARSection(m) {
   renderAgingChart(ar);
   renderARByCompanyChart(ar);
   renderARTable(ar);
+
+  document.querySelectorAll('.company-card[data-company]').forEach(card => {
+    card.addEventListener('click', () => showARCompanyDrilldown(ar, card.dataset.company));
+  });
+
+  if (arCompanyDrillSelected) {
+    showARCompanyDrilldown(ar, arCompanyDrillSelected);
+  }
 
   const arSearchEl = document.getElementById('arSearch');
   if (arSearchEl) {
@@ -2945,6 +2959,53 @@ function renderARByCompanyChart(ar) {
 }
 
 let arSearch = '';
+
+let arCompanyDrillSelected = null;
+let arCompanyDrillPage = 1;
+const AR_COMPANY_DRILL_PAGE_SIZE = 15;
+
+function showARCompanyDrilldown(ar, company) {
+  arCompanyDrillSelected = company;
+  arCompanyDrillPage = 1;
+
+  document.querySelectorAll('.company-card[data-company]').forEach(card => {
+    card.classList.toggle('row-selected', card.dataset.company === company);
+  });
+
+  document.getElementById('arCompanyDrillPanel').classList.remove('hidden');
+  renderARCompanyDrillTable(ar);
+  document.getElementById('arCompanyDrillPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function renderARCompanyDrillTable(ar) {
+  const PAGE = AR_COMPANY_DRILL_PAGE_SIZE;
+  const items = ar.items.filter(i => i.company === arCompanyDrillSelected)
+    .sort((a, b) => (b.tanggal && a.tanggal ? b.tanggal - a.tanggal : 0));
+
+  document.getElementById('arCompanyDrillTitle').textContent = `Rincian Piutang — ${arCompanyDrillSelected} (${fmtNum(items.length)} faktur)`;
+
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE));
+  if (arCompanyDrillPage > totalPages) arCompanyDrillPage = totalPages;
+  const shown = items.slice((arCompanyDrillPage - 1) * PAGE, arCompanyDrillPage * PAGE);
+
+  const rows = shown.map(i => `<tr>
+    <td>${i.tanggal ? fmtDateShort(i.tanggal) : '-'}</td>
+    <td>${escapeHtml(i.noFaktur)}</td>
+    <td>${escapeHtml(i.customer)}</td>
+    <td>${fmtRupiah(i.nilaiFaktur)}</td>
+    <td>${fmtRupiah(i.sisaSaldo)}</td>
+    <td>${escapeHtml(i.aging)}</td>
+  </tr>`).join('');
+
+  document.getElementById('tblARCompanyDrill').innerHTML = `
+    <thead><tr><th>Tanggal Faktur</th><th>No Faktur</th><th>Nama Customer</th><th>Nilai Faktur</th><th>Sisa Saldo Piutang</th><th>Aging</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="6" class="empty-row">Tidak ada data faktur.</td></tr>'}</tbody>
+  `;
+
+  const pagHtml = makePagBtns('pagARCompanyDrill', arCompanyDrillPage, totalPages, p => { arCompanyDrillPage = p; renderARCompanyDrillTable(ar); });
+  document.getElementById('pagARCompanyDrill').innerHTML = pagHtml;
+  attachPagBtns('pagARCompanyDrill', p => { arCompanyDrillPage = p; renderARCompanyDrillTable(ar); });
+}
 
 function renderARTable(ar) {
   const PAGE = 15;

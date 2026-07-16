@@ -234,6 +234,10 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
 
 .company-cards{display:flex; flex-direction:column; gap:14px; justify-content:center;}
 .company-card{border:1px solid var(--line); border-radius:12px; padding:18px;}
+.company-card.clickable-row{cursor:pointer; transition:box-shadow .15s, transform .1s;}
+.company-card.clickable-row:hover{box-shadow:var(--shadow); transform:translateY(-1px);}
+.company-card.clickable-row:active{transform:translateY(0);}
+.company-card.row-selected{box-shadow:inset 0 0 0 2px var(--terra);}
 .company-card.company-mki{background:var(--terra-dim); border-color:var(--terra-light);}
 .company-card.company-cfn{background:var(--sage-dim); border-color:var(--sage-light);}
 .company-card-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
