@@ -1880,6 +1880,11 @@ function renderZonaSection(m) {
         <div class="indonesia-map-loading">Memuat peta&hellip;</div>
       </div>
       <div id="mapTooltip" class="map-tooltip hidden"></div>
+      <div id="mapProvinceDrillPanel" class="drill-panel hidden">
+        <h4 class="sub-heading" id="mapProvinceDrillTitle"></h4>
+        <p class="panel-note" id="mapProvinceDrillNote"></p>
+        <table class="data-table" id="tblMapProvinceDrill"></table>
+      </div>
     </div>
 
     <div class="panel">
@@ -2062,11 +2067,36 @@ async function renderIndonesiaMap(z) {
       path.addEventListener('mousemove', showTooltip);
       path.addEventListener('mouseenter', showTooltip);
       path.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
-      path.addEventListener('click', showTooltip); // supaya bisa dipakai di HP (tap)
+      path.addEventListener('click', (evt) => {
+        showTooltip(evt); // tetap tampilkan tooltip singkat juga (berguna di HP/tap)
+        showMapProvinceDrilldown(code, info);
+      });
     });
   } catch (err) {
     wrap.innerHTML = `<div class="indonesia-map-loading">Peta tidak bisa dimuat: ${escapeHtml(err.message)}</div>`;
   }
+}
+
+function showMapProvinceDrilldown(code, info) {
+  const name = PROVINCE_NAMES[code] || code;
+  const panel = document.getElementById('mapProvinceDrillPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('mapProvinceDrillTitle').textContent = `Detail Kabupaten/Kota — ${name}`;
+
+  if (!info || !info.wilayahList.length) {
+    document.getElementById('mapProvinceDrillNote').textContent = 'Belum ada data invoice tercatat untuk provinsi ini.';
+    document.getElementById('tblMapProvinceDrill').innerHTML = '';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+
+  document.getElementById('mapProvinceDrillNote').textContent = `${fmtNum(info.wilayahCount)} kabupaten/kota dengan total ${fmtNum(info.total)} invoice, zona ${info.zone.charAt(0).toUpperCase() + info.zone.slice(1)}.`;
+  const rows = info.wilayahList.map(w => `<tr><td>${escapeHtml(w.nama)}</td><td>${fmtNum(w.total)}</td></tr>`).join('');
+  document.getElementById('tblMapProvinceDrill').innerHTML = `
+    <thead><tr><th>Kabupaten/Kota</th><th>Total Invoice 2026</th></tr></thead>
+    <tbody>${rows}</tbody>
+  `;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function positionTooltip(evt, tooltip, wrap) {

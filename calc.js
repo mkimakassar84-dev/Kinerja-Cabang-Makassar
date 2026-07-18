@@ -377,9 +377,12 @@ function buildProvinceZones(wilayahData) {
     if (!byProvince[code]) byProvince[code] = { code, total: 0, wilayahCount: 0, wilayahList: [] };
     byProvince[code].total += w.total;
     byProvince[code].wilayahCount += 1;
-    byProvince[code].wilayahList.push(w.nama);
+    byProvince[code].wilayahList.push({ nama: w.nama, total: w.total });
   });
-  Object.values(byProvince).forEach(p => { p.zone = zoneOf(p.total); });
+  Object.values(byProvince).forEach(p => {
+    p.zone = zoneOf(p.total);
+    p.wilayahList.sort((a, b) => b.total - a.total);
+  });
   return byProvince;
 }
 
