@@ -2079,6 +2079,8 @@ function positionTooltip(evt, tooltip, wrap) {
 
 
 
+let wilayahDrillSelected = null; // nama wilayah yang sedang dibuka drill-down-nya
+
 function renderWilayahTable(z, filter, grandTotalSales, wilayahMonthlyAgg) {
   const PAGE = WILAYAH_PAGE_SIZE;
   let data = filter === 'semua' ? z.wilayahData : z.wilayahData.filter(w => w.zone === filter);
