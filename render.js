@@ -1868,6 +1868,18 @@ function renderZonaSection(m) {
         <div class="chart-wrap chart-wrap-sm"><canvas id="chartZonaDist"></canvas></div>
         <div class="chart-wrap chart-wrap-sm"><canvas id="chartTop10Wilayah"></canvas></div>
       </div>
+      <h4 class="sub-heading">Peta Sebaran Zona per Provinsi</h4>
+      <p class="panel-note">Warna tiap provinsi mengikuti agregat total invoice seluruh kabupaten/kota di dalamnya (threshold sama dengan zona wilayah). Provinsi abu-abu = belum ada data tercatat.</p>
+      <div class="map-legend">
+        <span class="map-legend-item"><span class="map-legend-swatch map-legend-hijau"></span>Hijau (&gt;50 invoice)</span>
+        <span class="map-legend-item"><span class="map-legend-swatch map-legend-kuning"></span>Kuning (20&ndash;50 invoice)</span>
+        <span class="map-legend-item"><span class="map-legend-swatch map-legend-merah"></span>Merah (&lt;20 invoice)</span>
+        <span class="map-legend-item"><span class="map-legend-swatch map-legend-none"></span>Belum ada data</span>
+      </div>
+      <div id="indonesiaMapWrap" class="indonesia-map-wrap">
+        <div class="indonesia-map-loading">Memuat peta&hellip;</div>
+      </div>
+      <div id="mapTooltip" class="map-tooltip hidden"></div>
     </div>
 
     <div class="panel">
@@ -1918,6 +1930,7 @@ function renderZonaSection(m) {
   renderCoverageChart(z, zonaCoverageMode);
   renderZonaDistChart(z);
   renderTop10WilayahChart(z);
+  renderIndonesiaMap(z);
   renderWilayahTable(z, zonaFilter, grandTotalSales, wilayahMonthlyAgg);
 
   document.querySelectorAll('#zonaCoverageToggle .toggle-btn').forEach(btn => {
@@ -1990,7 +2003,81 @@ function renderTop10WilayahChart(z) {
   });
 }
 
-let wilayahDrillSelected = null; // nama wilayah yang sedang dibuka drill-down-nya
+let indonesiaMapSvgCache = null; // cache teks SVG mentah supaya cuma fetch sekali
+
+const PROVINCE_NAMES = {
+  IDAC:'Aceh', IDBA:'Bali', IDBB:'Bangka Belitung', IDBE:'Bengkulu', IDBT:'Banten', IDGO:'Gorontalo',
+  IDJA:'Jambi', IDJB:'Jawa Barat', IDJI:'Jawa Timur', IDJK:'DKI Jakarta', IDJT:'Jawa Tengah',
+  IDKB:'Kalimantan Barat', IDKI:'Kalimantan Timur', IDKR:'Kepulauan Riau', IDKS:'Kalimantan Selatan',
+  IDKT:'Kalimantan Tengah', IDKU:'Kalimantan Utara', IDLA:'Lampung', IDMA:'Maluku', IDMU:'Maluku Utara',
+  IDNB:'Nusa Tenggara Barat', IDNT:'Nusa Tenggara Timur', IDPA:'Papua', IDPB:'Papua Barat', IDRI:'Riau',
+  IDSA:'Sulawesi Utara', IDSB:'Sumatera Barat', IDSG:'Sulawesi Tenggara', IDSN:'Sulawesi Selatan',
+  IDSR:'Sulawesi Barat', IDSS:'Sumatera Selatan', IDST:'Sulawesi Tengah', IDSU:'Sumatera Utara', IDYO:'Yogyakarta',
+};
+const ZONE_COLOR = { hijau: '#8fae82', kuning: '#e0bf72', merah: '#c98b7f' };
+const ZONE_NONE_COLOR = '#e3dccb';
+
+async function renderIndonesiaMap(z) {
+  const wrap = document.getElementById('indonesiaMapWrap');
+  if (!wrap) return;
+
+  try {
+    if (!indonesiaMapSvgCache) {
+      const res = await fetch('indonesia-map.svg', { cache: 'force-cache' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      indonesiaMapSvgCache = await res.text();
+    }
+    wrap.innerHTML = indonesiaMapSvgCache;
+    const svg = wrap.querySelector('svg');
+    if (!svg) throw new Error('SVG kosong');
+    svg.removeAttribute('height');
+    svg.setAttribute('width', '100%');
+    svg.style.height = 'auto';
+
+    // Titik-titik label bawaan simplemaps tidak dipakai (kita pakai tooltip sendiri).
+    const pointsGroup = svg.querySelector('#points');
+    const labelPointsGroup = svg.querySelector('#label_points');
+    if (pointsGroup) pointsGroup.style.display = 'none';
+    if (labelPointsGroup) labelPointsGroup.style.display = 'none';
+
+    const tooltip = document.getElementById('mapTooltip');
+    svg.querySelectorAll('#features path[id]').forEach(path => {
+      const code = path.id;
+      const info = z.provinceZones[code];
+      const color = info ? ZONE_COLOR[info.zone] : ZONE_NONE_COLOR;
+      path.style.fill = color;
+      path.style.cursor = 'pointer';
+      path.style.transition = 'fill .15s';
+      path.classList.add('map-province-path');
+
+      const showTooltip = (evt) => {
+        const name = PROVINCE_NAMES[code] || code;
+        const html = info
+          ? `<strong>${escapeHtml(name)}</strong><br>${fmtNum(info.total)} total invoice &bull; ${fmtNum(info.wilayahCount)} kabupaten/kota<br><span class="map-tooltip-zone">Zona ${info.zone.charAt(0).toUpperCase() + info.zone.slice(1)}</span>`
+          : `<strong>${escapeHtml(name)}</strong><br>Belum ada data tercatat`;
+        tooltip.innerHTML = html;
+        tooltip.classList.remove('hidden');
+        positionTooltip(evt, tooltip, wrap);
+      };
+      path.addEventListener('mousemove', showTooltip);
+      path.addEventListener('mouseenter', showTooltip);
+      path.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
+      path.addEventListener('click', showTooltip); // supaya bisa dipakai di HP (tap)
+    });
+  } catch (err) {
+    wrap.innerHTML = `<div class="indonesia-map-loading">Peta tidak bisa dimuat: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function positionTooltip(evt, tooltip, wrap) {
+  const wrapRect = wrap.getBoundingClientRect();
+  const x = (evt.clientX - wrapRect.left) + 12;
+  const y = (evt.clientY - wrapRect.top) + 12;
+  tooltip.style.left = Math.min(x, wrapRect.width - 180) + 'px';
+  tooltip.style.top = y + 'px';
+}
+
+
 
 function renderWilayahTable(z, filter, grandTotalSales, wilayahMonthlyAgg) {
   const PAGE = WILAYAH_PAGE_SIZE;

@@ -320,6 +320,70 @@ function zoneOf(totalInvoice) {
   return 'merah';
 }
 
+/* ==========================================================================
+   PETA INDONESIA — mapping nama Kabupaten/Kota (dari sheet KPI Monitoring) ke
+   kode provinsi ISO 3166-2:ID (dipakai peta SVG dari simplemaps.com). Dipakai
+   untuk Section 05 "Distribusi Zona Wilayah" — mewarnai tiap provinsi sesuai
+   agregat zona (hijau/kuning/merah) dari kabupaten/kota di dalamnya.
+   ========================================================================== */
+const WILAYAH_TO_PROVINCE = {
+  // Sulawesi Selatan
+  'MAKASSAR':'IDSN','BONE':'IDSN','SIDRAP':'IDSN','GOWA':'IDSN','PALOPO':'IDSN','BULUKUMBA':'IDSN',
+  'JENEPONTO':'IDSN','SENGKANG':'IDSN','BELOPA':'IDSN','PANGKEP':'IDSN','ENREKANG':'IDSN','PINRANG':'IDSN',
+  'BARRU':'IDSN','SOPPENG':'IDSN','TAKALAR':'IDSN','MALILI':'IDSN','SINJAI':'IDSN','PARE-PARE':'IDSN',
+  'LUWU TIMUR':'IDSN','MANGKUTANA':'IDSN','MASAMBA':'IDSN','LUWU':'IDSN','BANTAENG':'IDSN','SUKAMAJU':'IDSN',
+  'LUWU UTARA':'IDSN','MAROS':'IDSN','SOROWAKO':'IDSN','BONE-BONE':'IDSN','WAJO':'IDSN','WAWONDULA':'IDSN',
+  'SELAYAR':'IDSN','TORAJA':'IDSN','LAROMPONG':'IDSN','SIWA':'IDSN','TOMONI':'IDSN','WASUPONDA':'IDSN',
+  'TANAMONI':'IDSN','WOWONDULA':'IDSN','WALENRANG':'IDSN','RANTEPAO':'IDSN','BELAWA WAJO':'IDSN',
+  'BAEBUNTA':'IDSN','LAPAI':'IDSN','TOWUTI':'IDSN',
+  // Sulawesi Tenggara
+  'KENDARI':'IDSG','BAU-BAU':'IDSG','KOLAKA':'IDSG','KONAWE':'IDSG','MUNA':'IDSG','KOLAKA UTARA':'IDSG',
+  'BOMBANA':'IDSG','RAHA':'IDSG','BUTON':'IDSG','LASUSUA':'IDSG','KOLAKA TIMUR':'IDSG','UNAHA':'IDSG',
+  'BUTON TENGAH':'IDSG','WAKATOBI':'IDSG','BAU BAU':'IDSG',
+  // Sulawesi Tengah
+  'PALU':'IDST','BANGGAI':'IDST','TOLI-TOLI':'IDST','MOROWALI':'IDST','POSO':'IDST','BETELEME':'IDST',
+  'KOLONEDALLE':'IDST','PARIGI':'IDST','LUWUK BANGGAI':'IDST','BURIKO':'IDST','MOROWALI UTARA':'IDST',
+  'TENTENA':'IDST','LUMBEWE':'IDST','BUNGKU':'IDST','PARIGI MOUTONG':'IDST','DONGGALA':'IDST',
+  'TOJO UNA-UNA':'IDST','SIGI':'IDST','PENDOLO':'IDST','TARAELU':'IDST','LAMBARESE':'IDST','BUOL':'IDST',
+  // Sulawesi Barat
+  'MAJENE':'IDSR','PASANGKAYU':'IDSR','MAMUJU':'IDSR','MAMASA':'IDSR','POLEWALI':'IDSR','POLMAN':'IDSR','TOPOYO':'IDSR',
+  // Sulawesi Utara
+  'MANADO':'IDSA','KOTAMOBAGU':'IDSA','MINAHASA':'IDSA','BOLAANG MONGODOW':'IDSA','KEPULAUAN SANGIHE':'IDSA',
+  'SIAU TAGULANDANG BIARO':'IDSA','KEPULAUAN TALAUD':'IDSA','BITUNG':'IDSA','TOMOHON':'IDSA',
+  // Gorontalo
+  'GORONTALO':'IDGO','BOALEMO':'IDGO','BONE BOLANGO':'IDGO','POHUWATU':'IDGO',
+  // Maluku
+  'AMBON':'IDMA','MALUKU':'IDMA','SAUMLAKI':'IDMA','BANDA':'IDMA','NAMLEA':'IDMA',
+  // Maluku Utara
+  'TERNATE':'IDMU','HALMAHERA':'IDMU','MALUKU UTARA':'IDMU',
+  // Papua & Papua Barat
+  'PAPUA':'IDPA','NABIRE':'IDPA','JAYAPURA':'IDPA','WAMENA':'IDPA',
+  'BINTUNI':'IDPB','MANOKWARI':'IDPB',
+  // Provinsi lain (kiriman sesekali di luar wilayah utama)
+  'JAKARTA':'IDJK','SURABAYA':'IDJI','SAMARINDA':'IDKI','BALIKPAPAN':'IDKI','BERAU':'IDKI','BELITUNG':'IDBB',
+};
+
+/**
+ * Mengagregasi data zona per Kabupaten/Kota (wilayahData) ke tingkat provinsi
+ * untuk ditampilkan di peta Indonesia. Total invoice tiap provinsi = jumlah
+ * total invoice seluruh kabupaten/kota yang match, lalu diklasifikasi zona
+ * pakai threshold yang SAMA dengan zoneOf() supaya konsisten.
+ */
+function buildProvinceZones(wilayahData) {
+  const byProvince = {};
+  wilayahData.forEach(w => {
+    const code = WILAYAH_TO_PROVINCE[w.nama];
+    if (!code) return;
+    if (!byProvince[code]) byProvince[code] = { code, total: 0, wilayahCount: 0, wilayahList: [] };
+    byProvince[code].total += w.total;
+    byProvince[code].wilayahCount += 1;
+    byProvince[code].wilayahList.push(w.nama);
+  });
+  Object.values(byProvince).forEach(p => { p.zone = zoneOf(p.total); });
+  return byProvince;
+}
+
+
 function buildZonaWilayah(kpiRows, transactions) {
   // PENTING: Google gviz mendeteksi kolom N..Z (Jan..Des, Total) sebagai tipe
   // "number" sehingga label header teks ("Jan", "Feb", dst) tidak pernah
@@ -945,6 +1009,7 @@ function computeAllMetrics(sheetData) {
   const revenueByCompany = buildRevenueByCompany(revRows);
   const salesToRevenueRatio = buildSalesToRevenueRatio(salesTrend.monthly, revTrend.monthly);
   const zonaWilayah = buildZonaWilayah(kpiRows, transactions);
+  zonaWilayah.provinceZones = buildProvinceZones(zonaWilayah.wilayahData);
   const topProducts = buildTopProducts(transactions);
   const stock = buildStock(stockRows, transactions);
   const poGudang = buildPoGudang(poRows);
