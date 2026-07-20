@@ -1853,87 +1853,90 @@ function renderKpiPersonelChart(k) {
 /* ---- Detail personel: klik nama -> modal dengan tren harian, tren bulanan,
    dan kepatuhan per indikator, persis seperti tampilan aplikasi KPI REKAP
    (data diambil dari endpoint backend yang sama). ---- */
-async function openKpiPersonelDetail(name, yearMonthKey) {
-  const monthParam = String(yearMonthKey).replace(/^K/, '');
+function openKpiPersonelDetail(name, yearMonthKey) {
   const overlay = document.createElement('div');
   overlay.className = 'kpi-modal-overlay';
-  overlay.innerHTML = `
-    <div class="kpi-modal-box">
-      <div class="kpi-modal-head">
-        <div>
-          <h3>${escapeHtml(name)}</h3>
-          <div class="kpi-modal-sub">${monthLabelIdKpi(yearMonthKey)}</div>
-        </div>
-        <button type="button" class="kpi-modal-close" aria-label="Tutup">&times;</button>
-      </div>
-      <div class="kpi-modal-loading">Memuat data&hellip;</div>
-    </div>
-  `;
   document.body.appendChild(overlay);
   requestAnimationFrame(() => overlay.classList.add('show'));
 
-  function close() {
-    overlay.classList.remove('show');
-    setTimeout(() => overlay.remove(), 200);
-  }
-  overlay.querySelector('.kpi-modal-close').addEventListener('click', close);
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
-
-  try {
-    const res = await fetch(`${KPI_WEBAPP_URL}?action=personView&nama=${encodeURIComponent(name)}&month=${monthParam}`);
-    const payload = await res.json();
-    const detail = payload.detail || payload;
-    const trend = payload.trend || [];
-    renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail, trend);
-  } catch (err) {
-    overlay.querySelector('.kpi-modal-box').innerHTML += `<p class="kpi-modal-loading">Gagal memuat data. Coba lagi beberapa saat.</p>`;
-  }
+  const detail = buildKpiPersonDetail(name, yearMonthKey, kpiPersonelState.byPersonMonth, kpiPersonelState.months);
+  renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail);
 }
 
-function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail, trend) {
-  const box = overlay.querySelector('.kpi-modal-box');
+function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail) {
   const indicatorRows = (detail.indicatorStats || []).map(s => {
     const cls = s.percent >= 80 ? 'ok' : (s.percent >= 50 ? 'mid' : 'low');
     return `<div class="kpi-indicator-row"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${cls}">${s.percent}%</span></div>`;
   }).join('');
 
-  box.innerHTML = `
-    <div class="kpi-modal-head">
-      <div>
-        <h3>${escapeHtml(name)}</h3>
-        <div class="kpi-modal-sub">${monthLabelIdKpi(yearMonthKey)} &middot; Kepatuhan bulan ini: ${fmtPct(detail.monthPercent || 0)} &middot; ${detail.countedDays || 0} hari kerja terhitung</div>
+  const submittedDays = detail.days.filter(d => d.submitted);
+  const dateOptions = submittedDays.map(d =>
+    `<option value="${d.day}">${d.day} ${monthLabelIdKpi(yearMonthKey).split(' ')[0]}</option>`
+  ).join('');
+  const defaultDay = submittedDays.length ? submittedDays[submittedDays.length - 1].day : null;
+
+  overlay.innerHTML = `
+    <div class="kpi-modal-box">
+      <div class="kpi-modal-head">
+        <div>
+          <h3>${escapeHtml(name)}</h3>
+          <div class="kpi-modal-sub">${monthLabelIdKpi(yearMonthKey)} &middot; Kepatuhan bulan ini: ${fmtPct(detail.monthPercent || 0)} &middot; ${detail.countedDays || 0} hari kerja terhitung</div>
+        </div>
+        <button type="button" class="kpi-modal-close" aria-label="Tutup">&times;</button>
       </div>
-      <button type="button" class="kpi-modal-close" aria-label="Tutup">&times;</button>
-    </div>
 
-    <div class="panel">
-      <div class="panel-head"><h3>Tren Kepatuhan Harian</h3></div>
-      <div class="chart-wrap" style="height:220px"><canvas id="kpiModalDailyChart"></canvas></div>
-    </div>
+      <div class="kpi-grid kpi-grid-2">
+        <div class="kpi-card">
+          <div class="kpi-label">Indikator Terkuat</div>
+          <div class="kpi-value" style="font-size:15px">${detail.strongest ? escapeHtml(detail.strongest.label) : '&ndash;'}</div>
+          <div class="kpi-label" style="margin-top:4px; margin-bottom:0; color:${PALETTE.green}">${detail.strongest ? detail.strongest.percent + '%' : ''}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Indikator Terlemah</div>
+          <div class="kpi-value" style="font-size:15px">${detail.weakest ? escapeHtml(detail.weakest.label) : '&ndash;'}</div>
+          <div class="kpi-label" style="margin-top:4px; margin-bottom:0; color:${PALETTE.red}">${detail.weakest ? detail.weakest.percent + '%' : ''}</div>
+        </div>
+      </div>
 
-    <div class="panel">
-      <div class="panel-head"><h3>Tren Kepatuhan Bulanan</h3></div>
-      <div class="chart-wrap" style="height:200px"><canvas id="kpiModalMonthlyChart"></canvas></div>
-    </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Tren Kepatuhan Harian</h3></div>
+        <div class="chart-wrap" style="height:220px"><canvas id="kpiModalDailyChart"></canvas></div>
+      </div>
 
-    <div class="panel">
-      <div class="panel-head"><h3>Kepatuhan per Indikator</h3></div>
-      ${indicatorRows || '<p class="kpi-modal-loading">Belum ada data indikator.</p>'}
+      <div class="panel">
+        <div class="panel-head"><h3>Tren Kepatuhan Bulanan</h3></div>
+        <div class="chart-wrap" style="height:200px"><canvas id="kpiModalMonthlyChart"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h3>Kepatuhan per Indikator</h3></div>
+        ${indicatorRows || '<p class="kpi-modal-loading">Belum ada data indikator.</p>'}
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h3>Cek Indikator per Tanggal</h3></div>
+        ${dateOptions ? `
+          <div class="kpi-month-filter" style="margin-top:0">
+            <label for="kpiDaySelect">Tanggal:</label>
+            <select id="kpiDaySelect">${dateOptions}</select>
+          </div>
+          <div id="kpiDayDetail"></div>
+        ` : '<p class="kpi-modal-loading">Belum ada hari yang tersubmit bulan ini.</p>'}
+      </div>
     </div>
   `;
-  box.querySelector('.kpi-modal-close').addEventListener('click', () => {
-    overlay.classList.remove('show');
-    setTimeout(() => overlay.remove(), 200);
-  });
 
-  const days = detail.days || [];
+  const close = () => { overlay.classList.remove('show'); setTimeout(() => overlay.remove(), 200); };
+  overlay.querySelector('.kpi-modal-close').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
   makeChart('kpiModalDailyChart', {
     type: 'line',
     data: {
-      labels: days.map(d => d.day),
+      labels: detail.days.map(d => d.day),
       datasets: [{
         label: 'Kepatuhan harian (%)',
-        data: days.map(d => (d.isWorkday && d.submitted) ? d.dailyPercent : null),
+        data: detail.days.map(d => d.submitted ? d.dailyPercent : null),
         borderColor: PALETTE.terra,
         backgroundColor: PALETTE.terraLight,
         fill: true, tension: 0.25, spanGaps: false,
@@ -1947,7 +1950,7 @@ function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail, trend) 
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y === null ? 'Belum diisi / bukan hari kerja' : fmtPct(ctx.parsed.y) } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y === null ? 'Belum diisi hari itu' : fmtPct(ctx.parsed.y) } } },
       scales: {
         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
         x: { grid: { display: false } },
@@ -1958,10 +1961,10 @@ function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail, trend) 
   makeChart('kpiModalMonthlyChart', {
     type: 'line',
     data: {
-      labels: trend.map(t => monthShortIdKpi(t.month)),
+      labels: detail.trend.map(t => monthShortIdKpi(t.month)),
       datasets: [{
         label: 'Kepatuhan bulanan (%)',
-        data: trend.map(t => t.percent),
+        data: detail.trend.map(t => t.percent),
         borderColor: PALETTE.slate,
         backgroundColor: PALETTE.slateLight,
         fill: true, tension: 0.25,
@@ -1977,6 +1980,24 @@ function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail, trend) 
       },
     },
   });
+
+  if (defaultDay) {
+    const daySelect = overlay.querySelector('#kpiDaySelect');
+    daySelect.value = String(defaultDay);
+    const renderDay = (dayNum) => {
+      const d = detail.days.find(x => x.day === Number(dayNum));
+      const rows = (detail.indicatorStats || []).map((s, i) => {
+        const on = d && d.values[i];
+        return `<div class="kpi-indicator-row"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${on ? 'ok' : 'low'}">${on ? 'YA' : 'TIDAK'}</span></div>`;
+      }).join('');
+      const jamInfo = d && (d.jamDatang || d.jamPulang)
+        ? `<div class="kpi-modal-sub" style="margin:8px 0 4px">Jam Datang: ${d.jamDatang || '-'} &middot; Jam Pulang: ${d.jamPulang || '-'}</div>`
+        : '';
+      overlay.querySelector('#kpiDayDetail').innerHTML = jamInfo + rows;
+    };
+    renderDay(defaultDay);
+    daySelect.addEventListener('change', (e) => renderDay(e.target.value));
+  }
 }
 
 function renderRatioSection(m) {

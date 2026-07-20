@@ -1002,6 +1002,47 @@ function buildMonthlyAggByKey(transactions, keyFn) {
 const KPI_PERSONEL_LIST = ['ASTRID','ADI','REZA','PUTRI','BURHAMIN','ZUL','ASPAR','TAUFIK'];
 const KPI_PERSONEL_INDICATOR_KEYS = ['Row13','Row14','Row15','Row16','Row17','Row18','Row19','Row20','Row21','Row22'];
 
+// Label 10 indikator per personel (persis seperti di aplikasi input masing-masing) —
+// disimpan di sini supaya detail per personel bisa dibangun instan dari data yang
+// sudah dimuat, tanpa perlu memanggil server lagi setiap kali modal dibuka.
+const KPI_PERSONEL_LABELS = {
+  ASTRID: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Monitoring Sales Harian','Monitoring Revenue Harian','Monitoring Invoice harian','Monitoring Piutang (Dibawah 3 Bulan)','Verifikasi Diskon dan Plafon Customer','Evaluasi Kelengkapan Administrasi Penjualan','Evaluasi Kinerja dan Membimbing Sales','Pelaporan Kegiatan Operasional Harian'],
+  ADI: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Call Customer Non-Aktif <30 Hari (Min 3 Customer)','Melayani Customer Offline/SPD','Melayani Customer online (WA/Telepon)','Pembuatan Faktur (Surat Jalan & Invoice)','Monitoring Piutang Customer Yang Dihandle','Monitoring Pergerakan Barang Customer','Handling Complaint Customer','Menjaga Kebersihan Space dan Ruang kerja'],
+  REZA: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Call Customer Non-Aktif <60 Hari (Min 3 Customer)','Melayani Customer Offline/SPD','Melayani Customer online (WA/Telepon)','Mengarsip Dokumen Sales Harian','Menginput Data Sales Harian di Sistem Cabang','Final Check Surat Jalan Delivery','Handling Complaint Customer','Menjaga Kebersihan Space dan Ruang kerja'],
+  PUTRI: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Mengelola administrasi dan Inventaris Kantor (Dokumen dan ATK Kantor)','Melakukan Pengecekan Server','Evaluasi Kas Operasional','Pengecekan Penunjang Operasional (PC, CCTV, Jaringan)','Menginput Laporan Revenue & AR','Report Harian Kinerja Cabang','Pelaporan Kegiatan Operasional Harian','Input dan Evaluasi Absensi Cabang'],
+  BURHAMIN: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Delivery Harian Diatas 80%','Follow Up Piutang Customer (Min 3 Customer)','Mengawasi Proses Bongkar Muat','Mengarsip Dokumen Logistik Harian','Membuat Laporan Piutang','Membuat Laporan Turnover, Delivery & Return','Menyiapkan Barang Handcarry','Memberi laporan kegiatan harian Logistik'],
+  ZUL: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Delivery Harian diatas 80%','Menyiapkan Barang Untuk Loading','Membuat Dokumentasi Barang di Ekspedisi','Membagi Surat Jalan Untuk Ritase Harian','Mengarsipkan Tanda Terima Ekspedisi','Menjaga Kebersihan dan Kerapian Gudang','Menginput Surat Jalan di Sistem Cabang','Melaporkan Evaluasi Ritase Harian'],
+  ASPAR: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Delivery Harian diatas 80%','Mengemas Barang Yang Akan Dikirim','Final Check Barang Loading','Final Check Surat Jalan','Menjaga Alat Penunjang Logistik','Menjaga Kebersihan dan Kerapian Gudang','Memastikan Keamanan Buka/Tutup Kantor','Melaporkan Evaluasi Ritase Harian'],
+  TAUFIK: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Delivery Harian diatas 80%','Memeriksa Kesiapan Kondisi Kendaraan Harian','Konfirmasi dan Navigasi Rute Harian','Mengatur Kubikasi Box Muatan','Menyiapkan Barang Untuk Loading','Menjaga Kebersihan dan Kerapian Gudang','Memastikan Keamanan Buka/Tutup Kantor','Melaporkan Evaluasi Ritase Harian'],
+};
+
+// Uraikan 1 baris DATA_ARCHIVE (1 orang x 1 bulan) menjadi data per-hari (1..31):
+// status submit, 10 nilai indikator (boolean), persentase harian, jam datang/pulang.
+function buildKpiDailyDetail(row) {
+  const splitArr = v => toStr(v).split(',');
+  const submittedArr = splitArr(row['Submitted']);
+  const jamDatangArr = splitArr(row['JamDatang']);
+  const jamPulangArr = splitArr(row['JamPulang']);
+  const indicatorArrs = KPI_PERSONEL_INDICATOR_KEYS.map(key => splitArr(row[key]));
+
+  const days = [];
+  for (let day = 0; day < 31; day++) {
+    const submitted = submittedArr[day] === '1';
+    const values = indicatorArrs.map(arr => arr[day] === '1');
+    const possibleCount = indicatorArrs.filter(arr => arr[day] === '1' || arr[day] === '0').length;
+    const onCount = indicatorArrs.filter(arr => arr[day] === '1').length;
+    days.push({
+      day: day + 1,
+      submitted,
+      values,
+      dailyPercent: submitted && possibleCount > 0 ? (onCount / possibleCount) * 100 : null,
+      jamDatang: jamDatangArr[day] || '',
+      jamPulang: jamPulangArr[day] || '',
+    });
+  }
+  return days;
+}
+
 function computeKpiPersonelMetrics(rows) {
   const splitArr = v => toStr(v).split(',');
 
@@ -1076,6 +1117,7 @@ function computeKpiPersonelMetrics(rows) {
   return {
     months,
     byMonth,
+    byPersonMonth,
     currentMonthLabel: latestMonth,
     people: current.people,
     avgPercent: current.avgPercent,
@@ -1084,6 +1126,46 @@ function computeKpiPersonelMetrics(rows) {
     mostHours: current.mostHours,
   };
 }
+
+// Bangun detail lengkap 1 personel x 1 bulan dari data yang SUDAH dimuat (tanpa fetch
+// baru): tren harian, tren bulanan (semua bulan yang ada), indikator terkuat/terlemah,
+// dan rincian per-tanggal untuk ditampilkan di modal detail.
+function buildKpiPersonDetail(name, ym, byPersonMonth, months) {
+  const labels = KPI_PERSONEL_LABELS[name] || [];
+  const row = byPersonMonth[name] && byPersonMonth[name][ym];
+  const days = row ? buildKpiDailyDetail(row) : [];
+
+  const submittedDays = days.filter(d => d.submitted);
+  const countedDays = submittedDays.length;
+  const monthPercent = countedDays > 0
+    ? submittedDays.reduce((s, d) => s + d.dailyPercent, 0) / countedDays
+    : 0;
+
+  const indicatorStats = labels.map((label, idx) => {
+    const checked = submittedDays.filter(d => d.values[idx]).length;
+    const possible = submittedDays.length;
+    return { label, checked, possible, percent: possible > 0 ? Math.round((checked / possible) * 100) : 0 };
+  });
+
+  let strongest = null, weakest = null;
+  if (indicatorStats.length) {
+    const sorted = indicatorStats.slice().sort((a, b) => b.percent - a.percent || b.checked - a.checked);
+    strongest = sorted[0];
+    weakest = sorted[sorted.length - 1];
+  }
+
+  // Tren bulanan: hitung ulang persentase untuk SEMUA bulan yang ada datanya orang ini.
+  const trend = months
+    .filter(m => byPersonMonth[name] && byPersonMonth[name][m])
+    .map(m => {
+      const mDays = buildKpiDailyDetail(byPersonMonth[name][m]).filter(d => d.submitted);
+      const pct = mDays.length ? mDays.reduce((s, d) => s + d.dailyPercent, 0) / mDays.length : 0;
+      return { month: m, percent: Math.round(pct * 10) / 10 };
+    });
+
+  return { name, yearMonth: ym, days, countedDays, monthPercent, indicatorStats, strongest, weakest, trend };
+}
+
 
 function computeAllMetrics(sheetData) {
 
