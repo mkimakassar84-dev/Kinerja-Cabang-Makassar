@@ -1084,6 +1084,26 @@ function computeKpiPersonelMetrics(rows) {
       percent: totalPossible > 0 ? (totalOn / totalPossible) * 100 : 0,
       totalJamKerja: totalMenitKerja / 60,
       hariSubmit,
+      totalOn, totalPossible, totalMenitKerja,
+    };
+  }
+
+  // Gabungkan beberapa baris bulan (dipakai untuk opsi "Semua Bulan") — dijumlahkan
+  // per hari-indikator (bukan rata-rata per bulan begitu saja) supaya bulan dengan
+  // lebih banyak hari kerja tercatat memang lebih berpengaruh ke persentase akhir.
+  function computeOneRowMulti(name, rowsArr) {
+    if (!rowsArr.length) return { name, hasData: false, percent: 0, totalJamKerja: 0, hariSubmit: 0 };
+    const parts = rowsArr.map(r => computeOneRow(name, r));
+    const totalOn = parts.reduce((s, p) => s + p.totalOn, 0);
+    const totalPossible = parts.reduce((s, p) => s + p.totalPossible, 0);
+    const totalMenitKerja = parts.reduce((s, p) => s + p.totalMenitKerja, 0);
+    const hariSubmit = parts.reduce((s, p) => s + p.hariSubmit, 0);
+    return {
+      name,
+      hasData: hariSubmit > 0,
+      percent: totalPossible > 0 ? (totalOn / totalPossible) * 100 : 0,
+      totalJamKerja: totalMenitKerja / 60,
+      hariSubmit,
     };
   }
 
@@ -1098,11 +1118,27 @@ function computeKpiPersonelMetrics(rows) {
     byPersonMonth[person][ym] = r;
     monthsSet.add(ym);
   });
-  const months = Array.from(monthsSet).sort(); // "K2026-07" dst — urut leksikal = urut kronologis
-  const latestMonth = months.length ? months[months.length - 1] : null;
+  const dataMonths = Array.from(monthsSet).sort(); // "K2026-07" dst — bulan yang SUDAH ada datanya
+  const latestMonth = dataMonths.length ? dataMonths[dataMonths.length - 1] : null;
+
+  // Filter bulan menampilkan SEMUA 12 bulan tahun yang bersangkutan (bukan cuma
+  // yang sudah ada datanya), supaya bisa langsung dicek begitu datanya mulai
+  // terisi di bulan-bulan berikutnya tanpa perlu update kode lagi — plus 1 opsi
+  // "Semua Bulan" (ALL) di paling atas untuk lihat akumulasi seluruh bulan yang
+  // sudah ada datanya sekaligus.
+  const yearsPresent = new Set(dataMonths.map(m => (m.match(/^K(\d{4})/) || [])[1]).filter(Boolean));
+  if (yearsPresent.size === 0) yearsPresent.add(String(new Date().getFullYear()));
+  const months = ['ALL'];
+  Array.from(yearsPresent).sort().forEach(y => {
+    for (let mm = 1; mm <= 12; mm++) months.push('K' + y + '-' + String(mm).padStart(2, '0'));
+  });
 
   function computeForMonth(ym) {
     const people = KPI_PERSONEL_LIST.map(name => {
+      if (ym === 'ALL') {
+        const rowsArr = dataMonths.map(m => byPersonMonth[name] && byPersonMonth[name][m]).filter(Boolean);
+        return computeOneRowMulti(name, rowsArr);
+      }
       const r = byPersonMonth[name] && byPersonMonth[name][ym];
       return r ? computeOneRow(name, r) : { name, hasData: false, percent: 0, totalJamKerja: 0, hariSubmit: 0 };
     });

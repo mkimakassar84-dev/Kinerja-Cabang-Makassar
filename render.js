@@ -1721,6 +1721,7 @@ function fmtJamKerjaId(hours) {
 
 function monthLabelIdKpi(ym) {
   if (!ym) return '';
+  if (ym === 'ALL') return 'Semua Bulan';
   const clean = String(ym).replace(/^K/, '');
   const [y, mm] = clean.split('-');
   const names = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
@@ -1820,7 +1821,10 @@ function renderKpiPersonelBody(monthData) {
   renderKpiPersonelChart(k);
 
   document.querySelectorAll('#kpiPersonelBody .data-table.kpi-clickable tbody tr').forEach(tr => {
-    tr.addEventListener('click', () => openKpiPersonelDetail(tr.dataset.name, k.yearMonth));
+    tr.addEventListener('click', () => {
+      const targetMonth = k.yearMonth === 'ALL' ? kpiPersonelState.currentMonthLabel : k.yearMonth;
+      openKpiPersonelDetail(tr.dataset.name, targetMonth);
+    });
   });
 }
 
