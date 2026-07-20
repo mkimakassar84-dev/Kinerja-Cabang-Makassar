@@ -1001,6 +1001,8 @@ function buildMonthlyAggByKey(transactions, keyFn) {
    ========================================================================== */
 const KPI_PERSONEL_LIST = ['ASTRID','ADI','REZA','PUTRI','BURHAMIN','ZUL','ASPAR','TAUFIK'];
 const KPI_PERSONEL_INDICATOR_KEYS = ['Row13','Row14','Row15','Row16','Row17','Row18','Row19','Row20','Row21','Row22'];
+const KPI_PERSONEL_EVID_KEYS = ['Evid13','Evid14','Evid15','Evid16','Evid17','Evid18','Evid19','Evid20','Evid21','Evid22'];
+const KPI_PERSONEL_SEP = '\u001F'; // pemisah antar-hari di kolom Evid — sama seperti yang dipakai sistem input KPI Personel
 
 // Label 10 indikator per personel (persis seperti di aplikasi input masing-masing) —
 // disimpan di sini supaya detail per personel bisa dibangun instan dari data yang
@@ -1017,24 +1019,28 @@ const KPI_PERSONEL_LABELS = {
 };
 
 // Uraikan 1 baris DATA_ARCHIVE (1 orang x 1 bulan) menjadi data per-hari (1..31):
-// status submit, 10 nilai indikator (boolean), persentase harian, jam datang/pulang.
+// status submit, 10 nilai indikator (boolean), bukti/evidence per indikator,
+// persentase harian, jam datang/pulang.
 function buildKpiDailyDetail(row) {
   const splitArr = v => toStr(v).split(',');
   const submittedArr = splitArr(row['Submitted']);
   const jamDatangArr = splitArr(row['JamDatang']);
   const jamPulangArr = splitArr(row['JamPulang']);
   const indicatorArrs = KPI_PERSONEL_INDICATOR_KEYS.map(key => splitArr(row[key]));
+  const evidenceArrs = KPI_PERSONEL_EVID_KEYS.map(key => toStr(row[key]).split(KPI_PERSONEL_SEP));
 
   const days = [];
   for (let day = 0; day < 31; day++) {
     const submitted = submittedArr[day] === '1';
     const values = indicatorArrs.map(arr => arr[day] === '1');
+    const evidence = evidenceArrs.map(arr => arr[day] || '');
     const possibleCount = indicatorArrs.filter(arr => arr[day] === '1' || arr[day] === '0').length;
     const onCount = indicatorArrs.filter(arr => arr[day] === '1').length;
     days.push({
       day: day + 1,
       submitted,
       values,
+      evidence,
       dailyPercent: submitted && possibleCount > 0 ? (onCount / possibleCount) * 100 : null,
       jamDatang: jamDatangArr[day] || '',
       jamPulang: jamPulangArr[day] || '',

@@ -1988,7 +1988,8 @@ function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail) {
       const d = detail.days.find(x => x.day === Number(dayNum));
       const rows = (detail.indicatorStats || []).map((s, i) => {
         const on = d && d.values[i];
-        return `<div class="kpi-indicator-row"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${on ? 'ok' : 'low'}">${on ? 'YA' : 'TIDAK'}</span></div>`;
+        const evi = d && on ? renderKpiEvidenceHtml(d.evidence[i]) : '';
+        return `<div class="kpi-indicator-row${evi ? ' has-evi' : ''}"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${on ? 'ok' : 'low'}">${on ? 'YA' : 'TIDAK'}</span></div>${evi}`;
       }).join('');
       const jamInfo = d && (d.jamDatang || d.jamPulang)
         ? `<div class="kpi-modal-sub" style="margin:8px 0 4px">Jam Datang: ${d.jamDatang || '-'} &middot; Jam Pulang: ${d.jamPulang || '-'}</div>`
@@ -1998,6 +1999,32 @@ function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail) {
     renderDay(defaultDay);
     daySelect.addEventListener('change', (e) => renderDay(e.target.value));
   }
+}
+
+// Render isi bukti/evidence 1 indikator (disimpan sistem KPI Personel sebagai JSON —
+// objek tunggal untuk indikator non-repeatable, atau array objek untuk yang bisa
+// diisi berkali-kali dalam 1 hari, seperti "Baris 1", "Baris 2" dst di aplikasi asli).
+function renderKpiEvidenceHtml(raw) {
+  if (!raw) return '';
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (e) { return ''; }
+  if (!parsed) return '';
+
+  const renderKv = (obj) => Object.keys(obj).map(k =>
+    `<div class="kpi-evi-row"><span class="kpi-evi-k">${escapeHtml(k)}</span><span class="kpi-evi-v">${escapeHtml(obj[k])}</span></div>`
+  ).join('');
+
+  if (Array.isArray(parsed)) {
+    if (!parsed.length) return '';
+    return `<div class="kpi-evi-block">${parsed.map((item, i) =>
+      `<div class="kpi-evi-baris">Baris ${i + 1}</div>${renderKv(item)}`
+    ).join('')}</div>`;
+  }
+  if (typeof parsed === 'object') {
+    if (!Object.keys(parsed).length) return '';
+    return `<div class="kpi-evi-block">${renderKv(parsed)}</div>`;
+  }
+  return '';
 }
 
 function renderRatioSection(m) {
