@@ -53,18 +53,24 @@
 
 const SHEET_ID = '1_uou6JDGV-Tm80oALMrduuj9ZIVWM1r9ppuQsYq7_qo';
 
+// Sheet terpisah — sumber data sistem KPI Personel (absensi & kepatuhan
+// harian tiap staf cabang). Tab DATA_ARCHIVE tersembunyi di spreadsheet
+// aslinya tapi tetap bisa diakses lewat export CSV publik.
+const KPI_SHEET_ID = '1WSp2VmHs2LqCD16cMc8JI1l1HHfnP0MAgK-G_kf4Rqw';
+
 const SHEET_TABS = {
-  grandData:  { name: 'Grand Data 2026', gid: '1703817529', headerRow: 1 },
-  revSum:     { name: 'Rev SUM',         gid: '1062237088', headerRow: 1 },
-  salesSum:   { name: 'Sales SUM',       gid: '1234708655', headerRow: 1 },
-  kpiMonitor: { name: 'KPI MONITORING',  gid: '64738765',   headerRow: 1 },
-  stock:      { name: 'Stock GD MKS',    gid: '507949843',  headerRow: 2 },
-  poGudang:   { name: 'PO Gudang',       gid: '2047354384', headerRow: 1 },
-  ar:         { name: 'AR 2026',         gid: '1407414424', headerRow: 1 },
+  grandData:   { name: 'Grand Data 2026', gid: '1703817529', headerRow: 1 },
+  revSum:      { name: 'Rev SUM',         gid: '1062237088', headerRow: 1 },
+  salesSum:    { name: 'Sales SUM',       gid: '1234708655', headerRow: 1 },
+  kpiMonitor:  { name: 'KPI MONITORING',  gid: '64738765',   headerRow: 1 },
+  stock:       { name: 'Stock GD MKS',    gid: '507949843',  headerRow: 2 },
+  poGudang:    { name: 'PO Gudang',       gid: '2047354384', headerRow: 1 },
+  ar:          { name: 'AR 2026',         gid: '1407414424', headerRow: 1 },
+  kpiPersonel: { name: 'DATA_ARCHIVE',    gid: '1890830079', headerRow: 1, sheetId: KPI_SHEET_ID, rawStrings: true },
 };
 
-function exportCsvUrl(gid) {
-  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}&_=${Date.now()}`;
+function exportCsvUrl(gid, sheetId = SHEET_ID) {
+  return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}&_=${Date.now()}`;
 }
 
 /**
@@ -163,8 +169,8 @@ function parseCsvCell(raw) {
  * mentah per kolom (sudah dikonversi tipe) untuk akses by-index — sama
  * persis seperti struktur yang dihasilkan loader gviz sebelumnya.
  */
-async function fetchSheetTabRaw(sheetName, gid, headerRow = 1) {
-  const url = exportCsvUrl(gid);
+async function fetchSheetTabRaw(sheetName, gid, headerRow = 1, sheetId = SHEET_ID, rawStrings = false) {
+  const url = exportCsvUrl(gid, sheetId);
   let res;
   try {
     res = await fetch(url, { cache: 'no-store' });
@@ -190,7 +196,9 @@ async function fetchSheetTabRaw(sheetName, gid, headerRow = 1) {
   const headerArr = headerArrRaw.map(h => (h === null || h === undefined) ? '' : String(h).trim());
   const dataRowsRaw = rawRows.slice(headerIdx + 1);
 
-  const dataRowsParsed = dataRowsRaw.map(r => r.map(cell => parseCsvCell(cell)));
+  const dataRowsParsed = dataRowsRaw.map(r => r.map(cell =>
+    rawStrings ? (cell === undefined || cell === null ? '' : cell) : parseCsvCell(cell)
+  ));
 
   const rows = dataRowsParsed
     .filter(row => row && row.some(v => v !== null && v !== undefined && v !== ''))
@@ -211,7 +219,7 @@ async function fetchSheetTabRaw(sheetName, gid, headerRow = 1) {
 async function loadAllSheetData() {
   const entries = Object.entries(SHEET_TABS);
   const settled = await Promise.allSettled(
-    entries.map(([key, cfg]) => fetchSheetTabRaw(cfg.name, cfg.gid, cfg.headerRow))
+    entries.map(([key, cfg]) => fetchSheetTabRaw(cfg.name, cfg.gid, cfg.headerRow, cfg.sheetId || SHEET_ID, !!cfg.rawStrings))
   );
 
   const data = {};

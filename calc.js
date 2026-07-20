@@ -990,6 +990,83 @@ function buildMonthlyAggByKey(transactions, keyFn) {
   return { byKey, totalsByMonth };
 }
 
+/* ==========================================================================
+   KPI PERSONEL — Kepatuhan absensi & kinerja harian staf cabang.
+   Sumber: sheet DATA_ARCHIVE milik sistem KPI Personel (spreadsheet
+   terpisah). Setiap baris = 1 orang x 1 bulan, berisi 31 hari data
+   dipisahkan koma per kolom indikator (Row13..Row22 = 10 indikator,
+   sudah berupa flag '1'/'0' yang DIHITUNG oleh sistem KPI Personel saat
+   data disimpan — termasuk aturan khusus hari Sabtu — jadi di sini kita
+   tinggal menjumlahkan, tidak perlu menghitung ulang aturan jam kerja.
+   ========================================================================== */
+const KPI_PERSONEL_LIST = ['ASTRID','ADI','REZA','PUTRI','BURHAMIN','ZUL','ASPAR','TAUFIK'];
+const KPI_PERSONEL_INDICATOR_KEYS = ['Row13','Row14','Row15','Row16','Row17','Row18','Row19','Row20','Row21','Row22'];
+
+function computeKpiPersonelMetrics(rows) {
+  const splitArr = v => toStr(v).split(',');
+
+  // Ambil baris bulan TERBARU per orang (YearMonth format "K2026-07" — string
+  // terbesar = bulan terbaru berkat format YYYY-MM yang urut secara leksikal).
+  const latestByPerson = {};
+  rows.forEach(r => {
+    const person = toStr(r['PersonSheet']);
+    const ym = toStr(r['YearMonth']);
+    if (KPI_PERSONEL_LIST.indexOf(person) === -1 || !ym) return;
+    if (!latestByPerson[person] || ym > latestByPerson[person].yearMonth) {
+      latestByPerson[person] = { yearMonth: ym, row: r };
+    }
+  });
+
+  const people = KPI_PERSONEL_LIST.map(name => {
+    const entry = latestByPerson[name];
+    if (!entry) return { name, hasData: false, percent: 0, totalJamKerja: 0, hariSubmit: 0 };
+
+    const r = entry.row;
+    const submittedArr = splitArr(r['Submitted']);
+    const jamDatangArr = splitArr(r['JamDatang']);
+    const jamPulangArr = splitArr(r['JamPulang']);
+
+    let totalOn = 0, totalPossible = 0, hariSubmit = 0, totalMenitKerja = 0;
+    for (let day = 0; day < 31; day++) {
+      if (submittedArr[day] !== '1') continue;
+      hariSubmit += 1;
+      KPI_PERSONEL_INDICATOR_KEYS.forEach(key => {
+        const arr = splitArr(r[key]);
+        const v = arr[day];
+        if (v === '1' || v === '0') {
+          totalPossible += 1;
+          if (v === '1') totalOn += 1;
+        }
+      });
+      const jd = jamDatangArr[day], jp = jamPulangArr[day];
+      if (/^\d{1,2}:\d{2}$/.test(jd) && /^\d{1,2}:\d{2}$/.test(jp)) {
+        const [jdH, jdM] = jd.split(':').map(Number);
+        const [jpH, jpM] = jp.split(':').map(Number);
+        const diff = (jpH * 60 + jpM) - (jdH * 60 + jdM);
+        if (diff > 0) totalMenitKerja += diff;
+      }
+    }
+
+    return {
+      name,
+      hasData: hariSubmit > 0,
+      percent: totalPossible > 0 ? (totalOn / totalPossible) * 100 : 0,
+      totalJamKerja: totalMenitKerja / 60,
+      hariSubmit,
+      yearMonth: entry.yearMonth,
+    };
+  });
+
+  const withData = people.filter(p => p.hasData);
+  const avgPercent = withData.length ? withData.reduce((s, p) => s + p.percent, 0) / withData.length : 0;
+  const totalJamTeam = people.reduce((s, p) => s + p.totalJamKerja, 0);
+  const ranking = people.slice().sort((a, b) => b.percent - a.percent);
+  const best = withData.slice().sort((a, b) => b.percent - a.percent)[0] || null;
+  const currentMonthLabel = withData.length ? withData[0].yearMonth.replace(/^K/, '') : '';
+
+  return { people: ranking, avgPercent, totalJamTeam, best, currentMonthLabel };
+}
+
 function computeAllMetrics(sheetData) {
 
   const transactions = normalizeGrandData(sheetData.grandData.rows);
@@ -1021,11 +1098,13 @@ function computeAllMetrics(sheetData) {
   const customerFrequency = buildCustomerFrequency(transactions);
   const fiberOptic1Core = buildFiberOptic1Core(transactions);
   const invoiceTargetKpi = buildInvoiceTargetFromKpiSheet(kpiRows);
+  const kpiPersonel = computeKpiPersonelMetrics(sheetData.kpiPersonel ? sheetData.kpiPersonel.rows : []);
 
   return {
     transactions, salesTrend, revTrend, revAllNormalized, invoiceCustomerSummary, yoyComparison,
     salesByCompany, revenueByCompany, salesToRevenueRatio, zonaWilayah,
     topProducts, stock, poGudang, delivery, ar, customerFrequency, fiberOptic1Core, invoiceTargetKpi,
+    kpiPersonel,
     generatedAt: new Date(),
   };
 }

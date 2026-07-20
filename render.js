@@ -1712,6 +1712,99 @@ function renderRevByCompanyChart(byco) {
    ========================================================================== */
 let ratioViewMode = 'bulanan';
 
+function fmtJamKerjaId(hours) {
+  const totalMin = Math.round((hours || 0) * 60);
+  const h = Math.floor(totalMin / 60);
+  const mnt = totalMin % 60;
+  return `${h} jam ${mnt} menit`;
+}
+
+function monthLabelIdKpi(ym) {
+  if (!ym) return '';
+  const [y, mm] = ym.split('-');
+  const names = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const idx = parseInt(mm, 10) - 1;
+  return names[idx] ? `${names[idx]} ${y}` : ym;
+}
+
+function renderKpiPersonelSection(m) {
+  const k = m.kpiPersonel;
+
+  const rankingRows = k.people.map((p, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${escapeHtml(p.name)}</td>
+      <td>${p.hasData ? fmtPct(p.percent) : '&ndash;'}</td>
+      <td>${p.hasData ? fmtJamKerjaId(p.totalJamKerja) : '&ndash;'}</td>
+      <td>${p.hasData ? p.hariSubmit + ' hari' : '&ndash;'}</td>
+    </tr>
+  `).join('');
+
+  const html = `
+    <div class="section-head">
+      <div class="eyebrow">12 &mdash; KPI Personel</div>
+      <h2>KPI Personel &amp; Kepatuhan Absensi${k.currentMonthLabel ? ' &mdash; ' + monthLabelIdKpi(k.currentMonthLabel) : ''}</h2>
+      <p class="lede">Ringkasan kepatuhan kinerja harian seluruh staf cabang (Marketing &amp; Logistik), diambil langsung dari sistem KPI Personel.</p>
+    </div>
+
+    <div class="kpi-grid kpi-grid-3">
+      <div class="kpi-card kpi-card-accent">
+        <div class="kpi-label">Rata-Rata Kepatuhan Tim</div>
+        <div class="kpi-value">${fmtPct(k.avgPercent)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Personel Terbaik</div>
+        <div class="kpi-value" style="font-size:22px">${k.best ? escapeHtml(k.best.name) : '&ndash;'}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Jam Kerja Tim</div>
+        <div class="kpi-value" style="font-size:20px">${fmtJamKerjaId(k.totalJamTeam)}</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Perbandingan Kepatuhan per Personel</h3></div>
+      <div class="chart-wrap"><canvas id="chartKpiPersonel"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Ranking Tim</h3></div>
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Nama</th><th>Kepatuhan</th><th>Total Jam Kerja</th><th>Hari Submit</th></tr></thead>
+        <tbody>${rankingRows}</tbody>
+      </table>
+    </div>
+  `;
+  document.getElementById('s11').innerHTML = html;
+  renderKpiPersonelChart(k);
+}
+
+function renderKpiPersonelChart(k) {
+  makeChart('chartKpiPersonel', {
+    type: 'bar',
+    data: {
+      labels: k.people.map(p => p.name),
+      datasets: [{
+        label: 'Kepatuhan (%)',
+        data: k.people.map(p => p.hasData ? Math.round(p.percent * 10) / 10 : 0),
+        backgroundColor: k.people.map(p => p.percent >= 80 ? PALETTE.green : (p.percent >= 50 ? PALETTE.yellow : PALETTE.red)),
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => fmtPct(ctx.parsed.y) } },
+      },
+      scales: {
+        y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
 function renderRatioSection(m) {
   const ratio = m.salesToRevenueRatio;
 
@@ -3704,6 +3797,7 @@ const SECTION_RENDER_MAP = {
   s8: renderARSection,
   s9: renderCustFreqSection,
   s10: renderFiberOpticSection,
+  s11: renderKpiPersonelSection,
 };
 let renderedSectionIds = new Set(); // section yang sudah pernah benar-benar dirender
 let latestMetrics = null;
