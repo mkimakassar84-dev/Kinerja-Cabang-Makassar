@@ -1064,7 +1064,8 @@ function computeKpiPersonelMetrics(rows) {
     const totalJamTeam = people.reduce((s, p) => s + p.totalJamKerja, 0);
     const ranking = people.slice().sort((a, b) => b.percent - a.percent);
     const best = withData.slice().sort((a, b) => b.percent - a.percent)[0] || null;
-    return { people: ranking, avgPercent, totalJamTeam, best, yearMonth: ym };
+    const mostHours = withData.slice().sort((a, b) => b.totalJamKerja - a.totalJamKerja)[0] || null;
+    return { people: ranking, avgPercent, totalJamTeam, best, mostHours, yearMonth: ym };
   }
 
   const byMonth = {};
@@ -1080,6 +1081,7 @@ function computeKpiPersonelMetrics(rows) {
     avgPercent: current.avgPercent,
     totalJamTeam: current.totalJamTeam,
     best: current.best,
+    mostHours: current.mostHours,
   };
 }
 

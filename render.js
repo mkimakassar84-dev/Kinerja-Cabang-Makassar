@@ -1783,7 +1783,7 @@ function renderKpiPersonelBody(monthData) {
   `).join('');
 
   const html = `
-    <div class="kpi-grid kpi-grid-3">
+    <div class="kpi-grid kpi-grid-4">
       <div class="kpi-card kpi-card-accent">
         <div class="kpi-label">Rata-Rata Kepatuhan Tim</div>
         <div class="kpi-value">${fmtPct(k.avgPercent)}</div>
@@ -1795,6 +1795,11 @@ function renderKpiPersonelBody(monthData) {
       <div class="kpi-card">
         <div class="kpi-label">Total Jam Kerja Tim</div>
         <div class="kpi-value" style="font-size:20px">${fmtJamKerjaId(k.totalJamTeam)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Jam Kerja Terbanyak</div>
+        <div class="kpi-value" style="font-size:18px">${k.mostHours ? escapeHtml(k.mostHours.name) : '&ndash;'}</div>
+        <div class="kpi-label" style="margin-top:4px; margin-bottom:0">${k.mostHours ? fmtJamKerjaId(k.mostHours.totalJamKerja) : ''}</div>
       </div>
     </div>
 
