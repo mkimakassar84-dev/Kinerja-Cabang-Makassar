@@ -1824,6 +1824,80 @@ function renderKpiPersonelBody(monthData) {
   });
 }
 
+const KPI_PHOTO_MAP = {
+  ASTRID: 'astrid.jpg',
+  ADI: 'adi.jpg',
+  REZA: 'reza.jpg',
+  PUTRI: 'putri.jpg',
+  BURHAMIN: 'burhamin.jpg',
+  ZUL: 'zul.jpg',
+  ASPAR: 'aspar.jpg',
+  TAUFIK: 'taufik.jpg',
+};
+const kpiPhotoImageCache = {}; // nama -> Image() sudah dimuat, dipakai ulang antar render supaya tidak load ulang tiap ganti bulan
+
+function getKpiPhotoImage(name) {
+  if (kpiPhotoImageCache[name]) return kpiPhotoImageCache[name];
+  const img = new Image();
+  img.src = KPI_PHOTO_MAP[name] || '';
+  kpiPhotoImageCache[name] = img;
+  return img;
+}
+
+// Plugin custom: gambar foto personel di dalam area batang (bar), rata atas
+// (supaya wajah tetap kelihatan meski batangnya pendek), dengan sedikit warna
+// overlay sesuai status kepatuhan (hijau/kuning/merah) di bagian bawah batang.
+const kpiPersonelPhotoPlugin = {
+  id: 'kpiPersonelPhoto',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart;
+    const meta = chart.getDatasetMeta(0);
+    const labels = chart.data.labels;
+    const colors = chart.data.datasets[0].backgroundColor;
+
+    meta.data.forEach((bar, i) => {
+      const name = labels[i];
+      const img = getKpiPhotoImage(name);
+      const x0 = bar.x - bar.width / 2;
+      const rectW = bar.width;
+      const rectH = bar.base - bar.y;
+      if (rectW <= 0 || rectH <= 0) return;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x0, bar.y, rectW, rectH);
+      ctx.clip();
+
+      if (img.complete && img.naturalWidth > 0) {
+        const imgRatio = img.naturalWidth / img.naturalHeight;
+        const rectRatio = rectW / rectH;
+        let drawW, drawH, drawX, drawY;
+        if (imgRatio > rectRatio) {
+          drawH = rectH; drawW = drawH * imgRatio;
+          drawX = x0 - (drawW - rectW) / 2; drawY = bar.y;
+        } else {
+          drawW = rectW; drawH = drawW / imgRatio;
+          drawX = x0; drawY = bar.y; // rata atas — wajah tetap tampak walau batang pendek
+        }
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
+        ctx.fillStyle = 'rgba(58,53,48,.12)';
+        ctx.fillRect(x0, bar.y, rectW, rectH);
+      } else {
+        ctx.fillStyle = colors[i];
+        ctx.fillRect(x0, bar.y, rectW, rectH);
+        if (!img.__wired) {
+          img.__wired = true;
+          img.addEventListener('load', () => chart.draw());
+        }
+      }
+
+      ctx.fillStyle = colors[i];
+      ctx.fillRect(x0, bar.base - 5, rectW, 5);
+      ctx.restore();
+    });
+  },
+};
+
 function renderKpiPersonelChart(k) {
   makeChart('chartKpiPersonel', {
     type: 'bar',
@@ -1847,6 +1921,7 @@ function renderKpiPersonelChart(k) {
         x: { grid: { display: false } },
       },
     },
+    plugins: [kpiPersonelPhotoPlugin],
   });
 }
 
