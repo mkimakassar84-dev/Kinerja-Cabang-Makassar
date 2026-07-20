@@ -1721,17 +1721,59 @@ function fmtJamKerjaId(hours) {
 
 function monthLabelIdKpi(ym) {
   if (!ym) return '';
-  const [y, mm] = ym.split('-');
+  const clean = String(ym).replace(/^K/, '');
+  const [y, mm] = clean.split('-');
   const names = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
   const idx = parseInt(mm, 10) - 1;
-  return names[idx] ? `${names[idx]} ${y}` : ym;
+  return names[idx] ? `${names[idx]} ${y}` : clean;
 }
+
+function monthShortIdKpi(ym) {
+  const clean = String(ym || '').replace(/^K/, '');
+  const [, mm] = clean.split('-');
+  const names = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  const idx = parseInt(mm, 10) - 1;
+  return names[idx] || clean;
+}
+
+const KPI_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyZjdcOqCzQZ3i54Y2pAZVfbnMfuaEHmPFOaMhlpPqBgD958CWKTN5iujN4lPOkvJ43/exec';
+let kpiPersonelState = null; // { months, byMonth, currentMonthLabel } — disimpan supaya filter bulan tidak perlu fetch ulang
 
 function renderKpiPersonelSection(m) {
   const k = m.kpiPersonel;
+  kpiPersonelState = k;
 
+  const monthOptions = k.months.map(ym =>
+    `<option value="${ym}"${ym === k.currentMonthLabel ? ' selected' : ''}>${monthLabelIdKpi(ym)}</option>`
+  ).join('');
+
+  const html = `
+    <div class="section-head">
+      <div class="eyebrow">12 &mdash; KPI Personel</div>
+      <h2>KPI Personel &amp; Kepatuhan Absensi</h2>
+      <p class="lede">Ringkasan kepatuhan kinerja harian seluruh staf cabang (Marketing &amp; Logistik), diambil langsung dari sistem KPI Personel. Klik nama personel untuk lihat detail tren &amp; indikator hariannya.</p>
+    </div>
+
+    <div class="kpi-month-filter">
+      <label for="kpiMonthSelect">Bulan:</label>
+      <select id="kpiMonthSelect">${monthOptions}</select>
+    </div>
+
+    <div id="kpiPersonelBody"></div>
+  `;
+  document.getElementById('s11').innerHTML = html;
+
+  document.getElementById('kpiMonthSelect').addEventListener('change', (e) => {
+    renderKpiPersonelBody(kpiPersonelState.byMonth[e.target.value]);
+  });
+
+  renderKpiPersonelBody(k.byMonth[k.currentMonthLabel]);
+}
+
+function renderKpiPersonelBody(monthData) {
+  const k = monthData;
   const rankingRows = k.people.map((p, i) => `
-    <tr>
+    <tr data-name="${escapeHtml(p.name)}">
       <td>${i + 1}</td>
       <td>${escapeHtml(p.name)}</td>
       <td>${p.hasData ? fmtPct(p.percent) : '&ndash;'}</td>
@@ -1741,12 +1783,6 @@ function renderKpiPersonelSection(m) {
   `).join('');
 
   const html = `
-    <div class="section-head">
-      <div class="eyebrow">12 &mdash; KPI Personel</div>
-      <h2>KPI Personel &amp; Kepatuhan Absensi${k.currentMonthLabel ? ' &mdash; ' + monthLabelIdKpi(k.currentMonthLabel) : ''}</h2>
-      <p class="lede">Ringkasan kepatuhan kinerja harian seluruh staf cabang (Marketing &amp; Logistik), diambil langsung dari sistem KPI Personel.</p>
-    </div>
-
     <div class="kpi-grid kpi-grid-3">
       <div class="kpi-card kpi-card-accent">
         <div class="kpi-label">Rata-Rata Kepatuhan Tim</div>
@@ -1768,15 +1804,19 @@ function renderKpiPersonelSection(m) {
     </div>
 
     <div class="panel">
-      <div class="panel-head"><h3>Ranking Tim</h3></div>
-      <table class="data-table">
+      <div class="panel-head"><h3>Ranking Tim &mdash; ${monthLabelIdKpi(k.yearMonth)}</h3></div>
+      <table class="data-table kpi-clickable">
         <thead><tr><th>#</th><th>Nama</th><th>Kepatuhan</th><th>Total Jam Kerja</th><th>Hari Submit</th></tr></thead>
         <tbody>${rankingRows}</tbody>
       </table>
     </div>
   `;
-  document.getElementById('s11').innerHTML = html;
+  document.getElementById('kpiPersonelBody').innerHTML = html;
   renderKpiPersonelChart(k);
+
+  document.querySelectorAll('#kpiPersonelBody .data-table.kpi-clickable tbody tr').forEach(tr => {
+    tr.addEventListener('click', () => openKpiPersonelDetail(tr.dataset.name, k.yearMonth));
+  });
 }
 
 function renderKpiPersonelChart(k) {
@@ -1797,6 +1837,135 @@ function renderKpiPersonelChart(k) {
         legend: { display: false },
         tooltip: { callbacks: { label: ctx => fmtPct(ctx.parsed.y) } },
       },
+      scales: {
+        y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+/* ---- Detail personel: klik nama -> modal dengan tren harian, tren bulanan,
+   dan kepatuhan per indikator, persis seperti tampilan aplikasi KPI REKAP
+   (data diambil dari endpoint backend yang sama). ---- */
+async function openKpiPersonelDetail(name, yearMonthKey) {
+  const monthParam = String(yearMonthKey).replace(/^K/, '');
+  const overlay = document.createElement('div');
+  overlay.className = 'kpi-modal-overlay';
+  overlay.innerHTML = `
+    <div class="kpi-modal-box">
+      <div class="kpi-modal-head">
+        <div>
+          <h3>${escapeHtml(name)}</h3>
+          <div class="kpi-modal-sub">${monthLabelIdKpi(yearMonthKey)}</div>
+        </div>
+        <button type="button" class="kpi-modal-close" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="kpi-modal-loading">Memuat data&hellip;</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('show'));
+
+  function close() {
+    overlay.classList.remove('show');
+    setTimeout(() => overlay.remove(), 200);
+  }
+  overlay.querySelector('.kpi-modal-close').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  try {
+    const res = await fetch(`${KPI_WEBAPP_URL}?action=personView&nama=${encodeURIComponent(name)}&month=${monthParam}`);
+    const payload = await res.json();
+    const detail = payload.detail || payload;
+    const trend = payload.trend || [];
+    renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail, trend);
+  } catch (err) {
+    overlay.querySelector('.kpi-modal-box').innerHTML += `<p class="kpi-modal-loading">Gagal memuat data. Coba lagi beberapa saat.</p>`;
+  }
+}
+
+function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail, trend) {
+  const box = overlay.querySelector('.kpi-modal-box');
+  const indicatorRows = (detail.indicatorStats || []).map(s => {
+    const cls = s.percent >= 80 ? 'ok' : (s.percent >= 50 ? 'mid' : 'low');
+    return `<div class="kpi-indicator-row"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${cls}">${s.percent}%</span></div>`;
+  }).join('');
+
+  box.innerHTML = `
+    <div class="kpi-modal-head">
+      <div>
+        <h3>${escapeHtml(name)}</h3>
+        <div class="kpi-modal-sub">${monthLabelIdKpi(yearMonthKey)} &middot; Kepatuhan bulan ini: ${fmtPct(detail.monthPercent || 0)} &middot; ${detail.countedDays || 0} hari kerja terhitung</div>
+      </div>
+      <button type="button" class="kpi-modal-close" aria-label="Tutup">&times;</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Tren Kepatuhan Harian</h3></div>
+      <div class="chart-wrap" style="height:220px"><canvas id="kpiModalDailyChart"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Tren Kepatuhan Bulanan</h3></div>
+      <div class="chart-wrap" style="height:200px"><canvas id="kpiModalMonthlyChart"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Kepatuhan per Indikator</h3></div>
+      ${indicatorRows || '<p class="kpi-modal-loading">Belum ada data indikator.</p>'}
+    </div>
+  `;
+  box.querySelector('.kpi-modal-close').addEventListener('click', () => {
+    overlay.classList.remove('show');
+    setTimeout(() => overlay.remove(), 200);
+  });
+
+  const days = detail.days || [];
+  makeChart('kpiModalDailyChart', {
+    type: 'line',
+    data: {
+      labels: days.map(d => d.day),
+      datasets: [{
+        label: 'Kepatuhan harian (%)',
+        data: days.map(d => (d.isWorkday && d.submitted) ? d.dailyPercent : null),
+        borderColor: PALETTE.terra,
+        backgroundColor: PALETTE.terraLight,
+        fill: true, tension: 0.25, spanGaps: false,
+        pointRadius: 3,
+        pointBackgroundColor: ctx => {
+          const v = ctx.raw;
+          if (v === null || v === undefined) return PALETTE.slateLight;
+          return v >= 80 ? PALETTE.green : (v >= 50 ? PALETTE.yellow : PALETTE.red);
+        },
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y === null ? 'Belum diisi / bukan hari kerja' : fmtPct(ctx.parsed.y) } } },
+      scales: {
+        y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+
+  makeChart('kpiModalMonthlyChart', {
+    type: 'line',
+    data: {
+      labels: trend.map(t => monthShortIdKpi(t.month)),
+      datasets: [{
+        label: 'Kepatuhan bulanan (%)',
+        data: trend.map(t => t.percent),
+        borderColor: PALETTE.slate,
+        backgroundColor: PALETTE.slateLight,
+        fill: true, tension: 0.25,
+        pointRadius: 4, pointBackgroundColor: PALETTE.slate,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtPct(ctx.parsed.y) } } },
       scales: {
         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
         x: { grid: { display: false } },

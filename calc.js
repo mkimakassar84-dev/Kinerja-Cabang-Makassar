@@ -1005,23 +1005,7 @@ const KPI_PERSONEL_INDICATOR_KEYS = ['Row13','Row14','Row15','Row16','Row17','Ro
 function computeKpiPersonelMetrics(rows) {
   const splitArr = v => toStr(v).split(',');
 
-  // Ambil baris bulan TERBARU per orang (YearMonth format "K2026-07" — string
-  // terbesar = bulan terbaru berkat format YYYY-MM yang urut secara leksikal).
-  const latestByPerson = {};
-  rows.forEach(r => {
-    const person = toStr(r['PersonSheet']);
-    const ym = toStr(r['YearMonth']);
-    if (KPI_PERSONEL_LIST.indexOf(person) === -1 || !ym) return;
-    if (!latestByPerson[person] || ym > latestByPerson[person].yearMonth) {
-      latestByPerson[person] = { yearMonth: ym, row: r };
-    }
-  });
-
-  const people = KPI_PERSONEL_LIST.map(name => {
-    const entry = latestByPerson[name];
-    if (!entry) return { name, hasData: false, percent: 0, totalJamKerja: 0, hariSubmit: 0 };
-
-    const r = entry.row;
+  function computeOneRow(name, r) {
     const submittedArr = splitArr(r['Submitted']);
     const jamDatangArr = splitArr(r['JamDatang']);
     const jamPulangArr = splitArr(r['JamPulang']);
@@ -1053,18 +1037,50 @@ function computeKpiPersonelMetrics(rows) {
       percent: totalPossible > 0 ? (totalOn / totalPossible) * 100 : 0,
       totalJamKerja: totalMenitKerja / 60,
       hariSubmit,
-      yearMonth: entry.yearMonth,
     };
+  }
+
+  // Kumpulkan baris per (orang, bulan) supaya bisa pindah-pindah bulan tanpa fetch ulang.
+  const byPersonMonth = {};
+  const monthsSet = new Set();
+  rows.forEach(r => {
+    const person = toStr(r['PersonSheet']);
+    const ym = toStr(r['YearMonth']);
+    if (KPI_PERSONEL_LIST.indexOf(person) === -1 || !ym) return;
+    if (!byPersonMonth[person]) byPersonMonth[person] = {};
+    byPersonMonth[person][ym] = r;
+    monthsSet.add(ym);
   });
+  const months = Array.from(monthsSet).sort(); // "K2026-07" dst — urut leksikal = urut kronologis
+  const latestMonth = months.length ? months[months.length - 1] : null;
 
-  const withData = people.filter(p => p.hasData);
-  const avgPercent = withData.length ? withData.reduce((s, p) => s + p.percent, 0) / withData.length : 0;
-  const totalJamTeam = people.reduce((s, p) => s + p.totalJamKerja, 0);
-  const ranking = people.slice().sort((a, b) => b.percent - a.percent);
-  const best = withData.slice().sort((a, b) => b.percent - a.percent)[0] || null;
-  const currentMonthLabel = withData.length ? withData[0].yearMonth.replace(/^K/, '') : '';
+  function computeForMonth(ym) {
+    const people = KPI_PERSONEL_LIST.map(name => {
+      const r = byPersonMonth[name] && byPersonMonth[name][ym];
+      return r ? computeOneRow(name, r) : { name, hasData: false, percent: 0, totalJamKerja: 0, hariSubmit: 0 };
+    });
+    const withData = people.filter(p => p.hasData);
+    const avgPercent = withData.length ? withData.reduce((s, p) => s + p.percent, 0) / withData.length : 0;
+    const totalJamTeam = people.reduce((s, p) => s + p.totalJamKerja, 0);
+    const ranking = people.slice().sort((a, b) => b.percent - a.percent);
+    const best = withData.slice().sort((a, b) => b.percent - a.percent)[0] || null;
+    return { people: ranking, avgPercent, totalJamTeam, best, yearMonth: ym };
+  }
 
-  return { people: ranking, avgPercent, totalJamTeam, best, currentMonthLabel };
+  const byMonth = {};
+  months.forEach(ym => { byMonth[ym] = computeForMonth(ym); });
+
+  const current = latestMonth ? byMonth[latestMonth] : { people: [], avgPercent: 0, totalJamTeam: 0, best: null, yearMonth: null };
+
+  return {
+    months,
+    byMonth,
+    currentMonthLabel: latestMonth,
+    people: current.people,
+    avgPercent: current.avgPercent,
+    totalJamTeam: current.totalJamTeam,
+    best: current.best,
+  };
 }
 
 function computeAllMetrics(sheetData) {
