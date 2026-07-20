@@ -1153,11 +1153,48 @@ function buildKpiPersonDetail(name, ym, byPersonMonth, months) {
     return { label, checked, possible, percent: possible > 0 ? Math.round((checked / possible) * 100) : 0 };
   });
 
+  // Tie-break persis seperti aplikasi KPI REKAP: kalau persentase sama, bandingkan
+  // akumulasi hari patuh (trueCount), lalu untuk indikator Absen Datang/Pulang
+  // secara khusus, bandingkan seberapa lebar margin waktunya (bukan sekadar YA/TIDAK).
+  const DATANG_CUTOFF = 8 * 60 + 15;
+  const PULANG_CUTOFF = 16 * 60 + 45;
+  const parseTimeToMinutes = (str) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(toStr(str));
+    return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
+  };
+  const datangMargins = [], pulangMargins = [];
+  submittedDays.forEach(d => {
+    const jd = parseTimeToMinutes(d.jamDatang);
+    if (jd !== null) datangMargins.push(DATANG_CUTOFF - jd);
+    const jp = parseTimeToMinutes(d.jamPulang);
+    if (jp !== null) pulangMargins.push(jp - PULANG_CUTOFF);
+  });
+  const avg = (arr) => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null;
+  const datangAvg = avg(datangMargins), pulangAvg = avg(pulangMargins);
+
+  const enriched = indicatorStats.map(s => {
+    let marginScore = null;
+    if (/absen datang/i.test(s.label)) marginScore = datangAvg;
+    else if (/absen pulang/i.test(s.label)) marginScore = pulangAvg;
+    return Object.assign({}, s, { marginScore });
+  });
+
   let strongest = null, weakest = null;
-  if (indicatorStats.length) {
-    const sorted = indicatorStats.slice().sort((a, b) => b.percent - a.percent || b.checked - a.checked);
-    strongest = sorted[0];
-    weakest = sorted[sorted.length - 1];
+  if (enriched.length) {
+    const weakSorted = enriched.slice().sort((a, b) => {
+      if (a.percent !== b.percent) return a.percent - b.percent;
+      if (a.checked !== b.checked) return a.checked - b.checked;
+      if (a.marginScore != null && b.marginScore != null && a.marginScore !== b.marginScore) return a.marginScore - b.marginScore;
+      return 0;
+    });
+    const strongSorted = enriched.slice().sort((a, b) => {
+      if (a.percent !== b.percent) return b.percent - a.percent;
+      if (a.checked !== b.checked) return b.checked - a.checked;
+      if (a.marginScore != null && b.marginScore != null && a.marginScore !== b.marginScore) return b.marginScore - a.marginScore;
+      return 0;
+    });
+    weakest = weakSorted[0];
+    strongest = strongSorted[0];
   }
 
   // Tren bulanan: hitung ulang persentase untuk SEMUA bulan yang ada datanya orang ini.
