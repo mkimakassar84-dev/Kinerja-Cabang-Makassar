@@ -1045,17 +1045,17 @@ function renderSalesSection(m) {
       <h3>Rincian Transaksi Sales</h3>
       <div class="panel-head daily-perf-controls">
         <div class="filter-field">
-          <label for="dpSalesMonth">Filter Bulan</label>
-          ${dpMonthSelectHtml('dpSalesMonth')}
+          <label for="salesDetailMonth">Filter Bulan</label>
+          ${dpMonthSelectHtml('salesDetailMonth')}
         </div>
         <div class="filter-field filter-field-grow">
-          <label for="dpSalesSearch">Cari Customer / No Invoice</label>
-          <input type="text" id="dpSalesSearch" class="text-input" placeholder="Ketik nama customer atau no invoice&hellip;" />
+          <label for="salesDetailSearch">Cari Customer / No Invoice</label>
+          <input type="text" id="salesDetailSearch" class="text-input" placeholder="Ketik nama customer atau no invoice&hellip;" />
         </div>
       </div>
-      <p class="panel-note" id="dpSalesCount"></p>
+      <p class="panel-note" id="salesDetailCount"></p>
       <div class="table-scroll">
-        <table class="data-table data-table-compact" id="dpSalesTable">
+        <table class="data-table data-table-compact" id="salesDetailTable">
           <thead>
             <tr>
               <th>Order Date</th><th>No Invoice</th><th>Payment</th><th>Customer</th>
@@ -1067,7 +1067,7 @@ function renderSalesSection(m) {
           <tbody></tbody>
         </table>
       </div>
-      <div class="pagination" id="dpSalesPagination"></div>
+      <div class="pagination" id="salesDetailPagination"></div>
     </div>
   `;
   document.getElementById('s1').innerHTML = html;
@@ -1088,9 +1088,12 @@ function renderSalesSection(m) {
   });
 }
 
+const SALES_DETAIL_PAGE_SIZE = 10;
+let salesDetailState = { month: 'all', search: '', page: 1 };
+
 function renderSalesDetailTable(tx2026) {
   const renderTable = () => {
-    const state = dailyPerfState.sales;
+    const state = salesDetailState;
     let rows = tx2026;
     if (state.month !== 'all') {
       const monthIdx = parseInt(state.month, 10);
@@ -1101,16 +1104,16 @@ function renderSalesDetailTable(tx2026) {
     rows = [...rows].sort((a, b) => (a.orderDate?.getTime() || 0) - (b.orderDate?.getTime() || 0));
 
     const totalRows = rows.length;
-    const totalPages = Math.max(1, Math.ceil(totalRows / DAILY_PERF_PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(totalRows / SALES_DETAIL_PAGE_SIZE));
     if (state.page > totalPages) state.page = totalPages;
     if (state.page < 1) state.page = 1;
-    const startIdx = (state.page - 1) * DAILY_PERF_PAGE_SIZE;
-    const shown = rows.slice(startIdx, startIdx + DAILY_PERF_PAGE_SIZE);
+    const startIdx = (state.page - 1) * SALES_DETAIL_PAGE_SIZE;
+    const shown = rows.slice(startIdx, startIdx + SALES_DETAIL_PAGE_SIZE);
 
-    document.getElementById('dpSalesCount').innerHTML =
+    document.getElementById('salesDetailCount').innerHTML =
       `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${dpPeriodLabel(state.month)}.`;
 
-    document.querySelector('#dpSalesTable tbody').innerHTML = shown.length
+    document.querySelector('#salesDetailTable tbody').innerHTML = shown.length
       ? shown.map(t => `
         <tr>
           <td>${fmtDateShort(t.orderDate)}</td>
@@ -1131,15 +1134,15 @@ function renderSalesDetailTable(tx2026) {
       `).join('')
       : `<tr><td colspan="14" class="empty-row">Tidak ada transaksi yang cocok dengan filter ini.</td></tr>`;
 
-    renderDpPagination('dpSalesPagination', state, totalPages, renderTable);
+    renderDpPagination('salesDetailPagination', state, totalPages, renderTable);
   };
 
   renderTable();
-  document.getElementById('dpSalesMonth').addEventListener('change', (e) => {
-    dailyPerfState.sales.month = e.target.value; dailyPerfState.sales.page = 1; renderTable();
+  document.getElementById('salesDetailMonth').addEventListener('change', (e) => {
+    salesDetailState.month = e.target.value; salesDetailState.page = 1; renderTable();
   });
-  document.getElementById('dpSalesSearch').addEventListener('input', (e) => {
-    dailyPerfState.sales.search = e.target.value; dailyPerfState.sales.page = 1; renderTable();
+  document.getElementById('salesDetailSearch').addEventListener('input', (e) => {
+    salesDetailState.search = e.target.value; salesDetailState.page = 1; renderTable();
   });
 }
 
@@ -1302,17 +1305,17 @@ function renderRevenueSection(m) {
       <h3>Rincian Pelunasan Revenue</h3>
       <div class="panel-head daily-perf-controls">
         <div class="filter-field">
-          <label for="dpRevMonth">Filter Bulan</label>
-          ${dpMonthSelectHtml('dpRevMonth')}
+          <label for="revDetailMonth">Filter Bulan</label>
+          ${dpMonthSelectHtml('revDetailMonth')}
         </div>
         <div class="filter-field filter-field-grow">
-          <label for="dpRevSearch">Cari Customer / No Faktur</label>
-          <input type="text" id="dpRevSearch" class="text-input" placeholder="Ketik nama customer atau no faktur&hellip;" />
+          <label for="revDetailSearch">Cari Customer / No Faktur</label>
+          <input type="text" id="revDetailSearch" class="text-input" placeholder="Ketik nama customer atau no faktur&hellip;" />
         </div>
       </div>
-      <p class="panel-note" id="dpRevCount"></p>
+      <p class="panel-note" id="revDetailCount"></p>
       <div class="table-scroll">
-        <table class="data-table data-table-compact" id="dpRevTable">
+        <table class="data-table data-table-compact" id="revDetailTable">
           <thead>
             <tr>
               <th>Payment Date</th><th>No Faktur</th><th>Customer</th><th>Pelunasan</th><th>Company</th>
@@ -1321,7 +1324,7 @@ function renderRevenueSection(m) {
           <tbody></tbody>
         </table>
       </div>
-      <div class="pagination" id="dpRevPagination"></div>
+      <div class="pagination" id="revDetailPagination"></div>
     </div>
   `;
   document.getElementById('s2').innerHTML = html;
@@ -1342,9 +1345,12 @@ function renderRevenueSection(m) {
   });
 }
 
+const REV_DETAIL_PAGE_SIZE = 10;
+let revDetailState = { month: 'all', search: '', page: 1 };
+
 function renderRevenueDetailTable(rev2026) {
   const renderTable = () => {
-    const state = dailyPerfState.revenue;
+    const state = revDetailState;
     let rows = rev2026;
     if (state.month !== 'all') {
       const monthIdx = parseInt(state.month, 10);
@@ -1355,16 +1361,16 @@ function renderRevenueDetailTable(rev2026) {
     rows = [...rows].sort((a, b) => (a.paymentDate?.getTime() || 0) - (b.paymentDate?.getTime() || 0));
 
     const totalRows = rows.length;
-    const totalPages = Math.max(1, Math.ceil(totalRows / DAILY_PERF_PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(totalRows / REV_DETAIL_PAGE_SIZE));
     if (state.page > totalPages) state.page = totalPages;
     if (state.page < 1) state.page = 1;
-    const startIdx = (state.page - 1) * DAILY_PERF_PAGE_SIZE;
-    const shown = rows.slice(startIdx, startIdx + DAILY_PERF_PAGE_SIZE);
+    const startIdx = (state.page - 1) * REV_DETAIL_PAGE_SIZE;
+    const shown = rows.slice(startIdx, startIdx + REV_DETAIL_PAGE_SIZE);
 
-    document.getElementById('dpRevCount').innerHTML =
+    document.getElementById('revDetailCount').innerHTML =
       `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${dpPeriodLabel(state.month)}.`;
 
-    document.querySelector('#dpRevTable tbody').innerHTML = shown.length
+    document.querySelector('#revDetailTable tbody').innerHTML = shown.length
       ? shown.map(r => `
         <tr>
           <td>${fmtDateShort(r.paymentDate)}</td>
@@ -1376,15 +1382,15 @@ function renderRevenueDetailTable(rev2026) {
       `).join('')
       : `<tr><td colspan="5" class="empty-row">Tidak ada data yang cocok dengan filter ini.</td></tr>`;
 
-    renderDpPagination('dpRevPagination', state, totalPages, renderTable);
+    renderDpPagination('revDetailPagination', state, totalPages, renderTable);
   };
 
   renderTable();
-  document.getElementById('dpRevMonth').addEventListener('change', (e) => {
-    dailyPerfState.revenue.month = e.target.value; dailyPerfState.revenue.page = 1; renderTable();
+  document.getElementById('revDetailMonth').addEventListener('change', (e) => {
+    revDetailState.month = e.target.value; revDetailState.page = 1; renderTable();
   });
-  document.getElementById('dpRevSearch').addEventListener('input', (e) => {
-    dailyPerfState.revenue.search = e.target.value; dailyPerfState.revenue.page = 1; renderTable();
+  document.getElementById('revDetailSearch').addEventListener('input', (e) => {
+    revDetailState.search = e.target.value; revDetailState.page = 1; renderTable();
   });
 }
 
