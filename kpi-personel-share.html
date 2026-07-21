@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KPI Personel — Cabang Makassar</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+:root{
+  --paper:#fbf8f2; --cream:#f6f1e7; --cream-deep:#efe7d8; --line:#e3dccb;
+  --ink:#2a2520; --ink-soft:#6a5a4a; --terra:#c17a5a; --terra-dim:#f3e6dd;
+  --green:#4d8a5c; --yellow:#c99a3a; --red:#b84040; --slate:#5c6b7a; --slate-light:#dbe2e8;
+  --terra-light:#e9cdbd; --shadow:0 2px 10px rgba(58,53,48,.08);
+}
+*{margin:0; padding:0; box-sizing:border-box;}
+body{font-family:'IBM Plex Sans', system-ui, sans-serif; background:var(--paper); color:var(--ink); min-height:100vh;}
+h1,h2,h3{font-family:Georgia, 'Times New Roman', serif; font-weight:600;}
+#loadingMsg{padding:60px 20px; text-align:center; color:var(--ink-soft); font-size:14px;}
+.banner{background:linear-gradient(90deg,#c17a5a,#a85d3f); color:#fff; padding:26px 20px 22px;}
+.banner .eyebrow{font-size:12px; letter-spacing:.06em; opacity:.75; text-transform:uppercase; margin-bottom:6px;}
+.banner h1{font-size:24px; margin-bottom:4px;}
+.banner .sub{font-size:13px; opacity:.85;}
+.wrap{max-width:760px; margin:0 auto; padding:18px 16px 40px;}
+.month-filter{display:flex; align-items:center; gap:10px; margin:16px 0; flex-wrap:wrap;}
+.month-filter label{font-size:12.5px; color:var(--ink-soft); font-weight:500;}
+.month-filter select{
+  font-family:inherit; font-size:13.5px; color:var(--ink); background:var(--paper);
+  border:1px solid var(--line); border-radius:8px; padding:7px 12px;
+}
+.kpi-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:18px;}
+@media (min-width:600px){ .kpi-grid{grid-template-columns:repeat(4,1fr);} }
+.kpi-card{background:var(--cream); border-radius:12px; padding:16px; box-shadow:var(--shadow);}
+.kpi-card.accent{background:var(--terra-dim);}
+.kpi-label{font-size:11.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px;}
+.kpi-value{font-size:24px; font-weight:700;}
+.panel{background:var(--cream); border-radius:14px; padding:18px; margin-bottom:16px; box-shadow:var(--shadow);}
+.panel h3{font-size:15px; margin-bottom:12px;}
+.chart-wrap{position:relative; height:280px;}
+.data-table{width:100%; border-collapse:collapse; font-size:13px;}
+.data-table th{text-align:left; font-size:11px; color:var(--ink-soft); text-transform:uppercase; padding:6px 8px; border-bottom:1px solid var(--line);}
+.data-table td{padding:10px 8px; border-bottom:1px solid var(--line);}
+.data-table tbody tr{cursor:pointer; transition:background .15s ease;}
+.data-table tbody tr:hover{background:var(--terra-dim);}
+.wa-share-wrap{display:flex; gap:10px; margin:16px 0; flex-wrap:wrap;}
+.wa-share-btn{
+  background:#25D366; color:#fff; border:none; border-radius:10px; padding:12px 18px;
+  font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:8px;
+}
+.wa-share-btn svg{width:18px; height:18px;}
+.save-btn{background:var(--cream-deep); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:12px 18px; font-size:13.5px; cursor:pointer;}
+#shareNote{font-size:12px; color:var(--ink-soft); margin-top:-6px; margin-bottom:12px; display:none;}
+.footer-note{font-size:12px; color:var(--ink-soft); text-align:center; margin-top:24px;}
+
+/* Modal detail personel */
+.kpi-modal-overlay{
+  position:fixed; inset:0; background:rgba(58,53,48,.55); z-index:120;
+  display:flex; align-items:flex-end; justify-content:center; opacity:0; transition:opacity .18s ease;
+}
+.kpi-modal-overlay.show{opacity:1;}
+.kpi-modal-box{
+  background:var(--cream); width:100%; max-width:600px; max-height:90vh; overflow-y:auto;
+  border-radius:18px 18px 0 0; padding:22px 20px 30px; transform:translateY(16px); transition:transform .18s ease;
+}
+.kpi-modal-overlay.show .kpi-modal-box{transform:translateY(0);}
+@media (min-width:640px){ .kpi-modal-overlay{align-items:center;} .kpi-modal-box{border-radius:18px; max-height:86vh;} }
+.kpi-modal-head{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:16px;}
+.kpi-modal-head h3{font-size:19px; margin:0;}
+.kpi-modal-sub{font-size:12.5px; color:var(--ink-soft); margin-top:4px;}
+.kpi-modal-close{background:var(--paper); border:1px solid var(--line); border-radius:50%; width:32px; height:32px; font-size:16px; color:var(--ink-soft); cursor:pointer; flex:0 0 auto;}
+.kpi-grid-2{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:16px;}
+.kpi-indicator-row{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px;}
+.kpi-indicator-row:last-child{border-bottom:none;}
+.kpi-indicator-row.has-evi{border-bottom:none; padding-bottom:2px;}
+.kpi-indicator-badge{font-size:12px; font-weight:700; padding:3px 10px; border-radius:20px; flex:0 0 auto;}
+.kpi-indicator-badge.ok{background:#e4f0df; color:var(--green);}
+.kpi-indicator-badge.mid{background:#f6ecd6; color:var(--yellow);}
+.kpi-indicator-badge.low{background:#f5e0dc; color:var(--red);}
+.kpi-evi-block{background:var(--cream-deep); border-radius:8px; padding:8px 12px; margin:0 0 9px; border-bottom:1px solid var(--line);}
+.kpi-evi-baris{font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-bottom:3px;}
+.kpi-evi-baris:not(:first-child){margin-top:8px;}
+.kpi-evi-row{display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:2px 0;}
+.kpi-evi-k{color:var(--ink-soft);}
+.kpi-evi-v{font-weight:600; color:var(--ink); text-align:right;}
+</style>
+</head>
+<body>
+
+<div id="loadingMsg">Memuat data KPI Personel&hellip;</div>
+<div id="pageContent" style="display:none">
+  <div class="banner">
+    <div class="eyebrow">Sistem KPI Personel — MKI Cabang Makassar</div>
+    <h1>KPI Personel &amp; Kepatuhan Absensi</h1>
+    <div class="sub">Kepatuhan kinerja harian seluruh staf cabang (Marketing &amp; Logistik)</div>
+  </div>
+
+  <div class="wrap" id="captureArea">
+    <div class="month-filter">
+      <label for="monthSelect">Bulan:</label>
+      <select id="monthSelect"></select>
+    </div>
+
+    <div class="wa-share-wrap">
+      <button class="wa-share-btn" id="btnWaShare">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.374 0 0 5.373 0 12c0 2.117.554 4.103 1.523 5.83L.057 23.997l6.334-1.648A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-4.976-1.352l-.357-.211-3.68.957.984-3.57-.232-.368A9.818 9.818 0 012.182 12C2.182 6.566 6.566 2.182 12 2.182S21.818 6.566 21.818 12 17.434 21.818 12 21.818z"/></svg>
+        Bagikan via WhatsApp
+      </button>
+      <button class="save-btn" id="btnSave">Simpan Gambar</button>
+    </div>
+    <div id="shareNote"></div>
+
+    <div class="kpi-grid" id="cardsArea"></div>
+
+    <div class="panel">
+      <h3>Perbandingan Kepatuhan per Personel</h3>
+      <div class="chart-wrap"><canvas id="chartKpi"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h3 id="rankingTitle">Ranking Tim</h3>
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Nama</th><th>Kepatuhan</th><th>Jam Kerja</th><th>Hari Submit</th></tr></thead>
+        <tbody id="rankingBody"></tbody>
+      </table>
+    </div>
+
+    <div class="footer-note">Tap nama personel untuk lihat detail tren &amp; indikator harian. Data diambil langsung dari sistem KPI Personel.</div>
+  </div>
+</div>
+
+<script>
+const KPI_SHEET_ID = '1WSp2VmHs2LqCD16cMc8JI1l1HHfnP0MAgK-G_kf4Rqw';
+const KPI_ARCHIVE_GID = '1890830079';
+const KPI_PERSONEL_LIST = ['ASTRID','ADI','REZA','PUTRI','BURHAMIN','ZUL','ASPAR','TAUFIK'];
+const KPI_PERSONEL_INDICATOR_KEYS = ['Row13','Row14','Row15','Row16','Row17','Row18','Row19','Row20','Row21','Row22'];
+const KPI_PERSONEL_EVID_KEYS = ['Evid13','Evid14','Evid15','Evid16','Evid17','Evid18','Evid19','Evid20','Evid21','Evid22'];
+const KPI_PERSONEL_SEP = '\u001F';
+const KPI_PERSONEL_LABELS = {
+  ASTRID: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Monitoring Sales Harian','Monitoring Revenue Harian','Monitoring Invoice harian','Monitoring Piutang (Dibawah 3 Bulan)','Verifikasi Diskon dan Plafon Customer','Evaluasi Kelengkapan Administrasi Penjualan','Evaluasi Kinerja dan Membimbing Sales','Pelaporan Kegiatan Operasional Harian'],
+  ADI: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Call Customer Non-Aktif <30 Hari (Min 3 Customer)','Melayani Customer Offline/SPD','Melayani Customer online (WA/Telepon)','Pembuatan Faktur (Surat Jalan & Invoice)','Monitoring Piutang Customer Yang Dihandle','Monitoring Pergerakan Barang Customer','Handling Complaint Customer','Menjaga Kebersihan Space dan Ruang kerja'],
+  REZA: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Call Customer Non-Aktif <60 Hari (Min 3 Customer)','Melayani Customer Offline/SPD','Melayani Customer online (WA/Telepon)','Mengarsip Dokumen Sales Harian','Menginput Data Sales Harian di Sistem Cabang','Final Check Surat Jalan Delivery','Handling Complaint Customer','Menjaga Kebersihan Space dan Ruang kerja'],
+  PUTRI: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Mengelola administrasi dan Inventaris Kantor (Dokumen dan ATK Kantor)','Melakukan Pengecekan Server','Evaluasi Kas Operasional','Pengecekan Penunjang Operasional (PC, CCTV, Jaringan)','Menginput Laporan Revenue & AR','Report Harian Kinerja Cabang','Pelaporan Kegiatan Operasional Harian','Input dan Evaluasi Absensi Cabang'],
+  BURHAMIN: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Delivery Harian Diatas 80%','Follow Up Piutang Customer (Min 3 Customer)','Mengawasi Proses Bongkar Muat','Mengarsip Dokumen Logistik Harian','Membuat Laporan Piutang','Membuat Laporan Turnover, Delivery & Return','Menyiapkan Barang Handcarry','Memberi laporan kegiatan harian Logistik'],
+  ZUL: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Delivery Harian diatas 80%','Menyiapkan Barang Untuk Loading','Membuat Dokumentasi Barang di Ekspedisi','Membagi Surat Jalan Untuk Ritase Harian','Mengarsipkan Tanda Terima Ekspedisi','Menjaga Kebersihan dan Kerapian Gudang','Menginput Surat Jalan di Sistem Cabang','Melaporkan Evaluasi Ritase Harian'],
+  ASPAR: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Delivery Harian diatas 80%','Mengemas Barang Yang Akan Dikirim','Final Check Barang Loading','Final Check Surat Jalan','Menjaga Alat Penunjang Logistik','Menjaga Kebersihan dan Kerapian Gudang','Memastikan Keamanan Buka/Tutup Kantor','Melaporkan Evaluasi Ritase Harian'],
+  TAUFIK: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Delivery Harian diatas 80%','Memeriksa Kesiapan Kondisi Kendaraan Harian','Konfirmasi dan Navigasi Rute Harian','Mengatur Kubikasi Box Muatan','Menyiapkan Barang Untuk Loading','Menjaga Kebersihan dan Kerapian Gudang','Memastikan Keamanan Buka/Tutup Kantor','Melaporkan Evaluasi Ritase Harian'],
+};
+const KPI_PHOTO_MAP = { ASTRID:'astrid.jpg', ADI:'adi.jpg', REZA:'reza.jpg', PUTRI:'putri.jpg', BURHAMIN:'burhamin.jpg', ZUL:'zul.jpg', ASPAR:'aspar.jpg', TAUFIK:'taufik.jpg' };
+const PALETTE = { green:'#4d8a5c', yellow:'#c99a3a', red:'#b84040', slate:'#5c6b7a', slateLight:'#dbe2e8', terra:'#c17a5a', terraLight:'#e9cdbd' };
+
+function toStr(v){ return v===null||v===undefined?'':String(v).trim(); }
+function fmtPct(v){ return (v||0).toFixed(1)+'%'; }
+function fmtJamKerja(hours){
+  const totalMin = Math.round((hours||0)*60);
+  return Math.floor(totalMin/60)+' jam '+(totalMin%60)+' menit';
+}
+function monthLabel(ym){
+  if (!ym) return '';
+  if (ym === 'ALL') return 'Semua Bulan';
+  const clean = String(ym).replace(/^K/,'');
+  const [y, mm] = clean.split('-');
+  const names = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const idx = parseInt(mm,10)-1;
+  return names[idx] ? names[idx]+' '+y : clean;
+}
+function monthShort(ym){
+  const clean = String(ym||'').replace(/^K/,'');
+  const [, mm] = clean.split('-');
+  const names = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  return names[parseInt(mm,10)-1] || clean;
+}
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s===null||s===undefined ? '' : String(s);
+  return d.innerHTML;
+}
+
+function parseCsv(t){
+  const rows=[]; let row=[], field='', inQ=false, i=0;
+  while(i<t.length){ const ch=t[i];
+    if(inQ){ if(ch==='"'){ if(t[i+1]==='"'){field+='"';i+=2;continue;} inQ=false;i+=1;continue;} field+=ch;i+=1;continue; }
+    if(ch==='"'){inQ=true;i+=1;continue;}
+    if(ch===','){row.push(field);field='';i+=1;continue;}
+    if(ch==='\r'&&t[i+1]==='\n'){row.push(field);rows.push(row);row=[];field='';i+=2;continue;}
+    if(ch==='\n'||ch==='\r'){row.push(field);rows.push(row);row=[];field='';i+=1;continue;}
+    field+=ch;i+=1;
+  }
+  if(field!==''||row.length>0){row.push(field);rows.push(row);}
+  return rows;
+}
+
+function buildDailyDetail(row){
+  const splitArr = v => toStr(v).split(',');
+  const submittedArr = splitArr(row['Submitted']);
+  const jamDatangArr = splitArr(row['JamDatang']);
+  const jamPulangArr = splitArr(row['JamPulang']);
+  const indicatorArrs = KPI_PERSONEL_INDICATOR_KEYS.map(k => splitArr(row[k]));
+  const evidenceArrs = KPI_PERSONEL_EVID_KEYS.map(k => toStr(row[k]).split(KPI_PERSONEL_SEP));
+  const days = [];
+  for (let day=0; day<31; day++){
+    const submitted = submittedArr[day]==='1';
+    const values = indicatorArrs.map(arr => arr[day]==='1');
+    const evidence = evidenceArrs.map(arr => arr[day] || '');
+    const possibleCount = indicatorArrs.filter(arr => arr[day]==='1'||arr[day]==='0').length;
+    const onCount = indicatorArrs.filter(arr => arr[day]==='1').length;
+    days.push({
+      day: day+1, submitted, values, evidence,
+      dailyPercent: submitted && possibleCount>0 ? (onCount/possibleCount)*100 : null,
+      jamDatang: jamDatangArr[day]||'', jamPulang: jamPulangArr[day]||'',
+    });
+  }
+  return days;
+}
+
+function computeOneRow(name, r){
+  const days = buildDailyDetail(r);
+  const submittedDays = days.filter(d => d.submitted);
+  let totalOn=0, totalPossible=0, totalMenitKerja=0;
+  submittedDays.forEach(d => {
+    d.values.forEach(v => { totalPossible+=1; if(v) totalOn+=1; });
+    const jd = /^\d{1,2}:\d{2}$/.test(d.jamDatang) ? d.jamDatang : null;
+    const jp = /^\d{1,2}:\d{2}$/.test(d.jamPulang) ? d.jamPulang : null;
+    if (jd && jp){
+      const [jdH,jdM]=jd.split(':').map(Number), [jpH,jpM]=jp.split(':').map(Number);
+      const diff=(jpH*60+jpM)-(jdH*60+jdM);
+      if (diff>0) totalMenitKerja+=diff;
+    }
+  });
+  return {
+    name, hasData: submittedDays.length>0,
+    percent: totalPossible>0 ? (totalOn/totalPossible)*100 : 0,
+    totalJamKerja: totalMenitKerja/60, hariSubmit: submittedDays.length,
+    totalOn, totalPossible, totalMenitKerja,
+  };
+}
+function computeOneRowMulti(name, rowsArr){
+  if (!rowsArr.length) return { name, hasData:false, percent:0, totalJamKerja:0, hariSubmit:0 };
+  const parts = rowsArr.map(r => computeOneRow(name, r));
+  const totalOn = parts.reduce((s,p)=>s+p.totalOn,0);
+  const totalPossible = parts.reduce((s,p)=>s+p.totalPossible,0);
+  const totalMenitKerja = parts.reduce((s,p)=>s+p.totalMenitKerja,0);
+  const hariSubmit = parts.reduce((s,p)=>s+p.hariSubmit,0);
+  return { name, hasData: hariSubmit>0, percent: totalPossible>0?(totalOn/totalPossible)*100:0, totalJamKerja: totalMenitKerja/60, hariSubmit };
+}
+
+function buildPersonDetail(name, ym, byPersonMonth, months){
+  const labels = KPI_PERSONEL_LABELS[name] || [];
+  const row = byPersonMonth[name] && byPersonMonth[name][ym];
+  const days = row ? buildDailyDetail(row) : [];
+  const submittedDays = days.filter(d => d.submitted);
+  const countedDays = submittedDays.length;
+  const monthPercent = countedDays>0 ? submittedDays.reduce((s,d)=>s+d.dailyPercent,0)/countedDays : 0;
+
+  const indicatorStats = labels.map((label, idx) => {
+    const checked = submittedDays.filter(d => d.values[idx]).length;
+    const possible = submittedDays.length;
+    return { label, checked, possible, percent: possible>0 ? Math.round((checked/possible)*100) : 0 };
+  });
+
+  const DATANG_CUTOFF = 8*60+15, PULANG_CUTOFF = 16*60+45;
+  const parseTimeToMinutes = s => { const m=/^(\d{1,2}):(\d{2})$/.exec(toStr(s)); return m ? parseInt(m[1],10)*60+parseInt(m[2],10) : null; };
+  const datangMargins=[], pulangMargins=[];
+  submittedDays.forEach(d => {
+    const jd = parseTimeToMinutes(d.jamDatang); if (jd!==null) datangMargins.push(DATANG_CUTOFF-jd);
+    const jp = parseTimeToMinutes(d.jamPulang); if (jp!==null) pulangMargins.push(jp-PULANG_CUTOFF);
+  });
+  const avg = arr => arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : null;
+  const datangAvg = avg(datangMargins), pulangAvg = avg(pulangMargins);
+  const enriched = indicatorStats.map(s => {
+    let marginScore = null;
+    if (/absen datang/i.test(s.label)) marginScore = datangAvg;
+    else if (/absen pulang/i.test(s.label)) marginScore = pulangAvg;
+    return Object.assign({}, s, { marginScore });
+  });
+  let strongest=null, weakest=null;
+  if (enriched.length){
+    const weakSorted = enriched.slice().sort((a,b) => {
+      if (a.percent!==b.percent) return a.percent-b.percent;
+      if (a.checked!==b.checked) return a.checked-b.checked;
+      if (a.marginScore!=null && b.marginScore!=null && a.marginScore!==b.marginScore) return a.marginScore-b.marginScore;
+      return 0;
+    });
+    const strongSorted = enriched.slice().sort((a,b) => {
+      if (a.percent!==b.percent) return b.percent-a.percent;
+      if (a.checked!==b.checked) return b.checked-a.checked;
+      if (a.marginScore!=null && b.marginScore!=null && a.marginScore!==b.marginScore) return b.marginScore-a.marginScore;
+      return 0;
+    });
+    weakest = weakSorted[0]; strongest = strongSorted[0];
+  }
+
+  const trend = months.filter(m => m!=='ALL' && byPersonMonth[name] && byPersonMonth[name][m]).map(m => {
+    const mDays = buildDailyDetail(byPersonMonth[name][m]).filter(d=>d.submitted);
+    const pct = mDays.length ? mDays.reduce((s,d)=>s+d.dailyPercent,0)/mDays.length : 0;
+    return { month: m, percent: Math.round(pct*10)/10 };
+  });
+
+  return { name, yearMonth: ym, days, countedDays, monthPercent, indicatorStats: enriched, strongest, weakest, trend };
+}
+
+function renderEvidenceHtml(raw){
+  if (!raw) return '';
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch(e) { return ''; }
+  if (!parsed) return '';
+  const renderKv = obj => Object.keys(obj).map(k =>
+    `<div class="kpi-evi-row"><span class="kpi-evi-k">${escapeHtml(k)}</span><span class="kpi-evi-v">${escapeHtml(obj[k])}</span></div>`
+  ).join('');
+  if (Array.isArray(parsed)){
+    if (!parsed.length) return '';
+    return `<div class="kpi-evi-block">${parsed.map((item,i)=>`<div class="kpi-evi-baris">Baris ${i+1}</div>${renderKv(item)}`).join('')}</div>`;
+  }
+  if (typeof parsed === 'object'){
+    if (!Object.keys(parsed).length) return '';
+    return `<div class="kpi-evi-block">${renderKv(parsed)}</div>`;
+  }
+  return '';
+}
+
+let kpiChart = null;
+const photoCache = {};
+function getPhotoImage(name){
+  if (photoCache[name]) return photoCache[name];
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.src = KPI_PHOTO_MAP[name] || '';
+  photoCache[name] = img;
+  return img;
+}
+const photoPlugin = {
+  id: 'kpiPersonelPhoto',
+  afterDatasetsDraw(chart){
+    const { ctx } = chart;
+    const meta = chart.getDatasetMeta(0);
+    const labels = chart.data.labels;
+    const colors = chart.data.datasets[0].backgroundColor;
+    meta.data.forEach((bar, i) => {
+      const name = labels[i];
+      const img = getPhotoImage(name);
+      const x0 = bar.x - bar.width/2, rectW = bar.width, rectH = bar.base - bar.y;
+      if (rectW<=0 || rectH<=0) return;
+      ctx.save(); ctx.beginPath(); ctx.rect(x0, bar.y, rectW, rectH); ctx.clip();
+      if (img.complete && img.naturalWidth>0){
+        const imgRatio = img.naturalWidth/img.naturalHeight, rectRatio = rectW/rectH;
+        let drawW, drawH, drawX, drawY;
+        if (imgRatio > rectRatio){ drawH=rectH; drawW=drawH*imgRatio; drawX=x0-(drawW-rectW)/2; drawY=bar.y; }
+        else { drawW=rectW; drawH=drawW/imgRatio; drawX=x0; drawY=bar.y; }
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
+        ctx.fillStyle='rgba(58,53,48,.12)'; ctx.fillRect(x0,bar.y,rectW,rectH);
+      } else {
+        ctx.fillStyle=colors[i]; ctx.fillRect(x0,bar.y,rectW,rectH);
+        if (!img.__wired){ img.__wired=true; img.addEventListener('load', ()=>chart.draw()); }
+      }
+      ctx.fillStyle=colors[i]; ctx.fillRect(x0, bar.base-5, rectW, 5);
+      ctx.restore();
+    });
+  },
+};
+
+let STATE = null; // { byPersonMonth, months }
+
+function renderChart(k){
+  const ctx = document.getElementById('chartKpi');
+  if (kpiChart) kpiChart.destroy();
+  kpiChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: k.people.map(p=>p.name),
+      datasets: [{
+        label: 'Kepatuhan (%)',
+        data: k.people.map(p => p.hasData ? Math.round(p.percent*10)/10 : 0),
+        backgroundColor: k.people.map(p => p.percent>=80 ? PALETTE.green : (p.percent>=50 ? PALETTE.yellow : PALETTE.red)),
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{display:false}, tooltip:{ callbacks:{ label: c => fmtPct(c.parsed.y) } } },
+      scales: {
+        y: { beginAtZero:true, max:100, ticks:{ callback:v=>v+'%' }, grid:{ color:'#eae3d6' } },
+        x: { grid:{ display:false } },
+      },
+    },
+    plugins: [photoPlugin],
+  });
+}
+
+function renderBody(monthKey){
+  const k = STATE.byMonth[monthKey];
+  document.getElementById('cardsArea').innerHTML = `
+    <div class="kpi-card accent"><div class="kpi-label">Rata-Rata Kepatuhan Tim</div><div class="kpi-value">${fmtPct(k.avgPercent)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Personel Terbaik</div><div class="kpi-value" style="font-size:18px">${k.best?escapeHtml(k.best.name):'&ndash;'}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Total Jam Kerja Tim</div><div class="kpi-value" style="font-size:16px">${fmtJamKerja(k.totalJamTeam)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Jam Kerja Terbanyak</div><div class="kpi-value" style="font-size:15px">${k.mostHours?escapeHtml(k.mostHours.name):'&ndash;'}</div><div class="kpi-label" style="margin-top:4px;margin-bottom:0">${k.mostHours?fmtJamKerja(k.mostHours.totalJamKerja):''}</div></div>
+  `;
+  document.getElementById('rankingTitle').textContent = 'Ranking Tim — ' + monthLabel(k.yearMonth);
+  document.getElementById('rankingBody').innerHTML = k.people.map((p,i) => `
+    <tr data-name="${escapeHtml(p.name)}">
+      <td>${i+1}</td><td>${escapeHtml(p.name)}</td>
+      <td>${p.hasData?fmtPct(p.percent):'&ndash;'}</td>
+      <td>${p.hasData?fmtJamKerja(p.totalJamKerja):'&ndash;'}</td>
+      <td>${p.hasData?p.hariSubmit+' hari':'&ndash;'}</td>
+    </tr>`).join('');
+  renderChart(k);
+  document.querySelectorAll('#rankingBody tr').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const targetMonth = monthKey === 'ALL' ? STATE.latestMonth : monthKey;
+      openDetail(tr.dataset.name, targetMonth);
+    });
+  });
+}
+
+function openDetail(name, ym){
+  const overlay = document.createElement('div');
+  overlay.className = 'kpi-modal-overlay';
+  document.body.appendChild(overlay);
+  requestAnimationFrame(()=>overlay.classList.add('show'));
+  const detail = buildPersonDetail(name, ym, STATE.byPersonMonth, STATE.months);
+  renderModalBody(overlay, name, ym, detail);
+}
+
+function renderModalBody(overlay, name, ym, detail){
+  const indicatorRows = (detail.indicatorStats||[]).map(s => {
+    const cls = s.percent>=80 ? 'ok' : (s.percent>=50 ? 'mid' : 'low');
+    return `<div class="kpi-indicator-row"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${cls}">${s.percent}%</span></div>`;
+  }).join('');
+  const submittedDays = detail.days.filter(d=>d.submitted);
+  const dateOptions = submittedDays.map(d => `<option value="${d.day}">${d.day} ${monthLabel(ym).split(' ')[0]}</option>`).join('');
+  const defaultDay = submittedDays.length ? submittedDays[submittedDays.length-1].day : null;
+
+  overlay.innerHTML = `
+    <div class="kpi-modal-box">
+      <div class="kpi-modal-head">
+        <div><h3>${escapeHtml(name)}</h3><div class="kpi-modal-sub">${monthLabel(ym)} &middot; Kepatuhan bulan ini: ${fmtPct(detail.monthPercent||0)} &middot; ${detail.countedDays||0} hari kerja terhitung</div></div>
+        <button type="button" class="kpi-modal-close" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="kpi-grid-2">
+        <div class="kpi-card"><div class="kpi-label">Indikator Terkuat</div><div class="kpi-value" style="font-size:14px">${detail.strongest?escapeHtml(detail.strongest.label):'&ndash;'}</div><div class="kpi-label" style="margin-top:4px;margin-bottom:0;color:${PALETTE.green}">${detail.strongest?detail.strongest.percent+'%':''}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Indikator Terlemah</div><div class="kpi-value" style="font-size:14px">${detail.weakest?escapeHtml(detail.weakest.label):'&ndash;'}</div><div class="kpi-label" style="margin-top:4px;margin-bottom:0;color:${PALETTE.red}">${detail.weakest?detail.weakest.percent+'%':''}</div></div>
+      </div>
+      <div class="panel"><h3>Tren Kepatuhan Harian</h3><div class="chart-wrap" style="height:200px"><canvas id="modalDailyChart"></canvas></div></div>
+      <div class="panel"><h3>Tren Kepatuhan Bulanan</h3><div class="chart-wrap" style="height:180px"><canvas id="modalMonthlyChart"></canvas></div></div>
+      <div class="panel"><h3>Kepatuhan per Indikator</h3>${indicatorRows || '<p style="font-size:13px;color:var(--ink-soft)">Belum ada data indikator.</p>'}</div>
+      <div class="panel"><h3>Cek Indikator per Tanggal</h3>
+        ${dateOptions ? `<div class="month-filter" style="margin-top:0"><label for="daySelect">Tanggal:</label><select id="daySelect">${dateOptions}</select></div><div id="dayDetail"></div>` : '<p style="font-size:13px;color:var(--ink-soft)">Belum ada hari yang tersubmit bulan ini.</p>'}
+      </div>
+    </div>`;
+
+  const close = () => { overlay.classList.remove('show'); setTimeout(()=>overlay.remove(),200); };
+  overlay.querySelector('.kpi-modal-close').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target===overlay) close(); });
+
+  new Chart(document.getElementById('modalDailyChart'), {
+    type: 'line',
+    data: { labels: detail.days.map(d=>d.day), datasets: [{
+      data: detail.days.map(d=>d.submitted?d.dailyPercent:null),
+      borderColor: PALETTE.terra, backgroundColor: PALETTE.terraLight, fill:true, tension:.25, spanGaps:false, pointRadius:3,
+    }]},
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.y===null?'Belum diisi hari itu':fmtPct(c.parsed.y)}}}, scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'},grid:{color:'#eae3d6'}},x:{grid:{display:false}}} },
+  });
+  new Chart(document.getElementById('modalMonthlyChart'), {
+    type: 'line',
+    data: { labels: detail.trend.map(t=>monthShort(t.month)), datasets: [{
+      data: detail.trend.map(t=>t.percent), borderColor: PALETTE.slate, backgroundColor: PALETTE.slateLight, fill:true, tension:.25, pointRadius:4,
+    }]},
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmtPct(c.parsed.y)}}}, scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'},grid:{color:'#eae3d6'}},x:{grid:{display:false}}} },
+  });
+
+  if (defaultDay){
+    const daySelect = overlay.querySelector('#daySelect');
+    daySelect.value = String(defaultDay);
+    const renderDay = dayNum => {
+      const d = detail.days.find(x=>x.day===Number(dayNum));
+      const rows = (detail.indicatorStats||[]).map((s,i) => {
+        const on = d && d.values[i];
+        const evi = d && on ? renderEvidenceHtml(d.evidence[i]) : '';
+        return `<div class="kpi-indicator-row${evi?' has-evi':''}"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${on?'ok':'low'}">${on?'YA':'TIDAK'}</span></div>${evi}`;
+      }).join('');
+      const jamInfo = d && (d.jamDatang||d.jamPulang) ? `<div class="kpi-modal-sub" style="margin:8px 0 4px">Jam Datang: ${d.jamDatang||'-'} &middot; Jam Pulang: ${d.jamPulang||'-'}</div>` : '';
+      overlay.querySelector('#dayDetail').innerHTML = jamInfo + rows;
+    };
+    renderDay(defaultDay);
+    daySelect.addEventListener('change', e => renderDay(e.target.value));
+  }
+}
+
+async function main(){
+  const res = await fetch('https://docs.google.com/spreadsheets/d/'+KPI_SHEET_ID+'/export?format=csv&gid='+KPI_ARCHIVE_GID+'&_='+Date.now(), { cache:'no-store' });
+  const text = await res.text();
+  const csvRows = parseCsv(text);
+  const header = csvRows[0];
+  const dataRows = csvRows.slice(1).filter(r => r.some(v=>v!==''));
+  const rows = dataRows.map(r => { const o={}; header.forEach((h,i)=>{ if(h) o[h]=r[i]===undefined?'':r[i]; }); return o; });
+
+  const byPersonMonth = {};
+  const monthsSet = new Set();
+  rows.forEach(r => {
+    const person = toStr(r['PersonSheet']);
+    const ym = toStr(r['YearMonth']);
+    if (KPI_PERSONEL_LIST.indexOf(person)===-1 || !ym) return;
+    if (!byPersonMonth[person]) byPersonMonth[person] = {};
+    byPersonMonth[person][ym] = r;
+    monthsSet.add(ym);
+  });
+  const dataMonths = Array.from(monthsSet).sort();
+  const latestMonth = dataMonths.length ? dataMonths[dataMonths.length-1] : null;
+  const yearsPresent = new Set(dataMonths.map(m => (m.match(/^K(\d{4})/)||[])[1]).filter(Boolean));
+  if (yearsPresent.size===0) yearsPresent.add(String(new Date().getFullYear()));
+  const months = ['ALL'];
+  Array.from(yearsPresent).sort().forEach(y => { for (let mm=1; mm<=12; mm++) months.push('K'+y+'-'+String(mm).padStart(2,'0')); });
+
+  function computeForMonth(ym){
+    const people = KPI_PERSONEL_LIST.map(name => {
+      if (ym==='ALL'){
+        const rowsArr = dataMonths.map(m => byPersonMonth[name] && byPersonMonth[name][m]).filter(Boolean);
+        return computeOneRowMulti(name, rowsArr);
+      }
+      const r = byPersonMonth[name] && byPersonMonth[name][ym];
+      return r ? computeOneRow(name, r) : { name, hasData:false, percent:0, totalJamKerja:0, hariSubmit:0 };
+    });
+    const withData = people.filter(p=>p.hasData);
+    const avgPercent = withData.length ? withData.reduce((s,p)=>s+p.percent,0)/withData.length : 0;
+    const totalJamTeam = people.reduce((s,p)=>s+p.totalJamKerja,0);
+    const ranking = people.slice().sort((a,b)=>b.percent-a.percent);
+    const best = withData.slice().sort((a,b)=>b.percent-a.percent)[0] || null;
+    const mostHours = withData.slice().sort((a,b)=>b.totalJamKerja-a.totalJamKerja)[0] || null;
+    return { people: ranking, avgPercent, totalJamTeam, best, mostHours, yearMonth: ym };
+  }
+  const byMonth = {};
+  months.forEach(ym => { byMonth[ym] = computeForMonth(ym); });
+
+  STATE = { byPersonMonth, byMonth, months, latestMonth };
+
+  const params = new URLSearchParams(location.search);
+  const monthParam = params.get('month');
+  const initialMonth = (monthParam && months.indexOf(monthParam)!==-1) ? monthParam : (latestMonth || months[1] || 'ALL');
+
+  const sel = document.getElementById('monthSelect');
+  sel.innerHTML = months.map(ym => `<option value="${ym}"${ym===initialMonth?' selected':''}>${monthLabel(ym)}</option>`).join('');
+  sel.addEventListener('change', e => renderBody(e.target.value));
+
+  document.getElementById('loadingMsg').style.display = 'none';
+  document.getElementById('pageContent').style.display = 'block';
+  renderBody(initialMonth);
+
+  // Tombol share: ambil snapshot area konten (kartu + grafik + ranking) jadi
+  // gambar, lalu kirim via Web Share API (fallback: download + buka wa.me).
+  // Caption menyertakan link balik ke halaman interaktif ini supaya penerima
+  // bisa tap nama personel dan lihat detailnya sendiri.
+  document.getElementById('btnWaShare').addEventListener('click', async () => {
+    const note = document.getElementById('shareNote');
+    note.style.display = 'block'; note.textContent = 'Menyiapkan gambar…';
+    try {
+      const canvas = await html2canvas(document.getElementById('captureArea'), { backgroundColor: '#fbf8f2', scale: 2 });
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+      const fn = 'KPI-Personel-' + sel.value + '.png';
+      const file = new File([blob], fn, { type: 'image/png' });
+      const link = location.origin + location.pathname + '?month=' + encodeURIComponent(sel.value);
+      const caption = '📊 *KPI Personel — ' + monthLabel(sel.value) + '*\nCabang Makassar\n\nLihat detail & tren tiap personel di sini:\n' + link;
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        note.style.display = 'none';
+        await navigator.share({ files: [file], title: 'KPI Personel', text: caption }).catch(e => { if (e && e.name !== 'AbortError') fallback(); });
+      } else {
+        fallback();
+      }
+      function fallback(){
+        const a = document.createElement('a'); a.download = fn; a.href = canvas.toDataURL('image/png'); a.click();
+        setTimeout(() => window.open('https://wa.me/?text=' + encodeURIComponent(caption), '_blank'), 700);
+        note.textContent = 'Gambar disimpan. Kirim dari galeri ke WhatsApp (link sudah disiapkan di jendela baru).';
+      }
+    } catch (err) {
+      note.textContent = 'Gagal membuat gambar: ' + err.message;
+    }
+  });
+  document.getElementById('btnSave').addEventListener('click', async () => {
+    const canvas = await html2canvas(document.getElementById('captureArea'), { backgroundColor: '#fbf8f2', scale: 2 });
+    const a = document.createElement('a'); a.download = 'KPI-Personel-' + sel.value + '.png'; a.href = canvas.toDataURL('image/png'); a.click();
+  });
+}
+main().catch(err => { document.getElementById('loadingMsg').textContent = 'Gagal memuat data: ' + err.message; });
+</script>
+</body>
+</html>
