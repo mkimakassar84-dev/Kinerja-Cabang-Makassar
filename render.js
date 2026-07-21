@@ -356,26 +356,37 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     return `<span class="kmc-status kmc-status-miss">&#9888; BELUM ACHIEVE</span>`;
   };
 
-  // Indikator target harian DINAMIS: bukan lagi rata-rata flat (target
-  // bulanan ÷ jumlah hari sebulan), melainkan (sisa target yang belum
-  // tercapai) ÷ (sisa hari termasuk hari ini). Jadi kalau hari-hari
-  // sebelumnya kurang dari target, target hari ini otomatis naik; kalau
-  // sudah lebih dari target, target hari ini otomatis turun.
+  // Indikator target harian DINAMIS: (sisa target yang belum tercapai) ÷
+  // (sisa HARI KERJA Senin-Sabtu, termasuk hari ini — Minggu tidak dihitung).
+  // Kalau hari-hari sebelumnya kurang dari target, target hari ini otomatis
+  // naik; kalau sudah lebih dari target, target hari ini otomatis turun.
   // Hanya relevan saat bulan yang dipilih adalah bulan berjalan.
+  const countWorkdays = (year, monthIdx, startDay, endDay) => {
+    let count = 0;
+    for (let d = startDay; d <= endDay; d++) {
+      if (new Date(year, monthIdx, d).getDay() !== 0) count++;
+    }
+    return count;
+  };
+
   const dailyTargetHtml = (metricTarget, monthActualSoFar, actualToday, todayMKI, todayCFN, isCurrentMonthCtx, daysInMonthCtx, fmtFn, todayLabelCtx, suffix = '') => {
     if (!isCurrentMonthCtx || !(metricTarget > 0)) return '';
     const actualBeforeToday = monthActualSoFar - actualToday;
     const dayOfMonth = TODAY.getDate();
-    const daysRemaining = Math.max(daysInMonthCtx - dayOfMonth + 1, 1);
+    const isSundayToday = TODAY.getDay() === 0;
+    const workdaysRemaining = Math.max(countWorkdays(TODAY.getFullYear(), TODAY.getMonth(), dayOfMonth, daysInMonthCtx), 1);
     const remainingTarget = Math.max(metricTarget - actualBeforeToday, 0);
-    const dailyTarget = remainingTarget / daysRemaining;
-    const achieved = actualToday >= dailyTarget;
+    const dailyTarget = isSundayToday ? 0 : remainingTarget / workdaysRemaining;
+    const achieved = isSundayToday ? null : Math.round(actualToday) >= Math.round(dailyTarget);
+    const statusHtml = isSundayToday
+      ? `<span class="kmc-status kmc-status-neutral">&#128197; HARI MINGGU &mdash; TIDAK DIHITUNG</span>`
+      : `<span class="kmc-status ${achieved ? 'kmc-status-hit' : 'kmc-status-miss'}">${achieved ? '&#10003; DAILY ACHIEVED' : '&#10005; DAILY NOT ACHIEVED'}</span>`;
     return `
       <div class="kmc-daily">
         <div class="kmc-pace-label">TARGET HARIAN</div>
         <div class="kmc-sub">Hari ini (${todayLabelCtx}): <strong class="kmc-today-value">${fmtFn(actualToday)}${suffix}</strong></div>
         <div class="kmc-sub">Target/hari: <strong>${fmtFn(dailyTarget)}${suffix}</strong></div>
-        <span class="kmc-status ${achieved ? 'kmc-status-hit' : 'kmc-status-miss'}">${achieved ? '&#10003; DAILY ACHIEVED' : '&#10005; DAILY NOT ACHIEVED'}</span>
+        ${statusHtml}
         <div class="kmc-daily-breakdown">
           <span class="kmc-daily-breakdown-label">Breakdown Hari Ini</span>
           <span class="kmc-daily-breakdown-vals"><span class="kmc-daily-mki">MKI ${fmtFn(todayMKI)}</span>&nbsp;&nbsp;<span class="kmc-daily-cfn">CFN ${fmtFn(todayCFN)}</span></span>
