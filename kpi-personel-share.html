@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KPI Personel — Cabang Makassar</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
 :root{
   --paper:#fbf8f2; --cream:#f6f1e7; --cream-deep:#efe7d8; --line:#e3dccb;
@@ -42,14 +41,6 @@ h1,h2,h3{font-family:Georgia, 'Times New Roman', serif; font-weight:600;}
 .data-table td{padding:10px 8px; border-bottom:1px solid var(--line);}
 .data-table tbody tr{cursor:pointer; transition:background .15s ease;}
 .data-table tbody tr:hover{background:var(--terra-dim);}
-.wa-share-wrap{display:flex; gap:10px; margin:16px 0; flex-wrap:wrap;}
-.wa-share-btn{
-  background:#25D366; color:#fff; border:none; border-radius:10px; padding:12px 18px;
-  font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:8px;
-}
-.wa-share-btn svg{width:18px; height:18px;}
-.save-btn{background:var(--cream-deep); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:12px 18px; font-size:13.5px; cursor:pointer;}
-#shareNote{font-size:12px; color:var(--ink-soft); margin-top:-6px; margin-bottom:12px; display:none;}
 .footer-note{font-size:12px; color:var(--ink-soft); text-align:center; margin-top:24px;}
 
 /* Modal detail personel */
@@ -94,17 +85,7 @@ h1,h2,h3{font-family:Georgia, 'Times New Roman', serif; font-weight:600;}
     <div class="sub">Kepatuhan kinerja harian seluruh staf cabang (Marketing &amp; Logistik)</div>
   </div>
 
-  <div class="wrap">
-    <div class="wa-share-wrap">
-      <button class="wa-share-btn" id="btnWaShare">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.374 0 0 5.373 0 12c0 2.117.554 4.103 1.523 5.83L.057 23.997l6.334-1.648A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-4.976-1.352l-.357-.211-3.68.957.984-3.57-.232-.368A9.818 9.818 0 012.182 12C2.182 6.566 6.566 2.182 12 2.182S21.818 6.566 21.818 12 17.434 21.818 12 21.818z"/></svg>
-        Bagikan via WhatsApp
-      </button>
-      <button class="save-btn" id="btnSave">Simpan Gambar</button>
-    </div>
-    <div id="shareNote"></div>
-
-    <div class="wrap" id="captureArea" style="padding:0">
+  <div class="wrap" id="captureArea">
     <div class="month-filter">
       <label for="monthSelect">Bulan:</label>
       <select id="monthSelect"></select>
@@ -127,7 +108,6 @@ h1,h2,h3{font-family:Georgia, 'Times New Roman', serif; font-weight:600;}
 
     <div class="footer-note">Tap nama personel untuk lihat detail tren &amp; indikator harian. Data diambil langsung dari sistem KPI Personel.</div>
   </div>
-</div>
 </div>
 
 <script>
@@ -544,40 +524,6 @@ async function main(){
   document.getElementById('loadingMsg').style.display = 'none';
   document.getElementById('pageContent').style.display = 'block';
   renderBody(initialMonth);
-
-  // Tombol share: ambil snapshot area konten (kartu + grafik + ranking) jadi
-  // gambar, lalu kirim via Web Share API (fallback: download + buka wa.me).
-  // Caption menyertakan link balik ke halaman interaktif ini supaya penerima
-  // bisa tap nama personel dan lihat detailnya sendiri.
-  document.getElementById('btnWaShare').addEventListener('click', async () => {
-    const note = document.getElementById('shareNote');
-    note.style.display = 'block'; note.textContent = 'Menyiapkan gambar…';
-    try {
-      const canvas = await html2canvas(document.getElementById('captureArea'), { backgroundColor: '#fbf8f2', scale: 2 });
-      const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
-      const fn = 'KPI-Personel-' + sel.value + '.png';
-      const file = new File([blob], fn, { type: 'image/png' });
-      const link = location.origin + location.pathname + '?month=' + encodeURIComponent(sel.value);
-      const caption = '📊 *KPI Personel — ' + monthLabel(sel.value) + '*\nCabang Makassar\n\nLihat detail & tren tiap personel di sini:\n' + link;
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        note.style.display = 'none';
-        await navigator.share({ files: [file], title: 'KPI Personel', text: caption }).catch(e => { if (e && e.name !== 'AbortError') fallback(); });
-      } else {
-        fallback();
-      }
-      function fallback(){
-        const a = document.createElement('a'); a.download = fn; a.href = canvas.toDataURL('image/png'); a.click();
-        setTimeout(() => window.open('https://wa.me/?text=' + encodeURIComponent(caption), '_blank'), 700);
-        note.textContent = 'Gambar disimpan. Kirim dari galeri ke WhatsApp (link sudah disiapkan di jendela baru).';
-      }
-    } catch (err) {
-      note.textContent = 'Gagal membuat gambar: ' + err.message;
-    }
-  });
-  document.getElementById('btnSave').addEventListener('click', async () => {
-    const canvas = await html2canvas(document.getElementById('captureArea'), { backgroundColor: '#fbf8f2', scale: 2 });
-    const a = document.createElement('a'); a.download = 'KPI-Personel-' + sel.value + '.png'; a.href = canvas.toDataURL('image/png'); a.click();
-  });
 }
 main().catch(err => { document.getElementById('loadingMsg').textContent = 'Gagal memuat data: ' + err.message; });
 </script>

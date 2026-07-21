@@ -1780,13 +1780,41 @@ function renderKpiPersonelSection(m) {
   `;
   document.getElementById('s11').innerHTML = html;
 
-  document.getElementById('btnWaShareKpiPersonel').addEventListener('click', () => {
-    // Buka halaman kpi-personel-share.html — versi mandiri interaktif dari
-    // section ini (ranking + klik nama utk detail), sekaligus tempat generate
-    // gambar untuk dikirim ke WhatsApp. Bulan yang sedang aktif di layar ikut
-    // dikirim supaya konsisten dengan yang sedang dilihat.
+  document.getElementById('btnWaShareKpiPersonel').addEventListener('click', async () => {
+    // Ambil snapshot kartu + grafik + ranking yang SEDANG tampil di dashboard,
+    // kirim sebagai gambar ke WhatsApp. Caption menyertakan link ke
+    // kpi-personel-share.html — halaman interaktif bersih (tanpa tombol share)
+    // supaya penerima bisa tap nama personel dan lihat detailnya sendiri.
+    const btn = document.getElementById('btnWaShareKpiPersonel');
     const activeMonth = document.getElementById('kpiMonthSelect').value;
-    window.open('kpi-personel-share.html?month=' + encodeURIComponent(activeMonth) + '&_=' + Date.now(), '_blank');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Menyiapkan gambar…';
+    try {
+      const canvas = await html2canvas(document.getElementById('kpiPersonelBody'), { backgroundColor: '#fbf8f2', scale: 2 });
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+      const fn = 'KPI-Personel-' + activeMonth + '.png';
+      const file = new File([blob], fn, { type: 'image/png' });
+      const link = location.origin + location.pathname.replace(/[^/]*$/, '') + 'kpi-personel-share.html?month=' + encodeURIComponent(activeMonth);
+      const caption = '📊 *KPI Personel \u2014 ' + monthLabelIdKpi(activeMonth) + '*\nCabang Makassar\n\nLihat detail & tren tiap personel di sini:\n' + link;
+      const shareOrFallback = async () => {
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: 'KPI Personel', text: caption }).catch((e) => { if (e && e.name !== 'AbortError') fallback(); });
+        } else {
+          fallback();
+        }
+      };
+      function fallback() {
+        const a = document.createElement('a'); a.download = fn; a.href = canvas.toDataURL('image/png'); a.click();
+        setTimeout(() => window.open('https://wa.me/?text=' + encodeURIComponent(caption), '_blank'), 700);
+      }
+      await shareOrFallback();
+    } catch (err) {
+      alert('Gagal membuat gambar: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
   });
 
   document.getElementById('kpiMonthSelect').addEventListener('change', (e) => {
