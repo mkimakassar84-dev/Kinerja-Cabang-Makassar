@@ -169,7 +169,7 @@ let dailyPerfActiveTab = 'kpi';
 
 function renderDailyPerformanceSection(m) {
   const tx2026 = filterYear(m.transactions, CURRENT_YEAR);
-  const rev2026 = m.revAllNormalized.filter(r => r.paymentDate.getFullYear() === CURRENT_YEAR);
+  const rev2026 = m.revAllNormalized.filter(r => r.paymentDate && r.paymentDate.getFullYear() === CURRENT_YEAR);
 
   const html = `
     <div class="section-head">
@@ -963,6 +963,8 @@ function renderDpLogistikPanel(tx2026, stock) {
    Saat wilayah dicari, muncul daftar customer dengan pembelanjaan terbesar
    (by total sales) di wilayah yang cocok dengan pencarian tsb, juga
    dipaginasi 10/halaman. ----- */
+let salesViewMode = 'bulanan';
+
 function renderSalesSection(m) {
   const s = m.salesTrend;
   const ic = m.invoiceCustomerSummary;
@@ -1328,7 +1330,7 @@ function renderRevenueSection(m) {
   renderYoyRevChart(yoy);
   renderYoyRevTable(yoy);
   renderRevByCompanyChart(byco);
-  renderRevenueDetailTable(m.revAllNormalized.filter(rv => rv.paymentDate.getFullYear() === CURRENT_YEAR));
+  renderRevenueDetailTable(m.revAllNormalized.filter(rv => rv.paymentDate && rv.paymentDate.getFullYear() === CURRENT_YEAR));
 
   document.querySelectorAll('#revViewToggle .toggle-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -3914,14 +3916,14 @@ function renderDashboard(metrics) {
     // Load pertama kali: cukup render Section 01 (Daily Performance, tampilan
     // default setelah cover) supaya dashboard langsung terasa siap. Section
     // lainnya baru dirender saat pertama kali dibuka (lihat ensureSectionRendered).
-    SECTION_RENDER_MAP.s0(metrics);
+    safeRenderSection('s0', metrics);
     renderedSectionIds.add('s0');
   } else {
     // Update data (auto-refresh): render ulang HANYA section yang memang
     // sudah pernah dibuka user, supaya datanya tetap ter-update — section
     // yang belum pernah dibuka akan otomatis dapat data terbaru saat nanti
     // pertama kali dibuka (ensureSectionRendered selalu pakai latestMetrics).
-    renderedSectionIds.forEach(id => { SECTION_RENDER_MAP[id](metrics); });
+    renderedSectionIds.forEach(id => { safeRenderSection(id, metrics); });
   }
 
   wrapTablesForMobileScroll();
@@ -3930,13 +3932,35 @@ function renderDashboard(metrics) {
   document.getElementById('mainContent').classList.add('visible');
 }
 
+// Membungkus pemanggilan render tiap section dengan try/catch — kalau SATU
+// section error, section lain tetap bisa dibuka/dinavigasi seperti biasa
+// (sebelumnya, error di satu section bisa bikin navigasi ke section
+// manapun ikut macet karena error tsb menghentikan showSlide()).
+function safeRenderSection(sectionId, metrics) {
+  try {
+    SECTION_RENDER_MAP[sectionId](metrics);
+  } catch (err) {
+    console.error(`Gagal merender section ${sectionId}:`, err);
+    const container = document.getElementById(sectionId);
+    if (container) {
+      container.innerHTML = `
+        <div class="section-head">
+          <div class="eyebrow">Terjadi Kesalahan</div>
+          <h2>Section Ini Gagal Dimuat</h2>
+          <p class="lede">${escapeHtml(err.message || 'Kesalahan tidak diketahui.')}</p>
+          <p class="lede">Coba muat ulang halaman. Kalau masih terjadi, laporkan ke pengembang dashboard.</p>
+        </div>`;
+    }
+  }
+}
+
 // Dipanggil dari index.html setiap kali user pindah ke section tertentu.
 // Kalau section itu belum pernah dirender, render sekarang (pakai data
 // terbaru yang sudah ada); kalau sudah pernah, tidak melakukan apa-apa
 // (hindari kerja render ulang yang tidak perlu).
 function ensureSectionRendered(sectionId) {
   if (!sectionId || renderedSectionIds.has(sectionId) || !SECTION_RENDER_MAP[sectionId] || !latestMetrics) return;
-  SECTION_RENDER_MAP[sectionId](latestMetrics);
+  safeRenderSection(sectionId, latestMetrics);
   renderedSectionIds.add(sectionId);
   wrapTablesForMobileScroll();
 }
