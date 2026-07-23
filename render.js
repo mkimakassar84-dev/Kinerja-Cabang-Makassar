@@ -1559,7 +1559,7 @@ function renderKpiPersonelSection(m) {
     btn.disabled = true;
     btn.textContent = 'Menyiapkan gambar…';
     try {
-      const canvas = await html2canvas(document.getElementById('kpiPersonelOnlyBody'), { backgroundColor: '#fbf8f2', scale: 2 });
+      const canvas = await html2canvas(document.getElementById('kpiPersonelOnlyBody'), { backgroundColor: '#fbf8f2', scale: 2, windowWidth: 1200 });
       const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
       const fn = 'KPI-Personel-' + activeMonth + '.png';
       const file = new File([blob], fn, { type: 'image/png' });
@@ -1664,7 +1664,7 @@ function renderKpiPersonelBody(monthData) {
     btn.disabled = true;
     btn.textContent = 'Menyiapkan gambar…';
     try {
-      const canvas = await html2canvas(document.getElementById('kpiMakassarBody'), { backgroundColor: '#fbf8f2', scale: 2 });
+      const canvas = await html2canvas(document.getElementById('kpiMakassarBody'), { backgroundColor: '#fbf8f2', scale: 2, windowWidth: 1200 });
       const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
       const fn = 'KPI-Cabang-Makassar-' + activeMonth + '.png';
       const file = new File([blob], fn, { type: 'image/png' });
