@@ -1668,18 +1668,16 @@ function renderKpiPersonelBody(monthData) {
       const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
       const fn = 'KPI-Cabang-Makassar-' + activeMonth + '.png';
       const file = new File([blob], fn, { type: 'image/png' });
-      const link = location.origin + location.pathname + '#s11';
-      const caption = '📊 *Rekap Kinerja Cabang MAKASSAR \\u2014 ' + monthLabelIdKpi(activeMonth) + '*\\nPT. Mitra Kabel Indonesia - Cabang Makassar\\n\\nLihat detail dashboard di sini:\\n' + link;
       const shareOrFallback = async () => {
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'Rekap Kinerja Cabang Makassar', text: caption }).catch((e) => { if (e && e.name !== 'AbortError') fallback(); });
+          await navigator.share({ files: [file], title: 'Rekap Kinerja Cabang Makassar' }).catch((e) => { if (e && e.name !== 'AbortError') fallback(); });
         } else {
           fallback();
         }
       };
       function fallback() {
         const a = document.createElement('a'); a.download = fn; a.href = canvas.toDataURL('image/png'); a.click();
-        setTimeout(() => window.open('https://wa.me/?text=' + encodeURIComponent(caption), '_blank'), 700);
+        setTimeout(() => window.open('https://wa.me/', '_blank'), 700);
       }
       await shareOrFallback();
     } catch (err) {
@@ -1814,12 +1812,6 @@ function renderKpiMakassarSubsection(yearMonthKey) {
     return `<div class="kpi-indicator-row"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${cls}">${s.percent}%</span></div>`;
   }).join('');
 
-  const submittedDays = detail.days.filter(d => d.submitted);
-  const dateOptions = submittedDays.map(d =>
-    `<option value="${d.day}">${d.day} ${monthLabelIdKpi(yearMonthKey).split(' ')[0]}</option>`
-  ).join('');
-  const defaultDay = submittedDays.length ? submittedDays[submittedDays.length - 1].day : null;
-
   wrap.innerHTML = `
     <div class="kpi-modal-sub" style="margin-bottom:14px">${monthLabelIdKpi(yearMonthKey)} &middot; Kepatuhan bulan ini: ${fmtPct(detail.monthPercent || 0)} &middot; ${detail.countedDays || 0} hari kerja terhitung</div>
 
@@ -1849,17 +1841,6 @@ function renderKpiMakassarSubsection(yearMonthKey) {
     <div class="panel">
       <div class="panel-head"><h3>Kepatuhan per Indikator</h3></div>
       ${indicatorRows || '<p class="kpi-modal-loading">Belum ada data indikator.</p>'}
-    </div>
-
-    <div class="panel">
-      <div class="panel-head"><h3>Cek Indikator per Tanggal</h3></div>
-      ${dateOptions ? `
-        <div class="kpi-month-filter" style="margin-top:0">
-          <label for="kpiMakassarDaySelect">Tanggal:</label>
-          <select id="kpiMakassarDaySelect">${dateOptions}</select>
-        </div>
-        <div id="kpiMakassarDayDetail"></div>
-      ` : '<p class="kpi-modal-loading">Belum ada hari yang tersubmit bulan ini.</p>'}
     </div>
   `;
 
@@ -1913,25 +1894,6 @@ function renderKpiMakassarSubsection(yearMonthKey) {
       },
     },
   });
-
-  if (defaultDay) {
-    const daySelect = wrap.querySelector('#kpiMakassarDaySelect');
-    daySelect.value = String(defaultDay);
-    const renderDay = (dayNum) => {
-      const d = detail.days.find(x => x.day === Number(dayNum));
-      const rows = (detail.indicatorStats || []).map((s, i) => {
-        const on = d && d.values[i];
-        const evi = d && on ? renderKpiEvidenceHtml(d.evidence[i]) : '';
-        return `<div class="kpi-indicator-row${evi ? ' has-evi' : ''}"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${on ? 'ok' : 'low'}">${on ? 'YA' : 'TIDAK'}</span></div>${evi}`;
-      }).join('');
-      const jamInfo = d && (d.jamDatang || d.jamPulang)
-        ? `<div class="kpi-modal-sub" style="margin:8px 0 4px">Jam Datang: ${d.jamDatang || '-'} &middot; Jam Pulang: ${d.jamPulang || '-'}</div>`
-        : '';
-      wrap.querySelector('#kpiMakassarDayDetail').innerHTML = jamInfo + rows;
-    };
-    renderDay(defaultDay);
-    daySelect.addEventListener('change', (e) => renderDay(e.target.value));
-  }
 }
 
 /* ---- Detail personel: klik nama -> modal dengan tren harian, tren bulanan,
