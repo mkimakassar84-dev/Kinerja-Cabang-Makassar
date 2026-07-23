@@ -2,7 +2,19 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" id="viewportMeta" content="width=device-width, initial-scale=1.0">
+<script>
+// Terapkan preferensi "Tampilan Desktop" sesegera mungkin (sebelum konten
+// dirender) supaya tidak ada kedipan layout saat halaman dimuat ulang.
+(function(){
+  try {
+    if (localStorage.getItem('forceDesktopView') === '1') {
+      document.getElementById('viewportMeta').setAttribute('content', 'width=1100');
+      document.documentElement.classList.add('force-desktop-view');
+    }
+  } catch (e) {}
+})();
+</script>
 <title>Dashboard Kinerja Cabang Makassar 2026</title>
 
 <!-- PWA: manifest, ikon, dan meta iOS — diletakkan di sini (di dalam <head>,
@@ -312,6 +324,19 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
   align-items:center; justify-content:center; flex-direction:column; gap:4px;
 }
 .hamburger-btn span{display:block; width:18px; height:2px; background:var(--ink); border-radius:2px;}
+.desktop-toggle-btn{
+  display:flex; align-items:center; justify-content:center; position:fixed; top:14px; right:14px; z-index:61;
+  width:42px; height:42px; border-radius:10px; border:1px solid var(--line);
+  background:var(--paper); box-shadow:var(--shadow); cursor:pointer; font-size:19px;
+}
+.desktop-toggle-btn.active{background:var(--terra); border-color:var(--terra); color:#fff;}
+/* Saat mode "Tampilan Desktop" dipaksa via viewport meta lebar 1100px, aplikasi
+   ini sebenarnya sengaja tidak pernah butuh scroll horizontal (overflow-x:hidden
+   di banyak tempat) — jadi khusus mode ini kita izinkan geser horizontal supaya
+   bagian yang melebar tidak terpotong, tanpa mengecilkan ukuran konten. */
+html.force-desktop-view, body.force-desktop-view{overflow-x:auto !important;}
+body.force-desktop-view .main{overflow-x:auto !important;}
+body.force-desktop-view .section, body.force-desktop-view .cover{overflow-x:auto !important;}
 .mobile-title{
   display:none; position:fixed; top:0; left:0; right:0; height:58px; z-index:55;
   background:var(--paper); border-bottom:1px solid var(--line);
@@ -436,6 +461,7 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
 </div>
 
 <button class="hamburger-btn" id="hamburgerBtn" aria-label="Buka menu navigasi"><span></span><span></span><span></span></button>
+<button class="desktop-toggle-btn" id="btnDesktopToggle" aria-label="Beralih tampilan desktop">&#128421;&#65039;</button>
 <div class="mobile-title" id="mobileTitle">Dashboard Kinerja Makassar</div>
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 <div class="slide-nav-fab">

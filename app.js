@@ -63,7 +63,28 @@ function scheduleAutoRefresh() {
   setInterval(checkForDataChanges, AUTO_CHECK_INTERVAL_MS);
 }
 
+function setForceDesktopView(enabled) {
+  const meta = document.getElementById('viewportMeta');
+  if (meta) meta.setAttribute('content', enabled ? 'width=1100' : 'width=device-width, initial-scale=1.0');
+  document.documentElement.classList.toggle('force-desktop-view', enabled);
+  document.body.classList.toggle('force-desktop-view', enabled);
+  const btn = document.getElementById('btnDesktopToggle');
+  if (btn) btn.classList.toggle('active', enabled);
+  try { localStorage.setItem('forceDesktopView', enabled ? '1' : '0'); } catch (e) {}
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  let stored = '0';
+  try { stored = localStorage.getItem('forceDesktopView') || '0'; } catch (e) {}
+  setForceDesktopView(stored === '1');
+
+  const desktopToggleBtn = document.getElementById('btnDesktopToggle');
+  if (desktopToggleBtn) {
+    desktopToggleBtn.addEventListener('click', () => {
+      setForceDesktopView(!document.documentElement.classList.contains('force-desktop-view'));
+    });
+  }
+
   initDashboard();
   scheduleAutoRefresh();
 });
