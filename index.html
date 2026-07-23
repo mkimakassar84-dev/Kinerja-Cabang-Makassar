@@ -232,9 +232,10 @@ h1,h2,h3,h4{font-family:'Source Serif 4', serif; font-weight:600; color:var(--in
 .data-table th{
   text-align:left; padding:10px 12px; background:var(--cream-deep); color:var(--ink-soft);
   font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.03em;
-  border-bottom:1px solid var(--line);
+  border-bottom:1px solid var(--line); white-space:nowrap;
 }
-.data-table td{padding:9px 12px; border-bottom:1px solid var(--line); color:var(--ink);}
+.data-table td{padding:9px 12px; border-bottom:1px solid var(--line); color:var(--ink); white-space:nowrap;}
+.data-table td .delta{font-size:13px;}
 .data-table tbody tr:hover{background:var(--cream-deep);}
 .data-table tbody tr.clickable-row{cursor:pointer;}
 .data-table tbody tr.clickable-row:hover{background:var(--terra-dim);}
@@ -551,15 +552,11 @@ body.force-desktop-view .section, body.force-desktop-view .cover{overflow-x:auto
   const fabNext = document.getElementById('fabNext');
   const fabShare = document.getElementById('fabShare');
 
-  // Slide index -> parameter section untuk section-share.html (format WA sama
-  // seperti stock/kpi: file HTML tersendiri yang me-render ulang data dari
-  // Google Sheets lalu jadi gambar). Section 01 (Daily Performance, index 1)
-  // dan Section 07 (Stock & PO Gudang, index 7) tidak dimasukkan karena sudah
-  // punya tombol share sendiri per bagian.
-  const SHARE_SECTION_MAP = {
-    2: 'sales', 3: 'revenue', 4: 'ratio', 5: 'wilayah', 6: 'turnover',
-    8: 'delivery', 9: 'ar', 10: 'customer', 11: 'fiber',
-  };
+  // Tombol share mengambang (fabShare) dinonaktifkan untuk semua section —
+  // section 01, 07, dan 12 sudah punya tombol share sendiri per bagian;
+  // section 02-06, 08-11 sengaja tidak lagi menampilkan tombol share
+  // mengambang ini di mode HP.
+  const SHARE_SECTION_MAP = {};
 
   function openSidebar() {
     sidebar.classList.add('open');
