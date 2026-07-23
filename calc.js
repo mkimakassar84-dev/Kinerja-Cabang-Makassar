@@ -1016,6 +1016,7 @@ const KPI_PERSONEL_LABELS = {
   ZUL: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Delivery Harian diatas 80%','Menyiapkan Barang Untuk Loading','Membuat Dokumentasi Barang di Ekspedisi','Membagi Surat Jalan Untuk Ritase Harian','Mengarsipkan Tanda Terima Ekspedisi','Menjaga Kebersihan dan Kerapian Gudang','Menginput Surat Jalan di Sistem Cabang','Melaporkan Evaluasi Ritase Harian'],
   ASPAR: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Delivery Harian diatas 80%','Mengemas Barang Yang Akan Dikirim','Final Check Barang Loading','Final Check Surat Jalan','Menjaga Alat Penunjang Logistik','Menjaga Kebersihan dan Kerapian Gudang','Memastikan Keamanan Buka/Tutup Kantor','Melaporkan Evaluasi Ritase Harian'],
   TAUFIK: ['Absen Datang dibawah 08.15','Absen Pulang Diatas 16.45','Delivery Harian diatas 80%','Memeriksa Kesiapan Kondisi Kendaraan Harian','Konfirmasi dan Navigasi Rute Harian','Mengatur Kubikasi Box Muatan','Menyiapkan Barang Untuk Loading','Menjaga Kebersihan dan Kerapian Gudang','Memastikan Keamanan Buka/Tutup Kantor','Melaporkan Evaluasi Ritase Harian'],
+  MAKASSAR: ['Target Sales Harian Tercapai','Target Revenue Harian Tercapai','Target Invoice Harian Tercapai','Delivery Harian diatas 80%','Absen Datang Marketing Sebelum 08.15','Absen Pulang Marketing Setelah 16.45','Absen Datang Logistik Sebelum 08.15','Absen Pulang Logistik Setelah 16.45','Revenue & Sales Harian Tercapai Bersama','Report Harian (Marketing & Logistik)'],
 };
 
 // Uraikan 1 baris DATA_ARCHIVE (1 orang x 1 bulan) menjadi data per-hari (1..31):
@@ -1113,7 +1114,8 @@ function computeKpiPersonelMetrics(rows) {
   rows.forEach(r => {
     const person = toStr(r['PersonSheet']);
     const ym = toStr(r['YearMonth']);
-    if (KPI_PERSONEL_LIST.indexOf(person) === -1 || !ym) return;
+    if (!ym) return;
+    if (KPI_PERSONEL_LIST.indexOf(person) === -1 && person !== 'MAKASSAR') return;
     if (!byPersonMonth[person]) byPersonMonth[person] = {};
     byPersonMonth[person][ym] = r;
     monthsSet.add(ym);
@@ -1236,10 +1238,11 @@ function buildKpiPersonDetail(name, ym, byPersonMonth, months) {
   // Tren bulanan: hitung ulang persentase untuk SEMUA bulan yang ada datanya orang ini.
   const trend = months
     .filter(m => byPersonMonth[name] && byPersonMonth[name][m])
-    .map(m => {
-      const mDays = buildKpiDailyDetail(byPersonMonth[name][m]).filter(d => d.submitted);
-      const pct = mDays.length ? mDays.reduce((s, d) => s + d.dailyPercent, 0) / mDays.length : 0;
-      return { month: m, percent: Math.round(pct * 10) / 10 };
+    .map(m => ({ month: m, mDays: buildKpiDailyDetail(byPersonMonth[name][m]).filter(d => d.submitted) }))
+    .filter(t => t.mDays.length > 0)
+    .map(t => {
+      const pct = t.mDays.reduce((s, d) => s + d.dailyPercent, 0) / t.mDays.length;
+      return { month: t.month, percent: Math.round(pct * 10) / 10 };
     });
 
   return { name, yearMonth: ym, days, countedDays, monthPercent, indicatorStats, strongest, weakest, trend };

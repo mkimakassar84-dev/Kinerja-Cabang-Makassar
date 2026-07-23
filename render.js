@@ -1637,9 +1637,17 @@ function renderKpiPersonelBody(monthData) {
         <tbody>${rankingRows}</tbody>
       </table>
     </div>
+
+    <div class="section-head" style="margin-top:32px">
+      <div class="eyebrow">12.1 &mdash; KPI Cabang Makassar</div>
+      <h2>Rekap Kinerja Cabang MAKASSAR</h2>
+      <p class="lede">Rekap kepatuhan gabungan cabang (bukan per personel) &mdash; target sales/revenue/invoice harian, delivery, absensi marketing &amp; logistik, dan laporan harian.</p>
+    </div>
+    <div id="kpiMakassarBody"></div>
   `;
   document.getElementById('kpiPersonelBody').innerHTML = html;
   renderKpiPersonelChart(k);
+  renderKpiMakassarSubsection(k.yearMonth === 'ALL' ? kpiPersonelState.currentMonthLabel : k.yearMonth);
 
   document.querySelectorAll('#kpiPersonelBody .data-table.kpi-clickable tbody tr').forEach(tr => {
     tr.addEventListener('click', () => {
@@ -1747,6 +1755,105 @@ function renderKpiPersonelChart(k) {
       },
     },
     plugins: [kpiPersonelPhotoPlugin],
+  });
+}
+
+/* ---- Sub-section 12.1 — KPI Cabang Makassar: rekap kepatuhan gabungan
+   cabang (bukan per personel), ditampilkan inline di bawah Ranking Tim
+   dengan tampilan & komponen yang sama persis dengan modal detail personel
+   (kartu indikator terkuat/terlemah, tren harian, tren bulanan, kepatuhan
+   per indikator) — hanya beda dirender langsung di section, bukan overlay. ---- */
+function renderKpiMakassarSubsection(yearMonthKey) {
+  const wrap = document.getElementById('kpiMakassarBody');
+  if (!wrap) return;
+  const detail = buildKpiPersonDetail('MAKASSAR', yearMonthKey, kpiPersonelState.byPersonMonth, kpiPersonelState.months);
+
+  const indicatorRows = (detail.indicatorStats || []).map(s => {
+    const cls = s.percent >= 80 ? 'ok' : (s.percent >= 50 ? 'mid' : 'low');
+    return `<div class="kpi-indicator-row"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${cls}">${s.percent}%</span></div>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="kpi-modal-sub" style="margin-bottom:14px">${monthLabelIdKpi(yearMonthKey)} &middot; Kepatuhan bulan ini: ${fmtPct(detail.monthPercent || 0)} &middot; ${detail.countedDays || 0} hari kerja terhitung</div>
+
+    <div class="kpi-grid kpi-grid-2">
+      <div class="kpi-card">
+        <div class="kpi-label">Indikator Terkuat</div>
+        <div class="kpi-value" style="font-size:15px">${detail.strongest ? escapeHtml(detail.strongest.label) : '&ndash;'}</div>
+        <div class="kpi-label" style="margin-top:4px; margin-bottom:0; color:${PALETTE.green}">${detail.strongest ? detail.strongest.percent + '%' : ''}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Indikator Terlemah</div>
+        <div class="kpi-value" style="font-size:15px">${detail.weakest ? escapeHtml(detail.weakest.label) : '&ndash;'}</div>
+        <div class="kpi-label" style="margin-top:4px; margin-bottom:0; color:${PALETTE.red}">${detail.weakest ? detail.weakest.percent + '%' : ''}</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Tren Kepatuhan Harian</h3></div>
+      <div class="chart-wrap" style="height:220px"><canvas id="chartMakassarDaily"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Tren Kepatuhan Bulanan</h3></div>
+      <div class="chart-wrap" style="height:200px"><canvas id="chartMakassarMonthly"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Kepatuhan per Indikator</h3></div>
+      ${indicatorRows || '<p class="kpi-modal-loading">Belum ada data indikator.</p>'}
+    </div>
+  `;
+
+  makeChart('chartMakassarDaily', {
+    type: 'line',
+    data: {
+      labels: detail.days.map(d => d.day),
+      datasets: [{
+        label: 'Kepatuhan harian (%)',
+        data: detail.days.map(d => d.submitted ? d.dailyPercent : null),
+        borderColor: PALETTE.terra,
+        backgroundColor: PALETTE.terraLight,
+        fill: true, tension: 0.25, spanGaps: false,
+        pointRadius: 3,
+        pointBackgroundColor: ctx => {
+          const v = ctx.raw;
+          if (v === null || v === undefined) return PALETTE.slateLight;
+          return v >= 80 ? PALETTE.green : (v >= 50 ? PALETTE.yellow : PALETTE.red);
+        },
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y === null ? 'Belum diisi hari itu' : fmtPct(ctx.parsed.y) } } },
+      scales: {
+        y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+
+  makeChart('chartMakassarMonthly', {
+    type: 'line',
+    data: {
+      labels: detail.trend.map(t => monthShortIdKpi(t.month)),
+      datasets: [{
+        label: 'Kepatuhan bulanan (%)',
+        data: detail.trend.map(t => t.percent),
+        borderColor: PALETTE.slate,
+        backgroundColor: PALETTE.slateLight,
+        fill: true, tension: 0.25,
+        pointRadius: 4, pointBackgroundColor: PALETTE.slate,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtPct(ctx.parsed.y) } } },
+      scales: {
+        y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
+        x: { grid: { display: false } },
+      },
+    },
   });
 }
 
