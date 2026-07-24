@@ -2939,7 +2939,7 @@ function renderStockSection(m) {
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Nilai Stock Gudang</div>
-        <div class="kpi-value">${fmtRupiah(st.totalNilaiStockGD)}</div>
+        <div class="kpi-value kpi-value-rupiah">${fmtRupiah(st.totalNilaiStockGD)}</div>
         <div class="kpi-sub">Harga satuan &times; total stock MKI &amp; CFN</div>
       </div>
     </div>
@@ -3305,11 +3305,11 @@ function renderARSection(m) {
     <div class="kpi-grid kpi-grid-3">
       <div class="kpi-card">
         <div class="kpi-label">Total Nilai Faktur 2026</div>
-        <div class="kpi-value">${fmtRupiah(ar.totalNilaiFaktur)}</div>
+        <div class="kpi-value kpi-value-rupiah">${fmtRupiah(ar.totalNilaiFaktur)}</div>
       </div>
       <div class="kpi-card kpi-card-accent">
         <div class="kpi-label">Sisa Saldo Piutang <span class="kpi-label-note">(per tanggal berjalan)</span></div>
-        <div class="kpi-value">${fmtRupiah(ar.totalSisaSaldo)}</div>
+        <div class="kpi-value kpi-value-rupiah">${fmtRupiah(ar.totalSisaSaldo)}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Rasio AR terhadap Sales</div>
@@ -3572,7 +3572,7 @@ function renderCustFreqSection(m) {
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Rata-rata Sales per Customer</div>
-        <div class="kpi-value">${fmtRupiah(cf.avgSalesPerCustomer)}</div>
+        <div class="kpi-value kpi-value-rupiah">${fmtRupiah(cf.avgSalesPerCustomer)}</div>
       </div>
       <div class="kpi-card kpi-card-accent">
         <div class="kpi-label">Customer Tidak Aktif &ge;2 Bulan</div>
@@ -3859,7 +3859,7 @@ function renderFiberOpticSection(m) {
     <div class="kpi-grid kpi-grid-3">
       <div class="kpi-card">
         <div class="kpi-label">Total Sales FO 1-Core 2026</div>
-        <div class="kpi-value">${fmtRupiah(fo.totalSales)}</div>
+        <div class="kpi-value kpi-value-rupiah">${fmtRupiah(fo.totalSales)}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Total Quantity Terjual</div>
