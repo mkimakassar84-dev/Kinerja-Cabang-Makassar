@@ -1559,7 +1559,27 @@ function renderKpiPersonelSection(m) {
     btn.disabled = true;
     btn.textContent = 'Menyiapkan gambar…';
     try {
-      const canvas = await html2canvas(document.getElementById('kpiPersonelOnlyBody'), { backgroundColor: '#fbf8f2', scale: 2, windowWidth: 1200 });
+      const captureEl = document.getElementById('kpiPersonelOnlyBody');
+      const chartCanvas = document.getElementById('chartKpiPersonel');
+      const chartInstance = CHART_REGISTRY['chartKpiPersonel'];
+      // Chart.js sudah menggambar canvas ini di lebar layar HP yang sebenarnya (sempit).
+      // html2canvas hanya memotret apa adanya — jadi sebelum motret, paksa chart resize
+      // dulu ke lebar capture (1160px, mengikuti windowWidth 1200 di bawah dikurangi padding),
+      // baru redraw, baru screenshot, baru kembalikan ke ukuran responsif semula.
+      const captureWidth = 1160;
+      const prevInlineWidth = chartCanvas.style.width;
+      const prevInlineHeight = chartCanvas.style.height;
+      if (chartInstance) {
+        chartCanvas.style.width = captureWidth + 'px';
+        chartInstance.resize(captureWidth, chartCanvas.height ? chartCanvas.clientHeight : 320);
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      }
+      const canvas = await html2canvas(captureEl, { backgroundColor: '#fbf8f2', scale: 2, windowWidth: 1200 });
+      if (chartInstance) {
+        chartCanvas.style.width = prevInlineWidth;
+        chartCanvas.style.height = prevInlineHeight;
+        chartInstance.resize();
+      }
       const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
       const fn = 'KPI-Personel-' + activeMonth + '.png';
       const file = new File([blob], fn, { type: 'image/png' });
