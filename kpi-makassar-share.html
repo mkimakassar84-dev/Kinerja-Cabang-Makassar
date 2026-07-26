@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rekap Kinerja Cabang MAKASSAR</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --paper:#fbf8f2; --cream:#f6f1e7; --cream-deep:#efe7d8; --line:#e3dccb;
+  --ink:#2a2520; --ink-soft:#6a5a4a; --terra:#c17a5a; --terra-dim:#f3e6dd;
+  --green:#4d8a5c; --yellow:#c99a3a; --red:#b84040; --slate:#5c6b7a; --slate-light:#dbe2e8;
+  --terra-light:#e9cdbd; --shadow:0 2px 10px rgba(58,53,48,.08);
+}
+*{margin:0; padding:0; box-sizing:border-box;}
+body{font-family:'IBM Plex Sans', system-ui, sans-serif; background:var(--paper); color:var(--ink); min-height:100vh;}
+h1,h2,h3{font-family:Georgia, 'Times New Roman', serif; font-weight:600;}
+#loadingMsg{padding:60px 20px; text-align:center; color:var(--ink-soft); font-size:14px;}
+.banner{background:linear-gradient(90deg,#c17a5a,#a85d3f); color:#fff; padding:26px 20px 22px;}
+.banner .eyebrow{font-size:12px; letter-spacing:.06em; opacity:.75; text-transform:uppercase; margin-bottom:6px;}
+.banner h1{font-size:24px; margin-bottom:4px;}
+.banner .sub{font-size:13px; opacity:.85;}
+.wrap{max-width:1040px; margin:0 auto; padding:18px 16px 40px;}
+@media (max-width:480px){
+  .wrap{padding-left:6px; padding-right:6px;}
+  .panel{padding-left:6px; padding-right:6px;}
+}
+.month-filter{display:flex; align-items:center; gap:10px; margin:16px 0; flex-wrap:wrap;}
+.month-filter label{font-size:12.5px; color:var(--ink-soft); font-weight:500;}
+.month-filter select{
+  font-family:inherit; font-size:13.5px; color:var(--ink); background:var(--paper);
+  border:1px solid var(--line); border-radius:8px; padding:7px 12px;
+}
+.kpi-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:18px;}
+@media (min-width:600px){ .kpi-grid{grid-template-columns:repeat(4,1fr);} }
+.kpi-card{background:var(--cream); border-radius:12px; padding:16px; box-shadow:var(--shadow);}
+.kpi-card.accent{background:var(--terra-dim);}
+.kpi-label{font-size:11.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px;}
+.kpi-value{font-size:24px; font-weight:700;}
+.panel{background:var(--cream); border-radius:14px; padding:18px; margin-bottom:16px; box-shadow:var(--shadow);}
+.panel h3{font-size:15px; margin-bottom:12px;}
+.chart-wrap{position:relative; height:280px;}
+.chart-wrap canvas{width:100% !important;}
+.data-table{width:100%; border-collapse:collapse; font-size:13px;}
+.data-table th{text-align:left; font-size:11px; color:var(--ink-soft); text-transform:uppercase; padding:6px 8px; border-bottom:1px solid var(--line);}
+.data-table td{padding:10px 8px; border-bottom:1px solid var(--line);}
+.footer-note{font-size:12px; color:var(--ink-soft); text-align:center; margin-top:24px;}
+.kpi-indicator-row{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px;}
+.kpi-indicator-row:last-child{border-bottom:none;}
+.kpi-indicator-row.has-evi{border-bottom:none; padding-bottom:2px;}
+.kpi-indicator-badge{font-size:12px; font-weight:700; padding:3px 10px; border-radius:20px; flex:0 0 auto;}
+.kpi-indicator-badge.ok{background:#e4f0df; color:var(--green);}
+.kpi-indicator-badge.mid{background:#f6ecd6; color:var(--yellow);}
+.kpi-indicator-badge.low{background:#f5e0dc; color:var(--red);}
+.kpi-indicator-badge.na{background:#e5e0d3; color:#7a8794;}
+.kpi-evi-block{background:var(--cream-deep); border-radius:8px; padding:8px 12px; margin:0 0 9px; border-bottom:1px solid var(--line);}
+.kpi-evi-baris{font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-bottom:3px;}
+.kpi-evi-baris:not(:first-child){margin-top:8px;}
+.kpi-evi-row{display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:2px 0;}
+.kpi-evi-k{color:var(--ink-soft);}
+.kpi-evi-v{font-weight:600; color:var(--ink); text-align:right;}
+.kpi-perf-banner{border-radius:8px; padding:8px 14px; font-weight:600; margin-bottom:16px;}
+</style>
+</head>
+<body>
+
+<div id="loadingMsg">Memuat data Rekap Kinerja Cabang MAKASSAR&hellip;</div>
+<div id="pageContent" style="display:none">
+  <div class="banner">
+    <div class="eyebrow">Sistem KPI Personel — MKI Cabang Makassar</div>
+    <h1>Rekap Kinerja Cabang MAKASSAR</h1>
+    <div class="sub">Kepatuhan gabungan cabang — target sales/revenue/invoice harian, delivery, absensi marketing &amp; logistik, dan laporan harian</div>
+  </div>
+
+  <div class="wrap">
+    <div class="month-filter">
+      <label for="monthSelect">Bulan:</label>
+      <select id="monthSelect"></select>
+    </div>
+
+    <div id="perfBanner"></div>
+
+    <div class="kpi-grid" id="cardsArea"></div>
+
+    <div class="panel">
+      <h3>Tren Kepatuhan Harian</h3>
+      <div class="chart-wrap" style="height:240px"><canvas id="dailyChart"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h3>Tren Kepatuhan Bulanan</h3>
+      <div class="chart-wrap" style="height:200px"><canvas id="monthlyChart"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h3>Kepatuhan per Indikator</h3>
+      <div id="indicatorArea"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Detail Harian</h3>
+      <div style="overflow-x:auto"><table class="data-table">
+        <thead><tr><th>Tanggal</th><th>Hari</th><th>Kepatuhan</th></tr></thead>
+        <tbody id="dayBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="panel">
+      <h3>Cek Indikator per Tanggal</h3>
+      <div id="dayCheckArea"></div>
+    </div>
+
+    <div class="footer-note">Data diambil langsung dari sistem KPI Personel Cabang Makassar.</div>
+  </div>
+</div>
+
+<script>
+const KPI_SHEET_ID = '1WSp2VmHs2LqCD16cMc8JI1l1HHfnP0MAgK-G_kf4Rqw';
+const KPI_ARCHIVE_GID = '1890830079';
+const KPI_DINAS_GID = '572213901';
+let DINAS_RANGES = [];
+const MAKASSAR_INDICATOR_KEYS = ['Row13','Row14','Row15','Row16','Row17','Row18','Row19','Row20','Row21','Row22'];
+const MAKASSAR_EVID_KEYS = ['Evid13','Evid14','Evid15','Evid16','Evid17','Evid18','Evid19','Evid20','Evid21','Evid22'];
+const MAKASSAR_SEP = '\u001F';
+const MAKASSAR_LABELS = ['Target Sales Harian Tercapai','Target Revenue Harian Tercapai','Target Invoice Harian Tercapai','Delivery Harian diatas 80%','Absen Datang Marketing Sebelum 08.15','Absen Pulang Marketing Setelah 16.45','Absen Datang Logistik Sebelum 08.15','Absen Pulang Logistik Setelah 16.45','Revenue & Sales Harian Tercapai Bersama','Report Harian (Marketing & Logistik)'];
+const PALETTE = { green:'#4d8a5c', yellow:'#c99a3a', red:'#b84040', slate:'#5c6b7a', slateLight:'#dbe2e8', terra:'#c17a5a', terraLight:'#e9cdbd' };
+const WEEKDAY_SHORT = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
+
+function toStr(v){ return v===null||v===undefined?'':String(v).trim(); }
+function fmtPct(v){ return (v||0).toFixed(1)+'%'; }
+function monthLabel(ym){
+  if (!ym) return '';
+  const clean = String(ym).replace(/^K/,'');
+  const [y, mm] = clean.split('-');
+  const names = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const idx = parseInt(mm,10)-1;
+  return names[idx] ? names[idx]+' '+y : clean;
+}
+function monthShort(ym){
+  const clean = String(ym||'').replace(/^K/,'');
+  const [, mm] = clean.split('-');
+  const names = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  return names[parseInt(mm,10)-1] || clean;
+}
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s===null||s===undefined ? '' : String(s);
+  return d.innerHTML;
+}
+function performanceLabel(percent){
+  if (percent >= 90) return { text:'SANGAT BAIK', color: PALETTE.green };
+  if (percent >= 75) return { text:'BAIK', color: PALETTE.yellow };
+  return { text:'CUKUP', color: PALETTE.red };
+}
+
+function parseCsv(t){
+  const rows=[]; let row=[], field='', inQ=false, i=0;
+  while(i<t.length){ const ch=t[i];
+    if(inQ){ if(ch==='"'){ if(t[i+1]==='"'){field+='"';i+=2;continue;} inQ=false;i+=1;continue;} field+=ch;i+=1;continue; }
+    if(ch==='"'){inQ=true;i+=1;continue;}
+    if(ch===','){row.push(field);field='';i+=1;continue;}
+    if(ch==='\r'&&t[i+1]==='\n'){row.push(field);rows.push(row);row=[];field='';i+=2;continue;}
+    if(ch==='\n'||ch==='\r'){row.push(field);rows.push(row);row=[];field='';i+=1;continue;}
+    field+=ch;i+=1;
+  }
+  if(field!==''||row.length>0){row.push(field);rows.push(row);}
+  return rows;
+}
+
+const KPI_MONTH_ABBR = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
+function parseDinasDateJs_(v){
+  const s = toStr(v).trim();
+  if (!s) return null;
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if (m) return new Date(+m[1], +m[2]-1, +m[3]);
+  m = /^(\d{1,2})[-\s]([A-Za-z]{3})[a-z]*[-\s](\d{4})/.exec(s);
+  if (m) {
+    const key = m[2].charAt(0).toUpperCase() + m[2].slice(1,3).toLowerCase();
+    if (KPI_MONTH_ABBR.hasOwnProperty(key)) return new Date(+m[3], KPI_MONTH_ABBR[key], +m[1]);
+  }
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s);
+  if (m) return new Date(+m[3], +m[1]-1, +m[2]);
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return null;
+}
+function buildDinasRanges_(dinasRows){
+  const ranges = [];
+  (dinasRows||[]).forEach(row => {
+    const nama = toStr(row['Nama']).trim();
+    if (!nama) return;
+    const start = parseDinasDateJs_(row['TanggalMulai']);
+    const end = parseDinasDateJs_(row['TanggalSelesai']);
+    if (!start || !end) return;
+    ranges.push({ nama, start, end });
+  });
+  return ranges;
+}
+function isDinasDayJs_(nama, dateObj, ranges){
+  for (let i=0;i<ranges.length;i++){
+    const r = ranges[i];
+    if (r.nama===nama && dateObj.getTime()>=r.start.getTime() && dateObj.getTime()<=r.end.getTime()) return true;
+  }
+  return false;
+}
+
+function buildDailyDetail(row){
+  const splitArr = v => toStr(v).split(',');
+  const submittedArr = splitArr(row['Submitted']);
+  const jamDatangArr = splitArr(row['JamDatang']);
+  const jamPulangArr = splitArr(row['JamPulang']);
+  const indicatorArrs = MAKASSAR_INDICATOR_KEYS.map(k => splitArr(row[k]));
+  const evidenceArrs = MAKASSAR_EVID_KEYS.map(k => toStr(row[k]).split(MAKASSAR_SEP));
+  const ym = toStr(row['YearMonth']);
+  const mYm = /^K(\d{4})-(\d{2})$/.exec(ym || '');
+  const daysInMonth = mYm ? new Date(+mYm[1], +mYm[2], 0).getDate() : 31;
+  const days = [];
+  for (let day=0; day<31; day++){
+    const dayNum = day+1;
+    const isDinas = !!(mYm && dayNum<=daysInMonth
+      && isDinasDayJs_('MAKASSAR', new Date(+mYm[1], +mYm[2]-1, dayNum), DINAS_RANGES));
+    const submitted = submittedArr[day]==='1' || isDinas;
+    const values = isDinas ? indicatorArrs.map(()=>true) : indicatorArrs.map(arr => arr[day]==='1');
+    const evidence = evidenceArrs.map(arr => arr[day] || '');
+    const possibleCount = isDinas ? indicatorArrs.length : indicatorArrs.filter(arr => arr[day]==='1'||arr[day]==='0').length;
+    const onCount = isDinas ? indicatorArrs.length : indicatorArrs.filter(arr => arr[day]==='1').length;
+    days.push({
+      day: dayNum, submitted, values, evidence,
+      dailyPercent: submitted && possibleCount>0 ? (onCount/possibleCount)*100 : null,
+      jamDatang: jamDatangArr[day]||'', jamPulang: jamPulangArr[day]||'',
+    });
+  }
+  return days;
+}
+
+function buildMakassarDetail(ym, byMonth, months){
+  const row = byMonth[ym];
+  const days = row ? buildDailyDetail(row) : [];
+  const submittedDays = days.filter(d => d.submitted);
+  const countedDays = submittedDays.length;
+  const monthPercent = countedDays>0 ? submittedDays.reduce((s,d)=>s+d.dailyPercent,0)/countedDays : 0;
+
+  const indicatorStats = MAKASSAR_LABELS.map((label, idx) => {
+    const checked = submittedDays.filter(d => d.values[idx]).length;
+    const possible = submittedDays.length;
+    return { label, checked, possible, percent: possible>0 ? Math.round((checked/possible)*100) : 0 };
+  });
+  let strongest=null, weakest=null;
+  if (indicatorStats.length){
+    const weakSorted = indicatorStats.slice().sort((a,b) => a.percent-b.percent);
+    const strongSorted = indicatorStats.slice().sort((a,b) => b.percent-a.percent);
+    weakest = weakSorted[0]; strongest = strongSorted[0];
+  }
+
+  const trend = months.filter(m => m!=='ALL' && byMonth[m]).map(m => {
+    const mDays = buildDailyDetail(byMonth[m]).filter(d=>d.submitted);
+    const pct = mDays.length ? mDays.reduce((s,d)=>s+d.dailyPercent,0)/mDays.length : 0;
+    return { month: m, percent: Math.round(pct*10)/10 };
+  });
+
+  return { yearMonth: ym, days, countedDays, monthPercent, indicatorStats, strongest, weakest, trend };
+}
+
+function renderEvidenceHtml(raw){
+  if (!raw) return '';
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch(e) { return ''; }
+  if (!parsed) return '';
+  const renderKv = obj => Object.keys(obj).map(k =>
+    `<div class="kpi-evi-row"><span class="kpi-evi-k">${escapeHtml(k)}</span><span class="kpi-evi-v">${escapeHtml(obj[k])}</span></div>`
+  ).join('');
+  if (Array.isArray(parsed)) {
+    return parsed.map((blk,i) => `<div class="kpi-evi-block"><div class="kpi-evi-baris">Baris ${i+1}</div>${renderKv(blk)}</div>`).join('');
+  }
+  return `<div class="kpi-evi-block">${renderKv(parsed)}</div>`;
+}
+
+let STATE = null;
+let dailyChartInst = null, monthlyChartInst = null;
+
+function renderBody(ym){
+  const detail = buildMakassarDetail(ym, STATE.byMonth, STATE.months);
+  const perfLbl = performanceLabel(detail.monthPercent || 0);
+
+  document.getElementById('perfBanner').innerHTML =
+    `<div class="kpi-perf-banner" style="background:${perfLbl.color}22; color:${perfLbl.color}; border:1px solid ${perfLbl.color}55;">Predikat Bulan Ini: ${perfLbl.text}</div>`;
+
+  document.getElementById('cardsArea').innerHTML = `
+    <div class="kpi-card accent"><div class="kpi-label">Persentase Kepatuhan Bulan Ini</div><div class="kpi-value">${fmtPct(detail.monthPercent||0)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Jumlah Hari Kerja Terhitung</div><div class="kpi-value">${detail.countedDays||0}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Indikator Terkuat</div><div class="kpi-value" style="font-size:14px">${detail.strongest?escapeHtml(detail.strongest.label):'&ndash;'}</div><div class="kpi-label" style="margin-top:4px;margin-bottom:0;color:${PALETTE.green}">${detail.strongest?detail.strongest.percent+'%':''}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Indikator Terlemah</div><div class="kpi-value" style="font-size:14px">${detail.weakest?escapeHtml(detail.weakest.label):'&ndash;'}</div><div class="kpi-label" style="margin-top:4px;margin-bottom:0;color:${PALETTE.red}">${detail.weakest?detail.weakest.percent+'%':''}</div></div>
+  `;
+
+  document.getElementById('indicatorArea').innerHTML = (detail.indicatorStats||[]).map(s => {
+    const cls = s.percent>=80 ? 'ok' : (s.percent>=50 ? 'mid' : 'low');
+    return `<div class="kpi-indicator-row"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${cls}">${s.percent}%</span></div>`;
+  }).join('') || '<p style="font-size:13px;color:var(--ink-soft)">Belum ada data indikator.</p>';
+
+  const mYm = /^K(\d{4})-(\d{2})$/.exec(ym || '');
+  document.getElementById('dayBody').innerHTML = (detail.days||[]).map(d => {
+    if (!mYm) return '';
+    const dateObj = new Date(+mYm[1], +mYm[2]-1, d.day);
+    const tanggal = String(d.day).padStart(2,'0') + '/' + mYm[2] + '/' + mYm[1];
+    const isLibur = dateObj.getDay()===0 || d.dailyPercent===null;
+    const badge = isLibur
+      ? '<span class="kpi-indicator-badge na">Libur</span>'
+      : `<span class="kpi-indicator-badge ${d.dailyPercent>=80?'ok':(d.dailyPercent>=50?'mid':'low')}">${Math.round(d.dailyPercent)}%</span>`;
+    return `<tr><td>${tanggal}</td><td>${WEEKDAY_SHORT[dateObj.getDay()]}</td><td>${badge}</td></tr>`;
+  }).join('');
+
+  if (dailyChartInst) dailyChartInst.destroy();
+  dailyChartInst = new Chart(document.getElementById('dailyChart'), {
+    type: 'line',
+    data: { labels: detail.days.map(d=>d.day), datasets: [{
+      data: detail.days.map(d=>d.submitted?d.dailyPercent:null),
+      borderColor: PALETTE.terra, backgroundColor: PALETTE.terraLight, fill:true, tension:.25, spanGaps:false,
+      pointRadius:4, pointHoverRadius:7, pointHitRadius:20,
+      pointBackgroundColor: ctx => { const v=ctx.raw; if (v===null||v===undefined) return PALETTE.slateLight; return v>=80?PALETTE.green:(v>=50?PALETTE.yellow:PALETTE.red); },
+    }]},
+    options: { responsive:true, maintainAspectRatio:false, layout:{padding:{top:8}}, clip:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.y===null?'Belum diisi hari itu':fmtPct(c.parsed.y)}}}, scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'},grid:{color:'#eae3d6'}},x:{grid:{display:false}}} },
+  });
+
+  if (monthlyChartInst) monthlyChartInst.destroy();
+  monthlyChartInst = new Chart(document.getElementById('monthlyChart'), {
+    type: 'line',
+    data: { labels: detail.trend.map(t=>monthShort(t.month)), datasets: [{
+      data: detail.trend.map(t=>t.percent), borderColor: PALETTE.slate, backgroundColor: PALETTE.slateLight, fill:true, tension:.25,
+      pointRadius:5, pointHoverRadius:8, pointHitRadius:20, pointBackgroundColor: PALETTE.slate,
+    }]},
+    options: { responsive:true, maintainAspectRatio:false, layout:{padding:{top:8}}, clip:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmtPct(c.parsed.y)}}}, scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'},grid:{color:'#eae3d6'}},x:{grid:{display:false}}} },
+  });
+
+  const submittedDays = detail.days.filter(d=>d.submitted);
+  const dateOptions = submittedDays.map(d => `<option value="${d.day}">${d.day} ${monthLabel(ym).split(' ')[0]}</option>`).join('');
+  const defaultDay = submittedDays.length ? submittedDays[submittedDays.length-1].day : null;
+  const dayCheckArea = document.getElementById('dayCheckArea');
+  if (!dateOptions) {
+    dayCheckArea.innerHTML = '<p style="font-size:13px;color:var(--ink-soft)">Belum ada hari yang tersubmit bulan ini.</p>';
+    return;
+  }
+  dayCheckArea.innerHTML = `<div class="month-filter" style="margin-top:0"><label for="daySelect">Tanggal:</label><select id="daySelect">${dateOptions}</select></div><div id="dayDetail"></div>`;
+  const daySelect = document.getElementById('daySelect');
+  daySelect.value = String(defaultDay);
+  const renderDay = dayNum => {
+    const d = detail.days.find(x=>x.day===Number(dayNum));
+    const rows = (detail.indicatorStats||[]).map((s,i) => {
+      const on = d && d.values[i];
+      const evi = d && on ? renderEvidenceHtml(d.evidence[i]) : '';
+      return `<div class="kpi-indicator-row${evi?' has-evi':''}"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${on?'ok':'low'}">${on?'YA':'TIDAK'}</span></div>${evi}`;
+    }).join('');
+    const jamInfo = d && (d.jamDatang||d.jamPulang) ? `<div style="font-size:12.5px;color:var(--ink-soft);margin:8px 0 4px">Jam Datang: ${d.jamDatang||'-'} &middot; Jam Pulang: ${d.jamPulang||'-'}</div>` : '';
+    document.getElementById('dayDetail').innerHTML = jamInfo + rows;
+  };
+  renderDay(defaultDay);
+  daySelect.addEventListener('change', e => renderDay(e.target.value));
+}
+
+async function main(){
+  const [res, dinasRes] = await Promise.all([
+    fetch('https://docs.google.com/spreadsheets/d/'+KPI_SHEET_ID+'/export?format=csv&gid='+KPI_ARCHIVE_GID+'&_='+Date.now(), { cache:'no-store' }),
+    fetch('https://docs.google.com/spreadsheets/d/'+KPI_SHEET_ID+'/export?format=csv&gid='+KPI_DINAS_GID+'&_='+Date.now(), { cache:'no-store' }).catch(()=>null),
+  ]);
+  const text = await res.text();
+  const csvRows = parseCsv(text);
+  const header = csvRows[0];
+  const dataRows = csvRows.slice(1).filter(r => r.some(v=>v!==''));
+  const rows = dataRows.map(r => { const o={}; header.forEach((h,i)=>{ if(h) o[h]=r[i]===undefined?'':r[i]; }); return o; });
+
+  if (dinasRes && dinasRes.ok) {
+    const dinasText = await dinasRes.text();
+    const dinasCsvRows = parseCsv(dinasText);
+    const dinasHeader = dinasCsvRows[0] || [];
+    const dinasDataRows = dinasCsvRows.slice(1).filter(r => r.some(v=>v!==''));
+    const dinasRows = dinasDataRows.map(r => { const o={}; dinasHeader.forEach((h,i)=>{ if(h) o[h]=r[i]===undefined?'':r[i]; }); return o; });
+    DINAS_RANGES = buildDinasRanges_(dinasRows);
+  }
+
+  const byMonth = {};
+  const monthsSet = new Set();
+  rows.forEach(r => {
+    if (toStr(r['PersonSheet']) !== 'MAKASSAR') return;
+    const ym = toStr(r['YearMonth']);
+    if (!ym) return;
+    byMonth[ym] = r;
+    monthsSet.add(ym);
+  });
+  const dataMonths = Array.from(monthsSet).sort();
+  const latestMonth = dataMonths.length ? dataMonths[dataMonths.length-1] : null;
+  const yearsPresent = new Set(dataMonths.map(m => (m.match(/^K(\d{4})/)||[])[1]).filter(Boolean));
+  if (yearsPresent.size===0) yearsPresent.add(String(new Date().getFullYear()));
+  const months = [];
+  Array.from(yearsPresent).sort().forEach(y => { for (let mm=1; mm<=12; mm++) months.push('K'+y+'-'+String(mm).padStart(2,'0')); });
+
+  STATE = { byMonth, months, latestMonth };
+
+  const params = new URLSearchParams(location.search);
+  const monthParam = params.get('month');
+  const initialMonth = (monthParam && months.indexOf(monthParam)!==-1) ? monthParam : (latestMonth || months[0]);
+
+  const sel = document.getElementById('monthSelect');
+  sel.innerHTML = months.map(ym => `<option value="${ym}"${ym===initialMonth?' selected':''}>${monthLabel(ym)}</option>`).join('');
+  sel.addEventListener('change', e => renderBody(e.target.value));
+
+  document.getElementById('loadingMsg').style.display = 'none';
+  document.getElementById('pageContent').style.display = 'block';
+  renderBody(initialMonth);
+}
+main().catch(err => { document.getElementById('loadingMsg').textContent = 'Gagal memuat data: ' + err.message; });
+</script>
+</body>
+</html>

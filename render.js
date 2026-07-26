@@ -1691,7 +1691,7 @@ function renderKpiPersonelBody(monthData) {
       const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
       const fn = 'KPI-Cabang-Makassar-' + activeMonth + '.png';
       const file = new File([blob], fn, { type: 'image/png' });
-      const link = 'https://mkimakassar84-dev.github.io/KPI-Personel-Cabang-Makassar/rekap-kinerja-tim.html?nama=MAKASSAR&lock=1';
+      const link = location.origin + location.pathname.replace(/[^/]*$/, '') + 'kpi-makassar-share.html?month=' + encodeURIComponent(activeMonth);
       const caption = '📊 *Rekap Kinerja Cabang MAKASSAR \u2014 ' + monthLabelIdKpi(activeMonth) + '*\nCabang Makassar\n\nLihat detail & tren lengkap di sini:\n' + link;
       const shareOrFallback = async () => {
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -1846,25 +1846,20 @@ function renderKpiMakassarSubsection(yearMonthKey) {
     return `<div class="kpi-indicator-row"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${cls}">${s.percent}%</span></div>`;
   }).join('');
 
-  const mYm = /^K(\d{4})-(\d{2})$/.exec(yearMonthKey || '');
-  const dayRows = (detail.days || []).map(d => {
-    if (!mYm) return '';
-    const dateObj = new Date(+mYm[1], +mYm[2] - 1, d.day);
-    const tanggal = String(d.day).padStart(2, '0') + '/' + mYm[2] + '/' + mYm[1];
-    const isLibur = dateObj.getDay() === 0 || d.dailyPercent === null;
-    const badge = isLibur
-      ? '<span class="kpi-indicator-badge" style="background:#e5e0d3;color:#7a8794">Libur</span>'
-      : `<span class="kpi-indicator-badge ${d.dailyPercent >= 80 ? 'ok' : (d.dailyPercent >= 50 ? 'mid' : 'low')}">${Math.round(d.dailyPercent)}%</span>`;
-    return `<tr><td>${tanggal}</td><td>${KPI_WEEKDAY_SHORT[dateObj.getDay()]}</td><td>${badge}</td></tr>`;
-  }).join('');
-
   wrap.innerHTML = `
     <div class="kpi-perf-banner" style="background:${perfLbl.color}22; color:${perfLbl.color}; border:1px solid ${perfLbl.color}55; border-radius:8px; padding:8px 14px; font-weight:600; margin-bottom:14px;">
       Predikat Bulan Ini: ${perfLbl.text}
     </div>
-    <div class="kpi-modal-sub" style="margin-bottom:14px">${monthLabelIdKpi(yearMonthKey)} &middot; Kepatuhan bulan ini: ${fmtPct(detail.monthPercent || 0)} &middot; ${detail.countedDays || 0} hari kerja terhitung</div>
 
-    <div class="kpi-grid kpi-grid-2">
+    <div class="kpi-grid kpi-grid-4">
+      <div class="kpi-card accent">
+        <div class="kpi-label">Persentase Kepatuhan Bulan Ini</div>
+        <div class="kpi-value">${fmtPct(detail.monthPercent || 0)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Jumlah Hari Kerja Terhitung</div>
+        <div class="kpi-value">${detail.countedDays || 0}</div>
+      </div>
       <div class="kpi-card">
         <div class="kpi-label">Indikator Terkuat</div>
         <div class="kpi-value" style="font-size:15px">${detail.strongest ? escapeHtml(detail.strongest.label) : '&ndash;'}</div>
@@ -1890,14 +1885,6 @@ function renderKpiMakassarSubsection(yearMonthKey) {
     <div class="panel">
       <div class="panel-head"><h3>Kepatuhan per Indikator</h3></div>
       ${indicatorRows || '<p class="kpi-modal-loading">Belum ada data indikator.</p>'}
-    </div>
-
-    <div class="panel">
-      <div class="panel-head"><h3>Detail Harian</h3></div>
-      <div class="table-scroll"><table class="data-table data-table-compact">
-        <thead><tr><th>Tanggal</th><th>Hari</th><th>Kepatuhan</th></tr></thead>
-        <tbody>${dayRows}</tbody>
-      </table></div>
     </div>
   `;
 

@@ -322,7 +322,7 @@ function buildPersonDetail(name, ym, byPersonMonth, months){
   }
 
   const trend = months.filter(m => m!=='ALL' && byPersonMonth[name] && byPersonMonth[name][m]).map(m => {
-    const mDays = buildDailyDetail(byPersonMonth[name][m]).filter(d=>d.submitted);
+    const mDays = buildDailyDetail(byPersonMonth[name][m], name).filter(d=>d.submitted);
     const pct = mDays.length ? mDays.reduce((s,d)=>s+d.dailyPercent,0)/mDays.length : 0;
     return { month: m, percent: Math.round(pct*10)/10 };
   });
