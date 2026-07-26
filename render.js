@@ -1691,16 +1691,18 @@ function renderKpiPersonelBody(monthData) {
       const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
       const fn = 'KPI-Cabang-Makassar-' + activeMonth + '.png';
       const file = new File([blob], fn, { type: 'image/png' });
+      const link = 'https://mkimakassar84-dev.github.io/KPI-Personel-Cabang-Makassar/rekap-kinerja-tim.html?nama=MAKASSAR&lock=1';
+      const caption = '📊 *Rekap Kinerja Cabang MAKASSAR \u2014 ' + monthLabelIdKpi(activeMonth) + '*\nCabang Makassar\n\nLihat detail & tren lengkap di sini:\n' + link;
       const shareOrFallback = async () => {
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'Rekap Kinerja Cabang Makassar' }).catch((e) => { if (e && e.name !== 'AbortError') fallback(); });
+          await navigator.share({ files: [file], title: 'Rekap Kinerja Cabang Makassar', text: caption }).catch((e) => { if (e && e.name !== 'AbortError') fallback(); });
         } else {
           fallback();
         }
       };
       function fallback() {
         const a = document.createElement('a'); a.download = fn; a.href = canvas.toDataURL('image/png'); a.click();
-        setTimeout(() => window.open('https://wa.me/', '_blank'), 700);
+        setTimeout(() => window.open('https://wa.me/?text=' + encodeURIComponent(caption), '_blank'), 700);
       }
       await shareOrFallback();
     } catch (err) {
