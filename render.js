@@ -1853,7 +1853,7 @@ function renderKpiMakassarSubsection(yearMonthKey) {
 
     <div class="kpi-grid kpi-grid-4">
       <div class="kpi-card accent">
-        <div class="kpi-label">Persentase Kepatuhan Bulan Ini</div>
+        <div class="kpi-label">Persentase Kinerja Harian Bulan ini</div>
         <div class="kpi-value">${fmtPct(detail.monthPercent || 0)}</div>
       </div>
       <div class="kpi-card">
