@@ -1888,6 +1888,7 @@ function renderKpiMakassarSubsection(yearMonthKey) {
     options: {
       responsive: true, maintainAspectRatio: false,
       layout: { padding: { top: 8 } },
+      clip: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y === null ? 'Belum diisi hari itu' : fmtPct(ctx.parsed.y) } } },
       scales: {
         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
@@ -1912,6 +1913,7 @@ function renderKpiMakassarSubsection(yearMonthKey) {
     options: {
       responsive: true, maintainAspectRatio: false,
       layout: { padding: { top: 8 } },
+      clip: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtPct(ctx.parsed.y) } } },
       scales: {
         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
@@ -2022,6 +2024,7 @@ function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail) {
     options: {
       responsive: true, maintainAspectRatio: false,
       layout: { padding: { top: 8 } },
+      clip: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y === null ? 'Belum diisi hari itu' : fmtPct(ctx.parsed.y) } } },
       scales: {
         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
@@ -2046,6 +2049,7 @@ function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail) {
     options: {
       responsive: true, maintainAspectRatio: false,
       layout: { padding: { top: 8 } },
+      clip: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtPct(ctx.parsed.y) } } },
       scales: {
         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },

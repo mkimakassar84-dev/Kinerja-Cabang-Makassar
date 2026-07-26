@@ -489,14 +489,14 @@ function renderModalBody(overlay, name, ym, detail){
       data: detail.days.map(d=>d.submitted?d.dailyPercent:null),
       borderColor: PALETTE.terra, backgroundColor: PALETTE.terraLight, fill:true, tension:.25, spanGaps:false, pointRadius:4, pointHoverRadius:7, pointHitRadius:20,
     }]},
-    options: { responsive:true, maintainAspectRatio:false, layout:{padding:{top:8}}, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.y===null?'Belum diisi hari itu':fmtPct(c.parsed.y)}}}, scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'},grid:{color:'#eae3d6'}},x:{grid:{display:false}}} },
+    options: { responsive:true, maintainAspectRatio:false, layout:{padding:{top:8}}, clip:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.y===null?'Belum diisi hari itu':fmtPct(c.parsed.y)}}}, scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'},grid:{color:'#eae3d6'}},x:{grid:{display:false}}} },
   });
   new Chart(document.getElementById('modalMonthlyChart'), {
     type: 'line',
     data: { labels: detail.trend.map(t=>monthShort(t.month)), datasets: [{
       data: detail.trend.map(t=>t.percent), borderColor: PALETTE.slate, backgroundColor: PALETTE.slateLight, fill:true, tension:.25, pointRadius:5, pointHoverRadius:8, pointHitRadius:20,
     }]},
-    options: { responsive:true, maintainAspectRatio:false, layout:{padding:{top:8}}, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmtPct(c.parsed.y)}}}, scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'},grid:{color:'#eae3d6'}},x:{grid:{display:false}}} },
+    options: { responsive:true, maintainAspectRatio:false, layout:{padding:{top:8}}, clip:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmtPct(c.parsed.y)}}}, scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'},grid:{color:'#eae3d6'}},x:{grid:{display:false}}} },
   });
 
   if (defaultDay){
