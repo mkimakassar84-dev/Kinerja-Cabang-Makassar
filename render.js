@@ -1877,7 +1877,7 @@ function renderKpiMakassarSubsection(yearMonthKey) {
         borderColor: PALETTE.terra,
         backgroundColor: PALETTE.terraLight,
         fill: true, tension: 0.25, spanGaps: false,
-        pointRadius: 3,
+        pointRadius: 4, pointHoverRadius: 7, pointHitRadius: 20,
         pointBackgroundColor: ctx => {
           const v = ctx.raw;
           if (v === null || v === undefined) return PALETTE.slateLight;
@@ -1887,6 +1887,7 @@ function renderKpiMakassarSubsection(yearMonthKey) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 8 } },
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y === null ? 'Belum diisi hari itu' : fmtPct(ctx.parsed.y) } } },
       scales: {
         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
@@ -1905,11 +1906,12 @@ function renderKpiMakassarSubsection(yearMonthKey) {
         borderColor: PALETTE.slate,
         backgroundColor: PALETTE.slateLight,
         fill: true, tension: 0.25,
-        pointRadius: 4, pointBackgroundColor: PALETTE.slate,
+        pointRadius: 5, pointHoverRadius: 8, pointHitRadius: 20, pointBackgroundColor: PALETTE.slate,
       }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 8 } },
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtPct(ctx.parsed.y) } } },
       scales: {
         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
@@ -2009,7 +2011,7 @@ function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail) {
         borderColor: PALETTE.terra,
         backgroundColor: PALETTE.terraLight,
         fill: true, tension: 0.25, spanGaps: false,
-        pointRadius: 3,
+        pointRadius: 4, pointHoverRadius: 7, pointHitRadius: 20,
         pointBackgroundColor: ctx => {
           const v = ctx.raw;
           if (v === null || v === undefined) return PALETTE.slateLight;
@@ -2019,6 +2021,7 @@ function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 8 } },
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y === null ? 'Belum diisi hari itu' : fmtPct(ctx.parsed.y) } } },
       scales: {
         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
@@ -2037,11 +2040,12 @@ function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail) {
         borderColor: PALETTE.slate,
         backgroundColor: PALETTE.slateLight,
         fill: true, tension: 0.25,
-        pointRadius: 4, pointBackgroundColor: PALETTE.slate,
+        pointRadius: 5, pointHoverRadius: 8, pointHitRadius: 20, pointBackgroundColor: PALETTE.slate,
       }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 8 } },
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtPct(ctx.parsed.y) } } },
       scales: {
         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
