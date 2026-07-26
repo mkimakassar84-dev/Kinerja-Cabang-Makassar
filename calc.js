@@ -1062,11 +1062,56 @@ function getSaturdayShiftTeamJs_(d) {
   return isGroupB ? KPI_SATURDAY_SHIFT_GROUP_B : KPI_SATURDAY_SHIFT_GROUP_A;
 }
 
+const KPI_MONTH_ABBR = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
+
+// Parser tanggal dinas/cuti yang toleran terhadap beberapa kemungkinan format
+// hasil export CSV publik Google Sheets (ISO "2026-07-22", "22-Jul-2026",
+// "7/22/2026", dsb) — tergantung format tampilan sel di spreadsheet.
+function parseDinasDateJs_(v) {
+  const s = toStr(v).trim();
+  if (!s) return null;
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = /^(\d{1,2})[-\s]([A-Za-z]{3})[a-z]*[-\s](\d{4})/.exec(s);
+  if (m) {
+    const key = m[2].charAt(0).toUpperCase() + m[2].slice(1, 3).toLowerCase();
+    if (KPI_MONTH_ABBR.hasOwnProperty(key)) return new Date(+m[3], KPI_MONTH_ABBR[key], +m[1]);
+  }
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s);
+  if (m) return new Date(+m[3], +m[1] - 1, +m[2]);
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return null;
+}
+
+function buildDinasRanges_(dinasRows) {
+  const ranges = [];
+  (dinasRows || []).forEach(row => {
+    const nama = toStr(row['Nama']).trim();
+    if (!nama) return;
+    const start = parseDinasDateJs_(row['TanggalMulai']);
+    const end = parseDinasDateJs_(row['TanggalSelesai']);
+    if (!start || !end) return;
+    ranges.push({ nama, start, end });
+  });
+  return ranges;
+}
+
+function isDinasDayJs_(nama, dateObj, ranges) {
+  for (let i = 0; i < ranges.length; i++) {
+    const r = ranges[i];
+    if (r.nama === nama && dateObj.getTime() >= r.start.getTime() && dateObj.getTime() <= r.end.getTime()) return true;
+  }
+  return false;
+}
+
 // Hari Kerja Berjalan: dihitung murni dari kalender (Senin-Sabtu) + jadwal shift Sabtu,
 // TIDAK bergantung pada apakah orangnya submit atau tidak — supaya rasio kelengkapan
 // (hariSubmit / hariKerjaBerjalan) benar-benar mencerminkan kepatuhan, bukan hanya
-// rata-rata dari hari yang dia pilih sendiri untuk disubmit.
-function computeHariKerjaBerjalan_(name, yearMonthKey) {
+// rata-rata dari hari yang dia pilih sendiri untuk disubmit. holidaySet (opsional):
+// hari yang sudah dipastikan libur bersama (lihat getSharedHolidaySet_ di
+// computeKpiPersonelMetrics) dikecualikan juga dari hitungan ini.
+function computeHariKerjaBerjalan_(name, yearMonthKey, holidaySet) {
   const m = /^K(\d{4})-(\d{2})$/.exec(yearMonthKey || '');
   if (!m) return 0;
   const year = parseInt(m[1], 10), monthNum = parseInt(m[2], 10);
@@ -1082,24 +1127,80 @@ function computeHariKerjaBerjalan_(name, yearMonthKey) {
       const shiftTeam = getSaturdayShiftTeamJs_(dateObj);
       if (shiftTeam && shiftTeam.indexOf(name) === -1) continue; // Sabtu ini bukan giliran shift dia
     }
+    if (holidaySet && holidaySet[day]) continue; // libur bersama (semua 8 personel kosong hari itu)
     count++;
   }
   return count;
 }
 
-function computeKpiPersonelMetrics(rows) {
+function computeKpiPersonelMetrics(rows, dinasRows) {
   const splitArr = v => toStr(v).split(',');
+  const dinasRanges = buildDinasRanges_(dinasRows);
+
+  // Kumpulkan baris per (orang, bulan) lebih dulu — dibutuhkan oleh
+  // getSharedHolidaySet_ di bawah sebelum computeOneRow dipanggil.
+  const byPersonMonth = {};
+  const monthsSet = new Set();
+  rows.forEach(r => {
+    const person = toStr(r['PersonSheet']);
+    const ym = toStr(r['YearMonth']);
+    if (!ym) return;
+    if (KPI_PERSONEL_LIST.indexOf(person) === -1 && person !== 'MAKASSAR') return;
+    if (!byPersonMonth[person]) byPersonMonth[person] = {};
+    byPersonMonth[person][ym] = r;
+    monthsSet.add(ym);
+  });
+
+  // Hari dianggap "libur bersama" kalau SEMUA 8 personel sama sekali tidak
+  // submit hari itu (bukan cuma Minggu) — supaya tanggal merah nasional yang
+  // jatuh di hari kerja tidak ikut menghukum rasio kelengkapan siapa pun.
+  // Di-cache per bulan supaya tidak dihitung ulang untuk tiap orang.
+  const sharedHolidayCache = {};
+  function getSharedHolidaySet_(ym) {
+    if (sharedHolidayCache[ym]) return sharedHolidayCache[ym];
+    const holidaySet = {};
+    const m = /^K(\d{4})-(\d{2})$/.exec(ym || '');
+    if (m) {
+      const year = parseInt(m[1], 10), monthNum = parseInt(m[2], 10);
+      const daysInMonth = new Date(year, monthNum, 0).getDate();
+      const anySubmit = new Array(daysInMonth + 1).fill(false);
+      KPI_PERSONEL_LIST.forEach(name => {
+        const r = byPersonMonth[name] && byPersonMonth[name][ym];
+        if (!r) return;
+        const submittedArr = splitArr(r['Submitted']);
+        for (let day = 1; day <= daysInMonth; day++) {
+          if (submittedArr[day - 1] === '1') anySubmit[day] = true;
+        }
+      });
+      for (let day = 1; day <= daysInMonth; day++) {
+        if (!anySubmit[day]) holidaySet[day] = true;
+      }
+    }
+    sharedHolidayCache[ym] = holidaySet;
+    return holidaySet;
+  }
 
   function computeOneRow(name, r) {
+    const ym = toStr(r['YearMonth']);
+    const holidaySet = getSharedHolidaySet_(ym);
     const submittedArr = splitArr(r['Submitted']);
     const jamDatangArr = splitArr(r['JamDatang']);
     const jamPulangArr = splitArr(r['JamPulang']);
+    const mYm = /^K(\d{4})-(\d{2})$/.exec(ym || '');
+    const daysInThisMonth = mYm ? new Date(+mYm[1], +mYm[2], 0).getDate() : 31;
 
     let totalOn = 0, totalPossible = 0, hariSubmit = 0, totalMenitKerja = 0;
     for (let day = 0; day < 31; day++) {
-      if (submittedArr[day] !== '1') continue;
+      const dayNum = day + 1;
+      const isSubmitted = submittedArr[day] === '1';
+      // Hari dinas/cuti tercatat: seluruh indikator hari itu otomatis dinilai
+      // YA (dihitung penuh bekerja), meski tidak sempat isi form di kantor.
+      const isDinas = mYm && dayNum <= daysInThisMonth
+        && isDinasDayJs_(name, new Date(+mYm[1], +mYm[2] - 1, dayNum), dinasRanges);
+      if (!isSubmitted && !isDinas) continue;
       hariSubmit += 1;
       KPI_PERSONEL_INDICATOR_KEYS.forEach(key => {
+        if (isDinas) { totalPossible += 1; totalOn += 1; return; }
         const arr = splitArr(r[key]);
         const v = arr[day];
         if (v === '1' || v === '0') {
@@ -1117,7 +1218,7 @@ function computeKpiPersonelMetrics(rows) {
     }
 
     const percentVal = totalPossible > 0 ? (totalOn / totalPossible) * 100 : 0;
-    const hariKerjaBerjalan = computeHariKerjaBerjalan_(name, toStr(r['YearMonth']));
+    const hariKerjaBerjalan = computeHariKerjaBerjalan_(name, ym, holidaySet);
     const completionRatio = hariKerjaBerjalan > 0 ? Math.min(1, hariSubmit / hariKerjaBerjalan) : 0;
     const skorAkhir = Math.round(percentVal * completionRatio);
 
@@ -1156,18 +1257,6 @@ function computeKpiPersonelMetrics(rows) {
     };
   }
 
-  // Kumpulkan baris per (orang, bulan) supaya bisa pindah-pindah bulan tanpa fetch ulang.
-  const byPersonMonth = {};
-  const monthsSet = new Set();
-  rows.forEach(r => {
-    const person = toStr(r['PersonSheet']);
-    const ym = toStr(r['YearMonth']);
-    if (!ym) return;
-    if (KPI_PERSONEL_LIST.indexOf(person) === -1 && person !== 'MAKASSAR') return;
-    if (!byPersonMonth[person]) byPersonMonth[person] = {};
-    byPersonMonth[person][ym] = r;
-    monthsSet.add(ym);
-  });
   const dataMonths = Array.from(monthsSet).sort(); // "K2026-07" dst — bulan yang SUDAH ada datanya
   const latestMonth = dataMonths.length ? dataMonths[dataMonths.length - 1] : null;
 
@@ -1337,7 +1426,10 @@ function computeAllMetrics(sheetData) {
   const customerFrequency = buildCustomerFrequency(transactions);
   const fiberOptic1Core = buildFiberOptic1Core(transactions);
   const invoiceTargetKpi = buildInvoiceTargetFromKpiSheet(kpiRows);
-  const kpiPersonel = computeKpiPersonelMetrics(sheetData.kpiPersonel ? sheetData.kpiPersonel.rows : []);
+  const kpiPersonel = computeKpiPersonelMetrics(
+    sheetData.kpiPersonel ? sheetData.kpiPersonel.rows : [],
+    sheetData.kpiDinas ? sheetData.kpiDinas.rows : []
+  );
 
   return {
     transactions, salesTrend, revTrend, revAllNormalized, invoiceCustomerSummary, yoyComparison,

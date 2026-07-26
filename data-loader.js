@@ -67,6 +67,7 @@ const SHEET_TABS = {
   poGudang:    { name: 'PO Gudang',       gid: '2047354384', headerRow: 1 },
   ar:          { name: 'AR 2026',         gid: '1407414424', headerRow: 1 },
   kpiPersonel: { name: 'DATA_ARCHIVE',    gid: '1890830079', headerRow: 1, sheetId: KPI_SHEET_ID, rawStrings: true },
+  kpiDinas:    { name: 'DINAS_CUTI',      gid: '572213901',  headerRow: 1, sheetId: KPI_SHEET_ID, rawStrings: true },
 };
 
 function exportCsvUrl(gid, sheetId = SHEET_ID) {
