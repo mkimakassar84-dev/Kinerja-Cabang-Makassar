@@ -1825,17 +1825,41 @@ function renderKpiPersonelChart(k) {
    dengan tampilan & komponen yang sama persis dengan modal detail personel
    (kartu indikator terkuat/terlemah, tren harian, tren bulanan, kepatuhan
    per indikator) — hanya beda dirender langsung di section, bukan overlay. ---- */
+function kpiPerformanceLabelDash(percent) {
+  if (percent >= 90) return { text: 'SANGAT BAIK', color: PALETTE.green };
+  if (percent >= 75) return { text: 'BAIK', color: PALETTE.yellow };
+  return { text: 'CUKUP', color: PALETTE.red };
+}
+
+const KPI_WEEKDAY_SHORT = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+
 function renderKpiMakassarSubsection(yearMonthKey) {
   const wrap = document.getElementById('kpiMakassarBody');
   if (!wrap) return;
   const detail = buildKpiPersonDetail('MAKASSAR', yearMonthKey, kpiPersonelState.byPersonMonth, kpiPersonelState.months);
+  const perfLbl = kpiPerformanceLabelDash(detail.monthPercent || 0);
 
   const indicatorRows = (detail.indicatorStats || []).map(s => {
     const cls = s.percent >= 80 ? 'ok' : (s.percent >= 50 ? 'mid' : 'low');
     return `<div class="kpi-indicator-row"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${cls}">${s.percent}%</span></div>`;
   }).join('');
 
+  const mYm = /^K(\d{4})-(\d{2})$/.exec(yearMonthKey || '');
+  const dayRows = (detail.days || []).map(d => {
+    if (!mYm) return '';
+    const dateObj = new Date(+mYm[1], +mYm[2] - 1, d.day);
+    const tanggal = String(d.day).padStart(2, '0') + '/' + mYm[2] + '/' + mYm[1];
+    const isLibur = dateObj.getDay() === 0 || d.dailyPercent === null;
+    const badge = isLibur
+      ? '<span class="kpi-indicator-badge" style="background:#e5e0d3;color:#7a8794">Libur</span>'
+      : `<span class="kpi-indicator-badge ${d.dailyPercent >= 80 ? 'ok' : (d.dailyPercent >= 50 ? 'mid' : 'low')}">${Math.round(d.dailyPercent)}%</span>`;
+    return `<tr><td>${tanggal}</td><td>${KPI_WEEKDAY_SHORT[dateObj.getDay()]}</td><td>${badge}</td></tr>`;
+  }).join('');
+
   wrap.innerHTML = `
+    <div class="kpi-perf-banner" style="background:${perfLbl.color}22; color:${perfLbl.color}; border:1px solid ${perfLbl.color}55; border-radius:8px; padding:8px 14px; font-weight:600; margin-bottom:14px;">
+      Predikat Bulan Ini: ${perfLbl.text}
+    </div>
     <div class="kpi-modal-sub" style="margin-bottom:14px">${monthLabelIdKpi(yearMonthKey)} &middot; Kepatuhan bulan ini: ${fmtPct(detail.monthPercent || 0)} &middot; ${detail.countedDays || 0} hari kerja terhitung</div>
 
     <div class="kpi-grid kpi-grid-2">
@@ -1864,6 +1888,14 @@ function renderKpiMakassarSubsection(yearMonthKey) {
     <div class="panel">
       <div class="panel-head"><h3>Kepatuhan per Indikator</h3></div>
       ${indicatorRows || '<p class="kpi-modal-loading">Belum ada data indikator.</p>'}
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Detail Harian</h3></div>
+      <div class="table-scroll"><table class="data-table data-table-compact">
+        <thead><tr><th>Tanggal</th><th>Hari</th><th>Kepatuhan</th></tr></thead>
+        <tbody>${dayRows}</tbody>
+      </table></div>
     </div>
   `;
 
