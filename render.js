@@ -1889,31 +1889,26 @@ function renderKpiMakassarSubsection(yearMonthKey) {
   `;
 
   makeChart('chartMakassarDaily', {
-    type: 'line',
+    type: 'bar',
     data: {
       labels: detail.days.map(d => d.day),
       datasets: [{
         label: 'Kepatuhan harian (%)',
         data: detail.days.map(d => d.submitted ? d.dailyPercent : null),
-        borderColor: PALETTE.terra,
-        backgroundColor: PALETTE.terraLight,
-        fill: true, tension: 0.25, spanGaps: false,
-        pointRadius: 4, pointHoverRadius: 7, pointHitRadius: 20,
-        pointBackgroundColor: ctx => {
+        backgroundColor: ctx => {
           const v = ctx.raw;
           if (v === null || v === undefined) return PALETTE.slateLight;
           return v >= 80 ? PALETTE.green : (v >= 50 ? PALETTE.yellow : PALETTE.red);
         },
+        borderRadius: 3,
       }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 8 } },
-      clip: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y === null ? 'Belum diisi hari itu' : fmtPct(ctx.parsed.y) } } },
       scales: {
         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
-        x: { grid: { display: false } },
+        x: { grid: { display: false }, ticks: { autoSkip: false, font: { size: 9 } } },
       },
     },
   });
@@ -2025,31 +2020,26 @@ function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
   makeChart('kpiModalDailyChart', {
-    type: 'line',
+    type: 'bar',
     data: {
       labels: detail.days.map(d => d.day),
       datasets: [{
         label: 'Kepatuhan harian (%)',
         data: detail.days.map(d => d.submitted ? d.dailyPercent : null),
-        borderColor: PALETTE.terra,
-        backgroundColor: PALETTE.terraLight,
-        fill: true, tension: 0.25, spanGaps: false,
-        pointRadius: 4, pointHoverRadius: 7, pointHitRadius: 20,
-        pointBackgroundColor: ctx => {
+        backgroundColor: ctx => {
           const v = ctx.raw;
           if (v === null || v === undefined) return PALETTE.slateLight;
           return v >= 80 ? PALETTE.green : (v >= 50 ? PALETTE.yellow : PALETTE.red);
         },
+        borderRadius: 3,
       }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 8 } },
-      clip: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y === null ? 'Belum diisi hari itu' : fmtPct(ctx.parsed.y) } } },
       scales: {
         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
-        x: { grid: { display: false } },
+        x: { grid: { display: false }, ticks: { autoSkip: false, font: { size: 9 } } },
       },
     },
   });

@@ -489,12 +489,13 @@ function renderModalBody(overlay, name, ym, detail){
   overlay.addEventListener('click', e => { if (e.target===overlay) close(); });
 
   new Chart(document.getElementById('modalDailyChart'), {
-    type: 'line',
+    type: 'bar',
     data: { labels: detail.days.map(d=>d.day), datasets: [{
       data: detail.days.map(d=>d.submitted?d.dailyPercent:null),
-      borderColor: PALETTE.terra, backgroundColor: PALETTE.terraLight, fill:true, tension:.25, spanGaps:false, pointRadius:4, pointHoverRadius:7, pointHitRadius:20,
+      backgroundColor: ctx => { const v=ctx.raw; if (v===null||v===undefined) return PALETTE.slateLight; return v>=80?PALETTE.green:(v>=50?PALETTE.yellow:PALETTE.red); },
+      borderRadius: 3,
     }]},
-    options: { responsive:true, maintainAspectRatio:false, layout:{padding:{top:8}}, clip:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.y===null?'Belum diisi hari itu':fmtPct(c.parsed.y)}}}, scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'},grid:{color:'#eae3d6'}},x:{grid:{display:false}}} },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.y===null?'Belum diisi hari itu':fmtPct(c.parsed.y)}}}, scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'},grid:{color:'#eae3d6'}},x:{grid:{display:false},ticks:{autoSkip:false,font:{size:9}}}} },
   });
   new Chart(document.getElementById('modalMonthlyChart'), {
     type: 'line',
