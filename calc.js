@@ -1050,6 +1050,43 @@ function buildKpiDailyDetail(row) {
   return days;
 }
 
+const KPI_SATURDAY_SHIFT_GROUP_A = ['ASTRID','BURHAMIN','ZUL','TAUFIK'];
+const KPI_SATURDAY_SHIFT_GROUP_B = ['ASPAR','ADI','REZA','PUTRI'];
+const KPI_SATURDAY_SHIFT_ANCHOR = '2026-08-01';
+
+function getSaturdayShiftTeamJs_(d) {
+  const anchor = new Date(KPI_SATURDAY_SHIFT_ANCHOR + 'T00:00:00');
+  if (d.getTime() < anchor.getTime()) return null;
+  const diffWeeks = Math.round((d.getTime() - anchor.getTime()) / (7*24*60*60*1000));
+  const isGroupB = (((diffWeeks % 2) + 2) % 2) === 0;
+  return isGroupB ? KPI_SATURDAY_SHIFT_GROUP_B : KPI_SATURDAY_SHIFT_GROUP_A;
+}
+
+// Hari Kerja Berjalan: dihitung murni dari kalender (Senin-Sabtu) + jadwal shift Sabtu,
+// TIDAK bergantung pada apakah orangnya submit atau tidak — supaya rasio kelengkapan
+// (hariSubmit / hariKerjaBerjalan) benar-benar mencerminkan kepatuhan, bukan hanya
+// rata-rata dari hari yang dia pilih sendiri untuk disubmit.
+function computeHariKerjaBerjalan_(name, yearMonthKey) {
+  const m = /^K(\d{4})-(\d{2})$/.exec(yearMonthKey || '');
+  if (!m) return 0;
+  const year = parseInt(m[1], 10), monthNum = parseInt(m[2], 10);
+  const daysInMonth = new Date(year, monthNum, 0).getDate();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  let count = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateObj = new Date(year, monthNum - 1, day);
+    if (dateObj > today) break;
+    const wd = dateObj.getDay();
+    if (wd === 0) continue; // Minggu selalu libur
+    if (wd === 6 && name !== 'MAKASSAR') {
+      const shiftTeam = getSaturdayShiftTeamJs_(dateObj);
+      if (shiftTeam && shiftTeam.indexOf(name) === -1) continue; // Sabtu ini bukan giliran shift dia
+    }
+    count++;
+  }
+  return count;
+}
+
 function computeKpiPersonelMetrics(rows) {
   const splitArr = v => toStr(v).split(',');
 
@@ -1079,13 +1116,19 @@ function computeKpiPersonelMetrics(rows) {
       }
     }
 
+    const percentVal = totalPossible > 0 ? (totalOn / totalPossible) * 100 : 0;
+    const hariKerjaBerjalan = computeHariKerjaBerjalan_(name, toStr(r['YearMonth']));
+    const completionRatio = hariKerjaBerjalan > 0 ? Math.min(1, hariSubmit / hariKerjaBerjalan) : 0;
+    const skorAkhir = Math.round(percentVal * completionRatio);
+
     return {
       name,
       hasData: hariSubmit > 0,
-      percent: totalPossible > 0 ? (totalOn / totalPossible) * 100 : 0,
+      percent: percentVal,
       totalJamKerja: totalMenitKerja / 60,
       hariSubmit,
       totalOn, totalPossible, totalMenitKerja,
+      hariKerjaBerjalan, completionRatio, skorAkhir,
     };
   }
 
@@ -1093,18 +1136,23 @@ function computeKpiPersonelMetrics(rows) {
   // per hari-indikator (bukan rata-rata per bulan begitu saja) supaya bulan dengan
   // lebih banyak hari kerja tercatat memang lebih berpengaruh ke persentase akhir.
   function computeOneRowMulti(name, rowsArr) {
-    if (!rowsArr.length) return { name, hasData: false, percent: 0, totalJamKerja: 0, hariSubmit: 0 };
+    if (!rowsArr.length) return { name, hasData: false, percent: 0, totalJamKerja: 0, hariSubmit: 0, hariKerjaBerjalan: 0, completionRatio: 0, skorAkhir: 0 };
     const parts = rowsArr.map(r => computeOneRow(name, r));
     const totalOn = parts.reduce((s, p) => s + p.totalOn, 0);
     const totalPossible = parts.reduce((s, p) => s + p.totalPossible, 0);
     const totalMenitKerja = parts.reduce((s, p) => s + p.totalMenitKerja, 0);
     const hariSubmit = parts.reduce((s, p) => s + p.hariSubmit, 0);
+    const hariKerjaBerjalan = parts.reduce((s, p) => s + p.hariKerjaBerjalan, 0);
+    const percentVal = totalPossible > 0 ? (totalOn / totalPossible) * 100 : 0;
+    const completionRatio = hariKerjaBerjalan > 0 ? Math.min(1, hariSubmit / hariKerjaBerjalan) : 0;
+    const skorAkhir = Math.round(percentVal * completionRatio);
     return {
       name,
       hasData: hariSubmit > 0,
-      percent: totalPossible > 0 ? (totalOn / totalPossible) * 100 : 0,
+      percent: percentVal,
       totalJamKerja: totalMenitKerja / 60,
       hariSubmit,
+      hariKerjaBerjalan, completionRatio, skorAkhir,
     };
   }
 
@@ -1142,13 +1190,22 @@ function computeKpiPersonelMetrics(rows) {
         return computeOneRowMulti(name, rowsArr);
       }
       const r = byPersonMonth[name] && byPersonMonth[name][ym];
-      return r ? computeOneRow(name, r) : { name, hasData: false, percent: 0, totalJamKerja: 0, hariSubmit: 0 };
+      return r ? computeOneRow(name, r) : { name, hasData: false, percent: 0, totalJamKerja: 0, hariSubmit: 0, hariKerjaBerjalan: 0, completionRatio: 0, skorAkhir: 0 };
     });
     const withData = people.filter(p => p.hasData);
     const avgPercent = withData.length ? withData.reduce((s, p) => s + p.percent, 0) / withData.length : 0;
     const totalJamTeam = people.reduce((s, p) => s + p.totalJamKerja, 0);
-    const ranking = people.slice().sort((a, b) => b.percent - a.percent);
-    const best = withData.slice().sort((a, b) => b.percent - a.percent)[0] || null;
+    const ranking = people.slice().sort((a, b) => {
+      if ((b.skorAkhir||0) !== (a.skorAkhir||0)) return (b.skorAkhir||0) - (a.skorAkhir||0);
+      return (b.percent||0) - (a.percent||0);
+    });
+    const MIN_COMPLETION_FOR_TERBAIK = 0.7; // syarat B: min 70% hari kerja berjalan harus disubmit utk jadi Personel Terbaik
+    const eligible = withData.filter(p => (p.completionRatio||0) >= MIN_COMPLETION_FOR_TERBAIK);
+    const bestPool = (eligible.length ? eligible : withData).slice().sort((a, b) => {
+      if ((b.skorAkhir||0) !== (a.skorAkhir||0)) return (b.skorAkhir||0) - (a.skorAkhir||0);
+      return (b.percent||0) - (a.percent||0);
+    });
+    const best = bestPool[0] || null;
     const mostHours = withData.slice().sort((a, b) => b.totalJamKerja - a.totalJamKerja)[0] || null;
     return { people: ranking, avgPercent, totalJamTeam, best, mostHours, yearMonth: ym };
   }
