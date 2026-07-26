@@ -1615,16 +1615,13 @@ function renderKpiPersonelSection(m) {
 function renderKpiPersonelBody(monthData) {
   const k = monthData;
   const rankingRows = k.people.map((p, i) => {
-    const compPct = Math.round((p.completionRatio || 0) * 100);
-    const belumLengkap = p.hasData && (p.completionRatio || 0) < 0.7
-      ? ' <span style="color:#c0392b;font-size:11px;">(belum penuhi syarat Terbaik)</span>' : '';
     return `
     <tr data-name="${escapeHtml(p.name)}">
       <td>${i + 1}</td>
       <td>${escapeHtml(p.name)}</td>
       <td><strong>${p.hasData ? (p.skorAkhir || 0) : '&ndash;'}</strong></td>
       <td>${p.hasData ? fmtPct(p.percent) : '&ndash;'}</td>
-      <td>${p.hasData ? (p.hariSubmit + '/' + (p.hariKerjaBerjalan || 0) + ' hari (' + compPct + '%)' + belumLengkap) : '&ndash;'}</td>
+      <td>${p.hasData ? (p.hariSubmit + ' hari') : '&ndash;'}</td>
       <td>${p.hasData ? fmtJamKerjaId(p.totalJamKerja) : '&ndash;'}</td>
     </tr>
   `;
@@ -1660,7 +1657,7 @@ function renderKpiPersonelBody(monthData) {
       <div class="panel">
         <div class="panel-head"><h3>Ranking Tim &mdash; ${monthLabelIdKpi(k.yearMonth)}</h3></div>
         <table class="data-table kpi-clickable">
-          <thead><tr><th>#</th><th>Nama</th><th>Skor Akhir</th><th>Kepatuhan</th><th>Kelengkapan Submit</th><th>Total Jam Kerja</th></tr></thead>
+          <thead><tr><th>#</th><th>Nama</th><th>Skor Akhir</th><th>Kepatuhan</th><th>Total Hari Submit</th><th>Total Jam Kerja</th></tr></thead>
           <tbody>${rankingRows}</tbody>
         </table>
       </div>
