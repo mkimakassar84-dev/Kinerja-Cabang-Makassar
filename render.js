@@ -1937,8 +1937,7 @@ function renderKpiMakassarSubsection(yearMonthKey) {
     },
   });
 
-  const lastSubmittedMakassarDay = detail.days.filter(d => d.submitted).slice(-1)[0];
-  if (lastSubmittedMakassarDay) renderKpiMakassarDayDetail(detail, lastSubmittedMakassarDay.day);
+  // (Tidak auto-render hari terakhir lagi — detail hanya muncul saat batang grafik diklik.)
 
   makeChart('chartMakassarMonthly', {
     type: 'line',
