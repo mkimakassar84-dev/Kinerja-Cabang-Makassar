@@ -11,21 +11,86 @@
    tidak terlalu sering supaya dashboard tetap ringan), lalu HANYA render
    ulang section yang sedang/pernah dibuka kalau datanya benar-benar berubah.
    Refresh halaman (hard refresh) selalu ambil data terbaru dari awal.
+
+   PERCEPATAN MUAT AWAL (2026-07-27): sebelum fetch ke Google Sheets selesai
+   (bisa beberapa detik, terutama Grand Data 2026 yang besar), dashboard
+   sekarang langsung merender data TERAKHIR yang berhasil dimuat sebelumnya
+   (disimpan di localStorage browser). Jadi kunjungan kedua dst. terasa
+   hampir instan — data lama tampil dulu, lalu otomatis diperbarui diam-diam
+   begitu data baru selesai diambil. Kunjungan PERTAMA di perangkat tertentu
+   tetap menunggu fetch seperti biasa karena belum ada cache tersimpan.
    ========================================================================== */
 
 const AUTO_CHECK_INTERVAL_MS = 10 * 60 * 1000; // cek perubahan data tiap 10 menit
+const DASHBOARD_CACHE_KEY = 'kmc_dashboard_cache_v1';
 let lastDataSnapshot = null;
 
+function loadCachedDashboardData() {
+  try {
+    const raw = localStorage.getItem(DASHBOARD_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.data) return null;
+    return parsed;
+  } catch (e) {
+    return null; // cache korup/format lama — abaikan, lanjut fetch normal
+  }
+}
+
+function saveCachedDashboardData(data) {
+  try {
+    localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify({ data, savedAt: Date.now() }));
+  } catch (e) {
+    // localStorage penuh/tidak tersedia (mis. mode privat) — cache murni
+    // optimasi opsional, dashboard tetap berfungsi normal tanpanya.
+    console.warn('Tidak bisa menyimpan cache dashboard:', e);
+  }
+}
+
+function showCacheNotice() {
+  const panel = document.getElementById('errorPanel');
+  if (!panel) return;
+  panel.classList.remove('hidden');
+  panel.innerHTML = `<div class="info-box">Menampilkan data tersimpan sebelumnya sambil memperbarui dari Google Sheets&hellip;</div>`;
+}
+
 async function initDashboard() {
+  const cached = loadCachedDashboardData();
+  let renderedFromCache = false;
+
+  if (cached) {
+    try {
+      lastDataSnapshot = JSON.stringify(cached.data);
+      const metrics = computeAllMetrics(cached.data);
+      renderDashboard(metrics);
+      showCacheNotice();
+      renderedFromCache = true;
+    } catch (e) {
+      // Bentuk cache lama/tidak cocok dengan versi kode saat ini — abaikan
+      // dan lanjut ke fetch normal seperti biasa.
+      console.warn('Cache dashboard tidak valid, mengambil data baru:', e);
+      lastDataSnapshot = null;
+    }
+  }
+
   try {
     const { data, errors } = await loadAllSheetData();
-    lastDataSnapshot = JSON.stringify(data);
-    renderErrorPanel(errors);
+    const snapshot = JSON.stringify(data);
+    saveCachedDashboardData(data);
 
-    const metrics = computeAllMetrics(data);
-    renderDashboard(metrics);
+    if (snapshot !== lastDataSnapshot) {
+      lastDataSnapshot = snapshot;
+      const metrics = computeAllMetrics(data);
+      renderDashboard(metrics);
+    }
+    renderErrorPanel(errors); // menimpa/menyembunyikan info-box cache di atas
   } catch (err) {
-    showFatalError(err);
+    if (!renderedFromCache) {
+      showFatalError(err);
+    }
+    // Kalau sempat tampil dari cache, biarkan dashboard cache tetap terlihat
+    // meski fetch data baru gagal — sama seperti perilaku checkForDataChanges.
+    console.error('Gagal memuat data terbaru dari Google Sheets:', err);
   }
 }
 
