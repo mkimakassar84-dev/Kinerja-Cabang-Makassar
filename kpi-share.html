@@ -71,6 +71,7 @@ async function load(){
   const qty=S(nh,t=>t.qty),kol=S(nh,t=>t.kol);
   const lkM={};tM.forEach(t=>{if(!t.lok)return;if(!lkM[t.lok])lkM[t.lok]=new Set();lkM[t.lok].add(t.inv);});
   const lkList=Object.entries(lkM).sort((a,b)=>b[1].size-a[1].size);
+  const lkAllTime=U(tx.filter(t=>t.lok),t=>t.lok);
   const rh=rR[0],iRd=rh.findIndex(x=>x.includes('Date')),iRp=rh.findIndex(x=>x.toLowerCase().includes('pelunasan')),iRc=rh.findIndex(x=>x.toLowerCase().includes('company'));
   const rv=rR.slice(1).map(r=>({dt:pDate(r[iRd]),p:N(r[iRp]),co:r[iRc]||''})).filter(r=>r.dt);
   const rM=isAll ? S(rv,r=>r.p) : S(rv.filter(r=>r.dt.getMonth()===mi),r=>r.p),rD=S(rv.filter(r=>Iso(r.dt)===ts),r=>r.p);
@@ -83,12 +84,14 @@ async function load(){
   const MO_EN=['January','February','March','April','May','June','July','August','September','October','November','December'];
   const targetRow=isAll ? null : sR.find(r=>(r[44]||'').trim().toLowerCase()===MO_EN[mi].toLowerCase());
   const targetSM=targetRow?N(targetRow[45]):0;
+  // Target 1 tahun (jumlah target semua bulan) — dipakai khusus saat "Semua Bulan" dipilih.
+  const annualTarget=S(MO_EN.map(name=>sR.find(r=>(r[44]||'').trim().toLowerCase()===name.toLowerCase())).filter(Boolean),r=>N(r[45]));
   const daysInMonth=isAll ? null : new Date(T.getFullYear(),mi+1,0).getDate();
   const TARGET_INVOICE=280;
   // Bulan yang sudah lewat (bukan "Semua Bulan" dan bukan bulan berjalan) —
   // kolom "Target Hari Ini"/"Target Harian" tidak relevan lagi untuk laporan ini.
   const isElapsed = !isAll && mi < T.getMonth();
-  return {T,ts,mi,isAll,isElapsed,sM,sD,sMKI,sCFN,sDMKI,sDCFN,iM,iD,iMKI,iCFN,iDMKI,iDCFN,rM,rD,rMKI,rCFN,rDMKI,rDCFN,oPct,oDpct,oH,oT,oDh,oDt,qty,kol,lkList,lkTot:Object.keys(lkM).length,col,colD,targetSM,daysInMonth,TARGET_INVOICE};
+  return {T,ts,mi,isAll,isElapsed,sM,sD,sMKI,sCFN,sDMKI,sDCFN,iM,iD,iMKI,iCFN,iDMKI,iDCFN,rM,rD,rMKI,rCFN,rDMKI,rDCFN,oPct,oDpct,oH,oT,oDh,oDt,qty,kol,lkList,lkTot:Object.keys(lkM).length,lkAllTime,col,colD,targetSM,annualTarget,daysInMonth,TARGET_INVOICE};
 }
 function draw(d){
   const W=1080,GAP=24,L=40,CW=488,T1=118;
@@ -181,12 +184,12 @@ function draw(d){
   const moLabel=d.isAll ? 'SEMUA BULAN' : MO[d.mi].toUpperCase();
   const noTargetNote='Target tersedia per bulan \u2014 pilih bulan spesifik di dashboard';
   card(L,T1,CW,CH1,{lbl:'TOTAL SALES \u2014 '+moLabel,val:Rp(d.sM),co:[Rp(d.sMKI),Rp(d.sCFN)],
-    s2:d.targetSM>0?('Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct((d.sM/d.targetSM)*100)):(d.isAll?noTargetNote:null),
-    pct:d.targetSM>0?(d.sM/d.targetSM)*100:undefined, threeTier:true,
+    s2:d.targetSM>0?('Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct((d.sM/d.targetSM)*100)):(d.isAll&&d.annualTarget>0?('Target 1 Tahun: '+Rp(d.annualTarget)+'  \u2014  Capaian: '+Pct((d.sM/d.annualTarget)*100)):(d.isAll?noTargetNote:null)),
+    pct:d.targetSM>0?(d.sM/d.targetSM)*100:(d.isAll&&d.annualTarget>0?(d.sM/d.annualTarget)*100:undefined), threeTier:true,
     daily:(d.targetSM>0 && !d.isElapsed)?{todayValue:Rp(d.sD),todayLabel:todayDM,targetPerDay:Rp(dTgtSales),achieved:isSundayToday?undefined:Math.round(d.sD)>=Math.round(dTgtSales),note:isSundayToday?'Hari Minggu \u2014 tidak dihitung sebagai target harian':null,breakdown:[Rp(d.sDMKI),Rp(d.sDCFN)]}:null});
   card(L+CW+GAP,T1,CW,CH1,{lbl:'TOTAL REVENUE \u2014 '+moLabel,val:Rp(d.rM),co:[Rp(d.rMKI),Rp(d.rCFN)],
-    s2:d.targetSM>0?('Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct((d.rM/d.targetSM)*100)):(d.isAll?noTargetNote:null),
-    pct:d.targetSM>0?(d.rM/d.targetSM)*100:undefined, threeTier:true,
+    s2:d.targetSM>0?('Target: '+Rp(d.targetSM)+'  \u2014  Capaian: '+Pct((d.rM/d.targetSM)*100)):(d.isAll&&d.annualTarget>0?('Target 1 Tahun: '+Rp(d.annualTarget)+'  \u2014  Capaian: '+Pct((d.rM/d.annualTarget)*100)):(d.isAll?noTargetNote:null)),
+    pct:d.targetSM>0?(d.rM/d.targetSM)*100:(d.isAll&&d.annualTarget>0?(d.rM/d.annualTarget)*100:undefined), threeTier:true,
     daily:(d.targetSM>0 && !d.isElapsed)?{todayValue:Rp(d.rD),todayLabel:todayDM,targetPerDay:Rp(dTgtRev),achieved:isSundayToday?undefined:Math.round(d.rD)>=Math.round(dTgtRev),note:isSundayToday?'Hari Minggu \u2014 tidak dihitung sebagai target harian':null,breakdown:[Rp(d.rDMKI),Rp(d.rDCFN)]}:null});
   card(L,T2,CW,CH2,{lbl:'TOTAL INVOICE \u2014 '+moLabel,val:Num(d.iM),fs:44,co:[Num(d.iMKI)+' inv',Num(d.iCFN)+' inv'],
     s2:d.isAll?noTargetNote:null,
@@ -194,22 +197,14 @@ function draw(d){
     daily:(d.isAll||d.isElapsed)?null:{todayValue:Num(d.iD)+' invoice',todayLabel:todayDM,targetPerDay:Num(Math.round(iTgt)),achieved:isSundayToday?undefined:Math.round(d.iD)>=Math.round(iTgt),note:isSundayToday?'Hari Minggu \u2014 tidak dihitung sebagai target harian':null,breakdown:[Num(d.iDMKI),Num(d.iDCFN)]}});
   card(L+CW+GAP,T2,CW,CH2,{lbl:'OTD ACCURACY \u2014 '+moLabel,val:Pct(d.oPct),fs:44,vc:d.oPct>=80?'#4d8a5c':'#b84040',s2:Num(d.oH)+' Same Day / '+Num(d.oT)+' invoice (termasuk HC)',s3:'Total Qty: '+Num(d.qty)+'  |  Total Koli: '+Num(d.kol),pct:d.oPct,tgt:80,daily:(d.isAll||d.isElapsed)?null:{todayValue:(d.oDt>0?Pct(d.oDpct):'\u2014')+' ('+Num(d.oDh)+'/'+Num(d.oDt)+' inv)',achieved:d.oDt>=1?(d.oDpct>=80):undefined,note:d.oDt===0?'Belum ada invoice hari ini':null}});
   card(L,T3,CW,CH3,{lbl:'SALES TO REVENUE RATIO',val:Pct(d.col),fs:44,s1:'Sales: '+Rp(d.sM),s2:'Revenue: '+Rp(d.rM)});
-  // Baris "HARI INI" untuk Sales to Revenue (tanpa box/target, murni angka besar)
-  // — tidak relevan untuk bulan yang sudah lewat.
-  if (!d.isElapsed) (function(){
-    const bx=L+22,by=T3+94+20+18+16;
-    cx.strokeStyle='#e3dccb';cx.beginPath();cx.moveTo(bx,by);cx.lineTo(L+CW-22,by);cx.stroke();
-    let yy=by+22;
-    cx.fillStyle='#6b7787';cx.font='bold 11px system-ui';cx.fillText('HARI INI ('+d.T.getDate()+' '+MO[d.T.getMonth()]+')',bx,yy);
-    yy+=24;cx.fillStyle='#2a2520';cx.font='bold 20px system-ui';cx.fillText(d.colD!==null?Pct(d.colD):'\u2013',bx,yy);
-    yy+=20;cx.fillStyle='#6a5a4a';cx.font='400 13px system-ui';cx.fillText('Sales: '+Rp(d.sD)+'  |  Revenue: '+Rp(d.rD),bx,yy);
-  })();
   const wx=L+CW+GAP,wy=T3,ww=CW,wh=CH3;
   cx.fillStyle='#fff';cx.fillRect(wx,wy,ww,wh);cx.strokeStyle='#ddd6cc';cx.lineWidth=1;cx.strokeRect(wx,wy,ww,wh);
   cx.fillStyle='#9a7a5a';cx.font='bold 14px system-ui';cx.fillText('PERFORMA WILAYAH \u2014 '+moLabel,wx+22,wy+30);
   cx.fillStyle='#2a2520';cx.font='bold 36px system-ui';cx.fillText(Num(d.lkTot)+' area aktif',wx+22,wy+72);
-  cx.fillStyle='#9a7a5a';cx.font='bold 12px system-ui';cx.fillText('TOP 5 WILAYAH',wx+22,wy+96);
-  d.lkList.slice(0,5).forEach((e,i)=>{cx.fillStyle='#3a3530';cx.font='400 14px system-ui';cx.fillText((i+1)+'. '+e[0],wx+22,wy+114+i*22);cx.fillStyle='#c17a5a';cx.font='bold 14px system-ui';cx.textAlign='right';cx.fillText(Num(e[1].size)+' inv',wx+ww-22,wy+114+i*22);cx.textAlign='left';});
+  const lkPct=d.lkAllTime>0?(d.lkTot/d.lkAllTime)*100:0;
+  cx.fillStyle='#6a5a4a';cx.font='400 13px system-ui';cx.fillText(Pct(lkPct)+' dari '+Num(d.lkAllTime)+' wilayah tercatat (sepanjang 2026)',wx+22,wy+92);
+  cx.fillStyle='#9a7a5a';cx.font='bold 12px system-ui';cx.fillText('TOP 5 WILAYAH',wx+22,wy+114);
+  d.lkList.slice(0,5).forEach((e,i)=>{cx.fillStyle='#3a3530';cx.font='400 14px system-ui';cx.fillText((i+1)+'. '+e[0],wx+22,wy+132+i*22);cx.fillStyle='#c17a5a';cx.font='bold 14px system-ui';cx.textAlign='right';cx.fillText(Num(e[1].size)+' inv',wx+ww-22,wy+132+i*22);cx.textAlign='left';});
   cx.fillStyle='#efe8df';cx.fillRect(0,H-56,W,56);
   cx.fillStyle='#a08060';cx.font='400 13px system-ui';cx.fillText('mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar  \u2022  '+new Date().toLocaleString('id-ID'),44,H-20);
 }

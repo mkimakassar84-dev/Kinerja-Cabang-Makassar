@@ -412,6 +412,7 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
 
     // 1. SALES
     const totalSales  = sum(txMonth, t => t.amount);
+    const pctSalesAnnual = annualTarget > 0 ? (totalSales / annualTarget) * 100 : 0;
     const dailySales  = sum(txToday, t => t.amount);
     const dailySalesMKI = sum(txToday.filter(t => t.company === 'MKI'), t => t.amount);
     const dailySalesCFN = sum(txToday.filter(t => t.company === 'CFN'), t => t.amount);
@@ -421,8 +422,13 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     const targetSales = monthData ? monthData.targetSalesRevenue : 0;
     const pctSales    = targetSales > 0 ? (totalSales / targetSales) * 100 : 0;
 
+    // Target satu tahun (jumlah target semua bulan) — dipakai khusus saat "Semua Bulan" dipilih,
+    // supaya Total Sales & Total Revenue tetap punya acuan capaian meski tidak per-bulan.
+    const annualTarget = sum(yoyMonths, m => m.targetSalesRevenue);
+
     // 2. REVENUE
     const totalRevenue = sum(revMonth, r => r.pelunasan);
+    const pctRevenueAnnual = annualTarget > 0 ? (totalRevenue / annualTarget) * 100 : 0;
     const dailyRevenue = sum(revToday, r => r.pelunasan);
     const dailyRevenueMKI = sum(revToday.filter(r => r.company === 'MKI'), r => r.pelunasan);
     const dailyRevenueCFN = sum(revToday.filter(r => r.company === 'CFN'), r => r.pelunasan);
@@ -467,6 +473,10 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
       lokasiMap[lok].add(t.noInvoice);
     });
     const totalLokasiAktif = Object.keys(lokasiMap).length;
+    // "Wilayah tercatat" = total wilayah unik yang pernah tercatat sepanjang 2026 (all-time),
+    // dipakai sebagai pembanding coverage terhadap wilayah aktif pada periode yang dipilih.
+    const totalLokasiTercatat = uniqueCount(tx2026.filter(t => (t.lokasi || '').trim()), t => (t.lokasi || '').trim());
+    const pctLokasiAktif = totalLokasiTercatat > 0 ? (totalLokasiAktif / totalLokasiTercatat) * 100 : 0;
     const top5Wilayah = Object.entries(lokasiMap)
       .sort((a, b) => b[1].size - a[1].size)
       .slice(0, 5)
@@ -493,6 +503,9 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
           <div class="kmc-target" style="margin-top:10px;">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctSales)}</strong></div>
           ${kpiBar(pctSales)}${kpiStatus(pctSales)}
           ${dailyTargetHtml(targetSales, totalSales, dailySales, dailySalesMKI, dailySalesCFN, isCurrentMonth, daysInMonth, fmtRupiah, escapeHtml(todayLabel))}
+        ` : isAll && annualTarget > 0 ? `
+          <div class="kmc-target" style="margin-top:10px;">Target 1 Tahun: ${fmtRupiah(annualTarget)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctSalesAnnual)}</strong></div>
+          ${kpiBar(pctSalesAnnual)}${kpiStatus(pctSalesAnnual)}
         ` : noTargetNote}
       </div>`;
 
@@ -505,6 +518,9 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
           <div class="kmc-target" style="margin-top:10px;">Target: ${fmtRupiah(targetSales)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctRevenue)}</strong></div>
           ${kpiBar(pctRevenue)}${kpiStatus(pctRevenue)}
           ${dailyTargetHtml(targetSales, totalRevenue, dailyRevenue, dailyRevenueMKI, dailyRevenueCFN, isCurrentMonth, daysInMonth, fmtRupiah, escapeHtml(todayLabel))}
+        ` : isAll && annualTarget > 0 ? `
+          <div class="kmc-target" style="margin-top:10px;">Target 1 Tahun: ${fmtRupiah(annualTarget)} &nbsp;&mdash;&nbsp; Capaian: <strong>${fmtPct(pctRevenueAnnual)}</strong></div>
+          ${kpiBar(pctRevenueAnnual)}${kpiStatus(pctRevenueAnnual)}
         ` : noTargetNote}
       </div>`;
 
@@ -540,25 +556,18 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
         ` : ''}
       </div>`;
 
-    // Sales to Revenue Ratio HARI INI (tanpa target, murni angka)
-    const dailyCollectionRate = dailySales > 0 ? (dailyRevenue / dailySales) * 100 : null;
-
     const cardCollection = `
       <div class="kpi-monitor-card">
         <div class="kmc-label">Sales to Revenue Ratio</div>
         <div class="kmc-value">${fmtPct(collectionRate)}</div>
         <div class="kmc-sub">Sales: ${fmtRupiah(totalSales)} &nbsp;|&nbsp; Revenue: ${fmtRupiah(totalRevenue)}</div>
-        <div class="kmc-daily-ratio">
-          <div class="kmc-pace-label">HARI INI (${escapeHtml(todayLabel)})</div>
-          <div class="kmc-daily-ratio-value">${dailyCollectionRate !== null ? fmtPct(dailyCollectionRate) : '&ndash;'}</div>
-          <div class="kmc-sub">Sales: ${fmtRupiah(dailySales)} &nbsp;|&nbsp; Revenue: ${fmtRupiah(dailyRevenue)}</div>
-        </div>
       </div>`;
 
     const cardWilayah = `
       <div class="kpi-monitor-card">
         <div class="kmc-label">Performa Wilayah &mdash; ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtNum(totalLokasiAktif)} <span style="font-size:16px; font-weight:400; color:var(--ink-soft);">area aktif</span></div>
+        <div class="kmc-sub">${fmtPct(pctLokasiAktif)} dari ${fmtNum(totalLokasiTercatat)} wilayah tercatat (sepanjang 2026)</div>
         <div class="kmc-sub">Coverage wilayah dengan minimal 1 invoice pada periode ini</div>
         <div class="mini-table-title" style="margin-top:14px;">Top 5 Wilayah</div>
         <table style="width:100%; font-size:12.5px; border-collapse:collapse; margin-top:4px;">
