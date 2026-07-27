@@ -1833,6 +1833,22 @@ function kpiPerformanceLabelDash(percent) {
   return { text: 'CUKUP', color: PALETTE.red };
 }
 
+function renderKpiMakassarDayDetail(detail, dayNum) {
+  const area = document.getElementById('kpiMakassarDayDetail');
+  if (!area) return;
+  const d = detail.days.find(x => x.day === Number(dayNum));
+  const rows = (detail.indicatorStats || []).map((s, i) => {
+    const on = d && d.values[i];
+    const evi = d && on ? renderKpiEvidenceHtml(d.evidence[i]) : '';
+    return `<div class="kpi-indicator-row${evi ? ' has-evi' : ''}"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${on ? 'ok' : 'low'}">${on ? 'YA' : 'TIDAK'}</span></div>${evi}`;
+  }).join('');
+  const jamInfo = d && (d.jamDatang || d.jamPulang)
+    ? `<div class="kpi-modal-sub" style="margin:0 0 6px">Jam Datang: ${d.jamDatang || '-'} &middot; Jam Pulang: ${d.jamPulang || '-'}</div>`
+    : '';
+  const heading = `<div class="kpi-modal-sub" style="margin:0 0 6px; font-weight:600">Tanggal ${dayNum}</div>`;
+  area.innerHTML = heading + jamInfo + (rows || '<p class="kpi-modal-loading">Belum diisi hari itu.</p>');
+}
+
 const KPI_WEEKDAY_SHORT = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
 function renderKpiMakassarSubsection(yearMonthKey) {
@@ -1873,8 +1889,10 @@ function renderKpiMakassarSubsection(yearMonthKey) {
     </div>
 
     <div class="panel">
-      <div class="panel-head"><h3>Tren Kepatuhan Harian</h3></div>
+      <div class="panel-head"><h3>Tren Kinerja Harian</h3></div>
       <div class="chart-wrap" style="height:220px"><canvas id="chartMakassarDaily"></canvas></div>
+      <p class="kpi-modal-sub" style="margin-top:6px">Klik salah satu batang untuk lihat performa indikator hari itu.</p>
+      <div id="kpiMakassarDayDetail" style="margin-top:8px"></div>
     </div>
 
     <div class="panel">
@@ -1905,6 +1923,12 @@ function renderKpiMakassarSubsection(yearMonthKey) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
+      onClick: (evt, elements) => {
+        if (!elements || !elements.length) return;
+        const idx = elements[0].index;
+        const dayNum = detail.days[idx] ? detail.days[idx].day : null;
+        if (dayNum) renderKpiMakassarDayDetail(detail, dayNum);
+      },
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y === null ? 'Belum diisi hari itu' : fmtPct(ctx.parsed.y) } } },
       scales: {
         y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#eae3d6' } },
@@ -1912,6 +1936,9 @@ function renderKpiMakassarSubsection(yearMonthKey) {
       },
     },
   });
+
+  const lastSubmittedMakassarDay = detail.days.filter(d => d.submitted).slice(-1)[0];
+  if (lastSubmittedMakassarDay) renderKpiMakassarDayDetail(detail, lastSubmittedMakassarDay.day);
 
   makeChart('chartMakassarMonthly', {
     type: 'line',
@@ -1953,6 +1980,7 @@ function openKpiPersonelDetail(name, yearMonthKey) {
 }
 
 function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail) {
+  const perfLbl = kpiPerformanceLabelDash(detail.monthPercent || 0);
   const indicatorRows = (detail.indicatorStats || []).map(s => {
     const cls = s.percent >= 80 ? 'ok' : (s.percent >= 50 ? 'mid' : 'low');
     return `<div class="kpi-indicator-row"><span>${escapeHtml(s.label)}</span><span class="kpi-indicator-badge ${cls}">${s.percent}%</span></div>`;
@@ -1974,7 +2002,11 @@ function renderKpiPersonelModalBody(overlay, name, yearMonthKey, detail) {
         <button type="button" class="kpi-modal-close" aria-label="Tutup">&times;</button>
       </div>
 
-      <div class="kpi-grid kpi-grid-2">
+      <div class="kpi-grid kpi-grid-3">
+        <div class="kpi-card">
+          <div class="kpi-label">Predikat Bulan Ini</div>
+          <div class="kpi-value" style="font-size:16px; color:${perfLbl.color}">${perfLbl.text}</div>
+        </div>
         <div class="kpi-card">
           <div class="kpi-label">Indikator Terkuat</div>
           <div class="kpi-value" style="font-size:15px">${detail.strongest ? escapeHtml(detail.strongest.label) : '&ndash;'}</div>

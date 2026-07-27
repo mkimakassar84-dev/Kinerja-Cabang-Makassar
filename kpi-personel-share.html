@@ -65,6 +65,8 @@ h1,h2,h3{font-family:Georgia, 'Times New Roman', serif; font-weight:600;}
 .kpi-modal-sub{font-size:12.5px; color:var(--ink-soft); margin-top:4px;}
 .kpi-modal-close{background:var(--paper); border:1px solid var(--line); border-radius:50%; width:32px; height:32px; font-size:16px; color:var(--ink-soft); cursor:pointer; flex:0 0 auto;}
 .kpi-grid-2{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:16px;}
+.kpi-grid-3{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px;}
+@media (max-width:520px){ .kpi-grid-3{grid-template-columns:1fr 1fr;} }
 .kpi-indicator-row{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px;}
 .kpi-indicator-row:last-child{border-bottom:none;}
 .kpi-indicator-row.has-evi{border-bottom:none; padding-bottom:2px;}
@@ -275,6 +277,11 @@ function computeOneRowMulti(name, rowsArr){
   return { name, hasData: hariSubmit>0, percent: totalPossible>0?(totalOn/totalPossible)*100:0, totalJamKerja: totalMenitKerja/60, hariSubmit };
 }
 
+function performanceLabel(percent){
+  if (percent >= 90) return { text:'SANGAT BAIK', color: PALETTE.green };
+  if (percent >= 75) return { text:'BAIK', color: PALETTE.yellow };
+  return { text:'CUKUP', color: PALETTE.red };
+}
 function buildPersonDetail(name, ym, byPersonMonth, months){
   const labels = KPI_PERSONEL_LABELS[name] || [];
   const row = byPersonMonth[name] && byPersonMonth[name][ym];
@@ -472,7 +479,8 @@ function renderModalBody(overlay, name, ym, detail){
         <div><h3>${escapeHtml(name)}</h3><div class="kpi-modal-sub">${monthLabel(ym)} &middot; Kepatuhan bulan ini: ${fmtPct(detail.monthPercent||0)} &middot; ${detail.countedDays||0} hari kerja terhitung</div></div>
         <button type="button" class="kpi-modal-close" aria-label="Tutup">&times;</button>
       </div>
-      <div class="kpi-grid-2">
+      <div class="kpi-grid-3">
+        <div class="kpi-card"><div class="kpi-label">Predikat Bulan Ini</div><div class="kpi-value" style="font-size:15px;color:${performanceLabel(detail.monthPercent||0).color}">${performanceLabel(detail.monthPercent||0).text}</div></div>
         <div class="kpi-card"><div class="kpi-label">Indikator Terkuat</div><div class="kpi-value" style="font-size:14px">${detail.strongest?escapeHtml(detail.strongest.label):'&ndash;'}</div><div class="kpi-label" style="margin-top:4px;margin-bottom:0;color:${PALETTE.green}">${detail.strongest?detail.strongest.percent+'%':''}</div></div>
         <div class="kpi-card"><div class="kpi-label">Indikator Terlemah</div><div class="kpi-value" style="font-size:14px">${detail.weakest?escapeHtml(detail.weakest.label):'&ndash;'}</div><div class="kpi-label" style="margin-top:4px;margin-bottom:0;color:${PALETTE.red}">${detail.weakest?detail.weakest.percent+'%':''}</div></div>
       </div>
