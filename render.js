@@ -410,6 +410,10 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     const isCurrentMonth = !isAll && monthIdx === TODAY.getMonth();
     const daysInMonth    = new Date(TODAY.getFullYear(), monthIdx + 1, 0).getDate();
 
+    // Target satu tahun (jumlah target semua bulan) — dipakai khusus saat "Semua Bulan" dipilih,
+    // supaya Total Sales & Total Revenue tetap punya acuan capaian meski tidak per-bulan.
+    const annualTarget = sum(yoyMonths, m => m.targetSalesRevenue);
+
     // 1. SALES
     const totalSales  = sum(txMonth, t => t.amount);
     const pctSalesAnnual = annualTarget > 0 ? (totalSales / annualTarget) * 100 : 0;
@@ -421,10 +425,6 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
     const monthData   = isAll ? null : yoyMonths.find(mo => mo.monthIdx === monthIdx);
     const targetSales = monthData ? monthData.targetSalesRevenue : 0;
     const pctSales    = targetSales > 0 ? (totalSales / targetSales) * 100 : 0;
-
-    // Target satu tahun (jumlah target semua bulan) — dipakai khusus saat "Semua Bulan" dipilih,
-    // supaya Total Sales & Total Revenue tetap punya acuan capaian meski tidak per-bulan.
-    const annualTarget = sum(yoyMonths, m => m.targetSalesRevenue);
 
     // 2. REVENUE
     const totalRevenue = sum(revMonth, r => r.pelunasan);
