@@ -473,10 +473,6 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
       lokasiMap[lok].add(t.noInvoice);
     });
     const totalLokasiAktif = Object.keys(lokasiMap).length;
-    // "Wilayah tercatat" = total wilayah unik yang pernah tercatat sepanjang 2026 (all-time),
-    // dipakai sebagai pembanding coverage terhadap wilayah aktif pada periode yang dipilih.
-    const totalLokasiTercatat = uniqueCount(tx2026.filter(t => (t.lokasi || '').trim()), t => (t.lokasi || '').trim());
-    const pctLokasiAktif = totalLokasiTercatat > 0 ? (totalLokasiAktif / totalLokasiTercatat) * 100 : 0;
     const top5Wilayah = Object.entries(lokasiMap)
       .sort((a, b) => b[1].size - a[1].size)
       .slice(0, 5)
@@ -567,7 +563,6 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
       <div class="kpi-monitor-card">
         <div class="kmc-label">Performa Wilayah &mdash; ${escapeHtml(monthLabel)}</div>
         <div class="kmc-value">${fmtNum(totalLokasiAktif)} <span style="font-size:16px; font-weight:400; color:var(--ink-soft);">area aktif</span></div>
-        <div class="kmc-sub">${fmtPct(pctLokasiAktif)} dari ${fmtNum(totalLokasiTercatat)} wilayah tercatat (sepanjang 2026)</div>
         <div class="kmc-sub">Coverage wilayah dengan minimal 1 invoice pada periode ini</div>
         <div class="mini-table-title" style="margin-top:14px;">Top 5 Wilayah</div>
         <table style="width:100%; font-size:12.5px; border-collapse:collapse; margin-top:4px;">

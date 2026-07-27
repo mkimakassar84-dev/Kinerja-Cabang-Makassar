@@ -201,10 +201,8 @@ function draw(d){
   cx.fillStyle='#fff';cx.fillRect(wx,wy,ww,wh);cx.strokeStyle='#ddd6cc';cx.lineWidth=1;cx.strokeRect(wx,wy,ww,wh);
   cx.fillStyle='#9a7a5a';cx.font='bold 14px system-ui';cx.fillText('PERFORMA WILAYAH \u2014 '+moLabel,wx+22,wy+30);
   cx.fillStyle='#2a2520';cx.font='bold 36px system-ui';cx.fillText(Num(d.lkTot)+' area aktif',wx+22,wy+72);
-  const lkPct=d.lkAllTime>0?(d.lkTot/d.lkAllTime)*100:0;
-  cx.fillStyle='#6a5a4a';cx.font='400 13px system-ui';cx.fillText(Pct(lkPct)+' dari '+Num(d.lkAllTime)+' wilayah tercatat (sepanjang 2026)',wx+22,wy+92);
-  cx.fillStyle='#9a7a5a';cx.font='bold 12px system-ui';cx.fillText('TOP 5 WILAYAH',wx+22,wy+114);
-  d.lkList.slice(0,5).forEach((e,i)=>{cx.fillStyle='#3a3530';cx.font='400 14px system-ui';cx.fillText((i+1)+'. '+e[0],wx+22,wy+132+i*22);cx.fillStyle='#c17a5a';cx.font='bold 14px system-ui';cx.textAlign='right';cx.fillText(Num(e[1].size)+' inv',wx+ww-22,wy+132+i*22);cx.textAlign='left';});
+  cx.fillStyle='#9a7a5a';cx.font='bold 12px system-ui';cx.fillText('TOP 5 WILAYAH',wx+22,wy+96);
+  d.lkList.slice(0,5).forEach((e,i)=>{cx.fillStyle='#3a3530';cx.font='400 14px system-ui';cx.fillText((i+1)+'. '+e[0],wx+22,wy+114+i*22);cx.fillStyle='#c17a5a';cx.font='bold 14px system-ui';cx.textAlign='right';cx.fillText(Num(e[1].size)+' inv',wx+ww-22,wy+114+i*22);cx.textAlign='left';});
   cx.fillStyle='#efe8df';cx.fillRect(0,H-56,W,56);
   cx.fillStyle='#a08060';cx.font='400 13px system-ui';cx.fillText('mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar  \u2022  '+new Date().toLocaleString('id-ID'),44,H-20);
 }
