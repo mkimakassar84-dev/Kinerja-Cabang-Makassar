@@ -1,5 +1,5 @@
 // Service Worker untuk PWA Dashboard KPI MKI Makassar
-const CACHE_NAME = 'mki-kinerja-v4';
+const CACHE_NAME = 'mki-kinerja-v5';
 const STATIC_ASSETS = [
   '/Kinerja-Cabang-Makassar/',
   '/Kinerja-Cabang-Makassar/index.html',

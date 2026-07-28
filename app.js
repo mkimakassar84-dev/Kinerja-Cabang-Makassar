@@ -23,7 +23,28 @@
 
 const AUTO_CHECK_INTERVAL_MS = 10 * 60 * 1000; // cek perubahan data tiap 10 menit
 const DASHBOARD_CACHE_KEY = 'kmc_dashboard_cache_v1';
+// Kalau cache localStorage baru diambil dalam rentang ini, dianggap masih
+// cukup segar untuk dipakai langsung TANPA fetch ulang ke Google Sheets sama
+// sekali — bukan cuma "tampil instan lalu tetap diam-diam fetch di belakang"
+// seperti sebelumnya. Navigasi cepat (buka dashboard, pindah halaman, balik
+// lagi dalam waktu dekat — pola umum pemakaian di HP) jadi benar-benar tidak
+// menunggu/membebani Google Sheets. Auto-check 10 menit tetap menjaga
+// kesegaran data selama dashboard dibiarkan terbuka.
+const DASHBOARD_CACHE_TTL_MS = 60 * 1000;
 let lastDataSnapshot = null;
+
+/** Bedakan hard refresh manual (F5 / pull-to-refresh / location.reload())
+ *  dari navigasi biasa (buka link, buka lagi dari home screen) — hard
+ *  refresh HARUS selalu ambil data terbaru, tidak boleh ikut lewati fetch
+ *  walau cache masih segar, sesuai jaminan yang sudah didokumentasikan. */
+function isHardReload() {
+  try {
+    const nav = performance.getEntriesByType('navigation')[0];
+    return !!nav && nav.type === 'reload';
+  } catch (e) {
+    return false; // API tidak tersedia — anggap bukan reload, aman (tetap fetch)
+  }
+}
 
 function loadCachedDashboardData() {
   try {
@@ -63,7 +84,6 @@ async function initDashboard() {
       lastDataSnapshot = JSON.stringify(cached.data);
       const metrics = computeAllMetrics(cached.data);
       renderDashboard(metrics);
-      showCacheNotice();
       renderedFromCache = true;
     } catch (e) {
       // Bentuk cache lama/tidak cocok dengan versi kode saat ini — abaikan
@@ -72,6 +92,13 @@ async function initDashboard() {
       lastDataSnapshot = null;
     }
   }
+
+  const cacheMasihSegar = renderedFromCache && cached.savedAt && (Date.now() - cached.savedAt) < DASHBOARD_CACHE_TTL_MS;
+  if (cacheMasihSegar && !isHardReload()) {
+    return; // data yang barusan tampil sudah cukup baru, tidak perlu request ke Google Sheets sama sekali
+  }
+
+  if (renderedFromCache) showCacheNotice();
 
   try {
     const { data, errors } = await loadAllSheetData();
