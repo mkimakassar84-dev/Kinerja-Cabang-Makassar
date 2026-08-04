@@ -1040,11 +1040,12 @@ function renderSalesSection(m) {
 
     <div class="panel">
       <h3>Sales by Company &mdash; MKI vs CFN</h3>
+      <p class="panel-note">Klik salah satu cardbox untuk memfilter tabel Rincian Transaksi Sales di bawah berdasarkan company. Klik lagi untuk membatalkan filter.</p>
       <div class="two-col">
         <div class="chart-wrap chart-wrap-sm"><canvas id="chartSalesByCompany"></canvas></div>
         <div class="company-cards">
           ${byco.companies.map(c => `
-            <div class="company-card company-${c.company.toLowerCase()}">
+            <div class="company-card company-${c.company.toLowerCase()} clickable-row" data-company="${c.company}">
               <div class="company-card-head">
                 <span class="company-badge company-badge-${c.company.toLowerCase()}">${c.company}</span>
                 <span class="company-pct">${fmtPct(c.pct)}</span>
@@ -1104,10 +1105,23 @@ function renderSalesSection(m) {
       renderSalesTrendChart(s, salesViewMode);
     });
   });
+
+  document.querySelectorAll('#s1 .company-card[data-company]').forEach(card => {
+    card.classList.toggle('row-selected', card.dataset.company === salesDetailState.company);
+    card.addEventListener('click', () => {
+      salesDetailState.company = salesDetailState.company === card.dataset.company ? null : card.dataset.company;
+      salesDetailState.page = 1;
+      document.querySelectorAll('#s1 .company-card[data-company]').forEach(c => {
+        c.classList.toggle('row-selected', c.dataset.company === salesDetailState.company);
+      });
+      renderSalesDetailTable(filterYear(m.transactions, CURRENT_YEAR));
+      document.getElementById('salesDetailTable').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  });
 }
 
 const SALES_DETAIL_PAGE_SIZE = 10;
-let salesDetailState = { month: 'all', search: '', page: 1 };
+let salesDetailState = { month: 'all', search: '', page: 1, company: null };
 
 function renderSalesDetailTable(tx2026) {
   const renderTable = () => {
@@ -1117,6 +1131,7 @@ function renderSalesDetailTable(tx2026) {
       const monthIdx = parseInt(state.month, 10);
       rows = rows.filter(t => t.orderDate && t.orderDate.getMonth() === monthIdx);
     }
+    if (state.company) rows = rows.filter(t => t.company === state.company);
     const q = state.search.trim().toUpperCase();
     if (q) rows = rows.filter(t => t.customer.includes(q) || t.noInvoice.toUpperCase().includes(q));
     rows = [...rows].sort((a, b) => (a.orderDate?.getTime() || 0) - (b.orderDate?.getTime() || 0));
@@ -1128,8 +1143,9 @@ function renderSalesDetailTable(tx2026) {
     const startIdx = (state.page - 1) * SALES_DETAIL_PAGE_SIZE;
     const shown = rows.slice(startIdx, startIdx + SALES_DETAIL_PAGE_SIZE);
 
+    const periodLabel = dpPeriodLabel(state.month) + (state.company ? ` &mdash; company <strong>${state.company}</strong>` : '');
     document.getElementById('salesDetailCount').innerHTML =
-      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${dpPeriodLabel(state.month)}.`;
+      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${periodLabel}.`;
 
     document.querySelector('#salesDetailTable tbody').innerHTML = shown.length
       ? shown.map(t => `
@@ -1301,11 +1317,12 @@ function renderRevenueSection(m) {
 
     <div class="panel">
       <h3>Revenue by Company &mdash; MKI vs CFN</h3>
+      <p class="panel-note">Klik salah satu cardbox untuk memfilter tabel Rincian Pelunasan Revenue di bawah berdasarkan company. Klik lagi untuk membatalkan filter.</p>
       <div class="two-col">
         <div class="chart-wrap chart-wrap-sm"><canvas id="chartRevByCompany"></canvas></div>
         <div class="company-cards">
           ${byco.companies.map(c => `
-            <div class="company-card company-${c.company.toLowerCase()}">
+            <div class="company-card company-${c.company.toLowerCase()} clickable-row" data-company="${c.company}">
               <div class="company-card-head">
                 <span class="company-badge company-badge-${c.company.toLowerCase()}">${c.company}</span>
                 <span class="company-pct">${fmtPct(c.pct)}</span>
@@ -1361,10 +1378,23 @@ function renderRevenueSection(m) {
       renderRevTrendChart(r, revViewMode);
     });
   });
+
+  document.querySelectorAll('#s2 .company-card[data-company]').forEach(card => {
+    card.classList.toggle('row-selected', card.dataset.company === revDetailState.company);
+    card.addEventListener('click', () => {
+      revDetailState.company = revDetailState.company === card.dataset.company ? null : card.dataset.company;
+      revDetailState.page = 1;
+      document.querySelectorAll('#s2 .company-card[data-company]').forEach(c => {
+        c.classList.toggle('row-selected', c.dataset.company === revDetailState.company);
+      });
+      renderRevenueDetailTable(m.revAllNormalized.filter(rv => rv.paymentDate && rv.paymentDate.getFullYear() === CURRENT_YEAR));
+      document.getElementById('revDetailTable').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  });
 }
 
 const REV_DETAIL_PAGE_SIZE = 10;
-let revDetailState = { month: 'all', search: '', page: 1 };
+let revDetailState = { month: 'all', search: '', page: 1, company: null };
 
 function renderRevenueDetailTable(rev2026) {
   const renderTable = () => {
@@ -1374,6 +1404,7 @@ function renderRevenueDetailTable(rev2026) {
       const monthIdx = parseInt(state.month, 10);
       rows = rows.filter(r => r.paymentDate && r.paymentDate.getMonth() === monthIdx);
     }
+    if (state.company) rows = rows.filter(r => r.company === state.company);
     const q = state.search.trim().toUpperCase();
     if (q) rows = rows.filter(r => r.customer.includes(q) || r.noFaktur.toUpperCase().includes(q));
     rows = [...rows].sort((a, b) => (a.paymentDate?.getTime() || 0) - (b.paymentDate?.getTime() || 0));
@@ -1385,8 +1416,9 @@ function renderRevenueDetailTable(rev2026) {
     const startIdx = (state.page - 1) * REV_DETAIL_PAGE_SIZE;
     const shown = rows.slice(startIdx, startIdx + REV_DETAIL_PAGE_SIZE);
 
+    const periodLabel = dpPeriodLabel(state.month) + (state.company ? ` &mdash; company <strong>${state.company}</strong>` : '');
     document.getElementById('revDetailCount').innerHTML =
-      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${dpPeriodLabel(state.month)}.`;
+      `Menampilkan <strong>${dpRangeLabel(totalRows, startIdx, shown.length)}</strong> transaksi pada ${periodLabel}.`;
 
     document.querySelector('#revDetailTable tbody').innerHTML = shown.length
       ? shown.map(r => `
@@ -2289,13 +2321,17 @@ function renderZonaSection(m) {
     <div class="panel">
       <h3>Coverage Area by Invoice</h3>
       <div class="panel-head">
-        <p class="panel-note">Jumlah wilayah yang memiliki transaksi (invoice &gt; 0) pada periode tersebut.</p>
+        <p class="panel-note">Jumlah wilayah yang memiliki transaksi (invoice &gt; 0) pada periode tersebut. Klik salah satu batang untuk melihat daftar wilayahnya.</p>
         <div class="toggle-group" id="zonaCoverageToggle">
           <button class="toggle-btn active" data-mode="bulanan">Per Bulan</button>
           <button class="toggle-btn" data-mode="kuartal">Per Kuartal</button>
         </div>
       </div>
       <div class="chart-wrap"><canvas id="chartCoverage"></canvas></div>
+      <div id="coverageDrillPanel" class="drill-panel hidden">
+        <h4 class="sub-heading" id="coverageDrillTitle"></h4>
+        <div class="chip-list" id="coverageDrillList"></div>
+      </div>
     </div>
 
     <div class="panel">
@@ -2413,10 +2449,35 @@ function renderCoverageChart(z, mode) {
     data: { labels: data.map(x => x.label), datasets: [{ label: 'Jumlah Wilayah Aktif', data: data.map(x => x.coverage), backgroundColor: PALETTE.sage, borderRadius: 4 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
+      onClick: (evt, els) => { if (els.length) showCoverageDrilldown(z, mode, els[0].index); },
       plugins: { legend: { display: false } },
       scales: { y: { beginAtZero: true, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
     },
   });
+  document.getElementById('coverageDrillPanel').classList.add('hidden');
+}
+
+function showCoverageDrilldown(z, mode, index) {
+  const panel = document.getElementById('coverageDrillPanel');
+  let monthIdxs, periodLabel;
+  if (mode === 'bulanan') {
+    monthIdxs = [index];
+    periodLabel = MONTH_NAMES_ID[index];
+  } else {
+    const q = index + 1;
+    monthIdxs = [0,1,2,3,4,5,6,7,8,9,10,11].filter(mi => QUARTER_OF_MONTH[mi] === q);
+    periodLabel = `Kuartal ${q}`;
+  }
+  const active = z.wilayahData
+    .filter(w => monthIdxs.some(mi => w.monthly[mi].invoice > 0))
+    .sort((a, b) => b.total - a.total);
+
+  panel.classList.remove('hidden');
+  document.getElementById('coverageDrillTitle').textContent = `Wilayah Aktif — ${periodLabel} 2026 (${fmtNum(active.length)} wilayah)`;
+  document.getElementById('coverageDrillList').innerHTML = active.length
+    ? active.map(w => `<span class="chip">${escapeHtml(w.nama)}</span>`).join('')
+    : '<span class="chip-empty">Tidak ada wilayah dengan invoice pada periode ini.</span>';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function renderZonaDistChart(z) {
@@ -3293,7 +3354,15 @@ function renderDeliverySection(m) {
           <input type="text" id="ekspedisiSearch" class="text-input" placeholder="Ketik nama jalur ekspedisi&hellip;" />
         </div>
       </div>
+      <p class="panel-note">Klik nama jalur ekspedisi untuk melihat tren bulanannya.</p>
       <table class="data-table" id="tblEkspedisi"></table>
+      <div id="ekspedisiDrillPanel" class="drill-panel hidden">
+        <h4 class="sub-heading" id="ekspedisiDrillTitle"></h4>
+        <div class="two-col">
+          <div class="chart-wrap chart-wrap-sm"><canvas id="chartEkspedisiDrillAmount"></canvas></div>
+          <div class="chart-wrap chart-wrap-sm"><canvas id="chartEkspedisiDrillCount"></canvas></div>
+        </div>
+      </div>
     </div>
   `;
   document.getElementById('s7').innerHTML = html;
@@ -3334,6 +3403,7 @@ function renderEkspedisiChart(d) {
 }
 
 let ekspedisiSearch = '';
+let ekspedisiDrillSelected = null;
 
 function renderEkspedisiTable(d) {
   const PAGE = 15;
@@ -3350,7 +3420,7 @@ function renderEkspedisiTable(d) {
     const pagHtml = makePagBtns('pagEkspedisi', page, totalPages, p => { page = p; render(); });
     document.getElementById('tblEkspedisi').outerHTML = `<table class="data-table" id="tblEkspedisi">
       <thead><tr><th>Jalur Ekspedisi</th><th>Jumlah</th><th>Persentase</th><th>Quantity</th><th>Koli</th></tr></thead>
-      <tbody>${shown.length ? shown.map(e => `<tr><td>${escapeHtml(e.nama)}</td><td>${fmtNum(e.count)}</td><td>${fmtPct(e.pct)}</td><td>${fmtNum(e.qty)}</td><td>${fmtNum(e.koli)}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-row">Tidak ada jalur ekspedisi yang cocok.</td></tr>'}</tbody>
+      <tbody>${shown.length ? shown.map(e => `<tr class="clickable-row${e.nama === ekspedisiDrillSelected ? ' row-selected' : ''}" data-ekspedisi="${escapeHtml(e.nama)}"><td>${escapeHtml(e.nama)}</td><td>${fmtNum(e.count)}</td><td>${fmtPct(e.pct)}</td><td>${fmtNum(e.qty)}</td><td>${fmtNum(e.koli)}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-row">Tidak ada jalur ekspedisi yang cocok.</td></tr>'}</tbody>
     </table>`;
     const pagEl = document.getElementById('pagEkspedisi');
     if (pagEl) { pagEl.innerHTML = pagHtml; attachPagBtns('pagEkspedisi', p => { page = p; render(); }); }
@@ -3362,8 +3432,59 @@ function renderEkspedisiTable(d) {
       document.getElementById('tblEkspedisi').insertAdjacentElement('afterend', wrap);
       attachPagBtns('pagEkspedisi', p => { page = p; render(); });
     }
+
+    document.querySelectorAll('#tblEkspedisi tbody tr[data-ekspedisi]').forEach(tr => {
+      tr.addEventListener('click', () => showEkspedisiDrilldown(d, tr.dataset.ekspedisi));
+    });
+
+    if (ekspedisiDrillSelected && !items.some(e => e.nama === ekspedisiDrillSelected)) {
+      document.getElementById('ekspedisiDrillPanel').classList.add('hidden');
+      ekspedisiDrillSelected = null;
+    }
   };
   render();
+}
+
+function showEkspedisiDrilldown(d, nama) {
+  ekspedisiDrillSelected = nama;
+  const eks = d.byEkspedisi.find(e => e.nama === nama);
+  if (!eks) return;
+
+  document.querySelectorAll('#tblEkspedisi tbody tr[data-ekspedisi]').forEach(tr => {
+    tr.classList.toggle('row-selected', tr.dataset.ekspedisi === nama);
+  });
+
+  const panel = document.getElementById('ekspedisiDrillPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('ekspedisiDrillTitle').textContent = `Tren Bulanan — ${nama}`;
+
+  makeChart('chartEkspedisiDrillAmount', {
+    type: 'bar',
+    data: {
+      labels: MONTH_NAMES_SHORT_ID,
+      datasets: [{ label: 'Nilai Kiriman', data: eks.monthly.map(mo => mo.amount), backgroundColor: PALETTE.terra, borderRadius: 4 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtRupiah(ctx.parsed.y) } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+
+  makeChart('chartEkspedisiDrillCount', {
+    type: 'line',
+    data: {
+      labels: MONTH_NAMES_SHORT_ID,
+      datasets: [{ label: 'Jumlah Kiriman', data: eks.monthly.map(mo => mo.count), borderColor: PALETTE.sage, backgroundColor: PALETTE.sage, tension: 0.3 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtNum(ctx.parsed.y) + ' kiriman' } } },
+      scales: { y: { beginAtZero: true, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
+    },
+  });
+
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 /* ==========================================================================
@@ -3397,8 +3518,12 @@ function renderARSection(m) {
 
     <div class="panel">
       <h3>Piutang dengan Aging diatas 60 Hari</h3>
-      <p class="panel-note">Total <strong>${fmtNum(ar.piutangDiatas60Hari.length)}</strong> faktur dengan sisa saldo piutang diatas 60 hari, senilai <strong>${fmtRupiah(ar.totalPiutangDiatas60Hari)}</strong>.</p>
+      <p class="panel-note">Total <strong>${fmtNum(ar.piutangDiatas60Hari.length)}</strong> faktur dengan sisa saldo piutang diatas 60 hari, senilai <strong>${fmtRupiah(ar.totalPiutangDiatas60Hari)}</strong>. Klik salah satu batang untuk melihat daftar customer belum lunas di kategori aging tersebut.</p>
       <div class="chart-wrap"><canvas id="chartAging"></canvas></div>
+      <div id="agingDrillPanel" class="drill-panel hidden">
+        <h4 class="sub-heading" id="agingDrillTitle"></h4>
+        <table class="data-table" id="tblAgingDrill"></table>
+      </div>
     </div>
 
     <div class="panel">
@@ -3459,7 +3584,7 @@ function renderARSection(m) {
   renderARByCompanyChart(ar);
   renderARTable(ar);
 
-  document.querySelectorAll('.company-card[data-company]').forEach(card => {
+  document.querySelectorAll('#s8 .company-card[data-company]').forEach(card => {
     card.addEventListener('click', () => showARCompanyDrilldown(ar, card.dataset.company));
   });
 
@@ -3487,6 +3612,7 @@ function renderAgingChart(ar) {
     options: {
       responsive: true, maintainAspectRatio: false,
       layout: { padding: { top: 24 } },
+      onClick: (evt, els) => { if (els.length) showAgingDrilldown(ar, sorted[els[0].index].kategori); },
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${fmtRupiah(ctx.parsed.y)} (${fmtPct(pctOf(ctx.parsed.y))})` } } },
       scales: { y: { ticks: { callback: v => fmtRupiahShort(v) }, grid: { color: '#eae3d6' } }, x: { grid: { display: false } } },
     },
@@ -3511,6 +3637,29 @@ function renderAgingChart(ar) {
   });
 }
 
+function showAgingDrilldown(ar, kategori) {
+  const items = ar.items
+    .filter(i => i.kategori === kategori && i.sisaSaldo > 0)
+    .sort((a, b) => b.sisaSaldo - a.sisaSaldo);
+
+  const panel = document.getElementById('agingDrillPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('agingDrillTitle').textContent = `Customer Belum Lunas — Aging ${kategori} (${fmtNum(items.length)} faktur)`;
+
+  const rows = items.map(i => `<tr>
+    <td>${i.tanggal ? fmtDateShort(i.tanggal) : '-'}</td>
+    <td>${escapeHtml(i.noFaktur)}</td>
+    <td>${escapeHtml(i.customer)}</td>
+    <td>${fmtRupiah(i.sisaSaldo)}</td>
+    <td>${escapeHtml(i.company)}</td>
+  </tr>`).join('');
+  document.getElementById('tblAgingDrill').innerHTML = `
+    <thead><tr><th>Tanggal Faktur</th><th>No Faktur</th><th>Nama Customer</th><th>Sisa Saldo Piutang</th><th>Company</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="5" class="empty-row">Tidak ada faktur belum lunas pada kategori ini.</td></tr>'}</tbody>
+  `;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 function renderARByCompanyChart(ar) {
   const cos = Object.keys(ar.byCompany);
   const colorMap = { MKI: PALETTE.terra, CFN: PALETTE.sage };
@@ -3533,7 +3682,7 @@ function showARCompanyDrilldown(ar, company) {
   arCompanyDrillPage = 1;
   arCompanyDrillSearch = '';
 
-  document.querySelectorAll('.company-card[data-company]').forEach(card => {
+  document.querySelectorAll('#s8 .company-card[data-company]').forEach(card => {
     card.classList.toggle('row-selected', card.dataset.company === company);
   });
 

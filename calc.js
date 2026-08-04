@@ -671,11 +671,18 @@ function buildDelivery(transactions) {
   };
 
   const byEkspedisi = Array.from(groupBy(tx2026, t => t.statusEkspedisi || 'TIDAK TERCATAT').entries())
-    .map(([nama, items]) => ({
-      nama, count: items.length,
-      pct: total > 0 ? (items.length / total) * 100 : 0,
-      qty: sum(items, i => i.qty), koli: sum(items, i => i.koli),
-    }))
+    .map(([nama, items]) => {
+      const monthly = MONTH_NAMES_ID.map((label, idx) => {
+        const monthItems = items.filter(i => i.orderDate && i.orderDate.getMonth() === idx);
+        return { monthIdx: idx, label, amount: sum(monthItems, i => i.amount), count: monthItems.length };
+      });
+      return {
+        nama, count: items.length,
+        pct: total > 0 ? (items.length / total) * 100 : 0,
+        qty: sum(items, i => i.qty), koli: sum(items, i => i.koli),
+        monthly,
+      };
+    })
     .sort((a, b) => b.count - a.count);
 
   const handCarryCount = tx2026.filter(t => t.statusEkspedisi.toUpperCase().includes('HAND CARRY')).length;
