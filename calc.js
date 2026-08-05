@@ -1291,16 +1291,17 @@ function computeKpiPersonelMetrics(rows, dinasRows) {
     const withData = people.filter(p => p.hasData);
     const avgPercent = withData.length ? withData.reduce((s, p) => s + p.percent, 0) / withData.length : 0;
     const totalJamTeam = people.reduce((s, p) => s + p.totalJamKerja, 0);
-    const ranking = people.slice().sort((a, b) => {
+    // Urutan ranking (sinkron dengan rekap-kinerja-tim.html di KPI-Personel-Cabang-Makassar):
+    // 1) skorAkhir tertinggi, 2) kalau sama, percent (kepatuhan) tertinggi, 3) kalau masih sama, totalJamKerja terlama.
+    const rankCompare = (a, b) => {
       if ((b.skorAkhir||0) !== (a.skorAkhir||0)) return (b.skorAkhir||0) - (a.skorAkhir||0);
-      return (b.percent||0) - (a.percent||0);
-    });
+      if ((b.percent||0) !== (a.percent||0)) return (b.percent||0) - (a.percent||0);
+      return (b.totalJamKerja||0) - (a.totalJamKerja||0);
+    };
+    const ranking = people.slice().sort(rankCompare);
     const MIN_COMPLETION_FOR_TERBAIK = 0.7; // syarat B: min 70% hari kerja berjalan harus disubmit utk jadi Personel Terbaik
     const eligible = withData.filter(p => (p.completionRatio||0) >= MIN_COMPLETION_FOR_TERBAIK);
-    const bestPool = (eligible.length ? eligible : withData).slice().sort((a, b) => {
-      if ((b.skorAkhir||0) !== (a.skorAkhir||0)) return (b.skorAkhir||0) - (a.skorAkhir||0);
-      return (b.percent||0) - (a.percent||0);
-    });
+    const bestPool = (eligible.length ? eligible : withData).slice().sort(rankCompare);
     const best = bestPool[0] || null;
     const mostHours = withData.slice().sort((a, b) => b.totalJamKerja - a.totalJamKerja)[0] || null;
     return { people: ranking, avgPercent, totalJamTeam, best, mostHours, yearMonth: ym };
