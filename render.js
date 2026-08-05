@@ -350,6 +350,13 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
   // Kalau hari-hari sebelumnya kurang dari target, target hari ini otomatis
   // naik; kalau sudah lebih dari target, target hari ini otomatis turun.
   // Hanya relevan saat bulan yang dipilih adalah bulan berjalan.
+  //
+  // PENTING: "sisa target" memakai pencapaian bulan berjalan TERMASUK hari ini,
+  // sama persis dengan blok DAILY KPI MEASUREMENT di sheet KPI Monitoring
+  // (mis. 5 Agu 2026: sisa sales Rp1.487.158.167 ÷ 23 hari = Rp64.659.051).
+  // Konsekuensinya target hari ini ikut mengecil seiring transaksi hari itu
+  // masuk — itu memang perilaku yang dipakai sheet, jangan diubah jadi
+  // "pencapaian sebelum hari ini" karena angkanya akan beda dengan sheet.
   const countWorkdays = (year, monthIdx, startDay, endDay) => {
     let count = 0;
     for (let d = startDay; d <= endDay; d++) {
@@ -360,11 +367,10 @@ function renderDpKpiPanel(tx2026, rev2026, yoyMonths) {
 
   const dailyTargetHtml = (metricTarget, monthActualSoFar, actualToday, todayMKI, todayCFN, isCurrentMonthCtx, daysInMonthCtx, fmtFn, todayLabelCtx, suffix = '') => {
     if (!isCurrentMonthCtx || !(metricTarget > 0)) return '';
-    const actualBeforeToday = monthActualSoFar - actualToday;
     const dayOfMonth = TODAY.getDate();
     const isSundayToday = TODAY.getDay() === 0;
     const workdaysRemaining = Math.max(countWorkdays(TODAY.getFullYear(), TODAY.getMonth(), dayOfMonth, daysInMonthCtx), 1);
-    const remainingTarget = Math.max(metricTarget - actualBeforeToday, 0);
+    const remainingTarget = Math.max(metricTarget - monthActualSoFar, 0);
     const dailyTarget = isSundayToday ? 0 : remainingTarget / workdaysRemaining;
     const achieved = isSundayToday ? null : Math.round(actualToday) >= Math.round(dailyTarget);
     const statusHtml = isSundayToday

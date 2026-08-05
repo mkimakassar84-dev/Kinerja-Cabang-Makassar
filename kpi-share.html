@@ -177,9 +177,11 @@ function draw(d){
   }
   const isSundayToday=d.T.getDay()===0;
   const workdaysRemaining=(d.isAll||d.isElapsed) ? 1 : Math.max(countWorkdays(d.T.getFullYear(),d.T.getMonth(),dayOfMonth,d.daysInMonth),1);
-  const dTgtSales=(d.isAll||d.isElapsed||isSundayToday) ? 0 : Math.max(d.targetSM-(d.sM-d.sD),0)/workdaysRemaining;
-  const dTgtRev=(d.isAll||d.isElapsed||isSundayToday) ? 0 : Math.max(d.targetSM-(d.rM-d.rD),0)/workdaysRemaining;
-  const iTgt=(d.isAll||d.isElapsed||isSundayToday) ? 0 : Math.max(d.TARGET_INVOICE-(d.iM-d.iD),0)/workdaysRemaining;
+  // Sisa target memakai pencapaian bulan berjalan TERMASUK hari ini — sama persis
+  // dengan sheet KPI Monitoring (blok DAILY KPI MEASUREMENT) dan dengan render.js.
+  const dTgtSales=(d.isAll||d.isElapsed||isSundayToday) ? 0 : Math.max(d.targetSM-d.sM,0)/workdaysRemaining;
+  const dTgtRev=(d.isAll||d.isElapsed||isSundayToday) ? 0 : Math.max(d.targetSM-d.rM,0)/workdaysRemaining;
+  const iTgt=(d.isAll||d.isElapsed||isSundayToday) ? 0 : Math.max(d.TARGET_INVOICE-d.iM,0)/workdaysRemaining;
   const todayDM=d.T.getDate()+' '+MO[d.T.getMonth()];
   const moLabel=d.isAll ? 'SEMUA BULAN' : MO[d.mi].toUpperCase();
   const noTargetNote='Target tersedia per bulan \u2014 pilih bulan spesifik di dashboard';
