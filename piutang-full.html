@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan Lengkap Piutang (AR) — MKI Cabang Makassar</title>
+<meta name="theme-color" content="#8a6a4a">
+<style>
+:root{
+  --paper:#fdfbf7; --cream:#f5efe4; --ink:#3a3530; --ink-soft:#6a5f52;
+  --line:#e5ddcf; --terra:#c17a5a; --terra-dim:#f3e6de; --sage:#8a9a7e;
+  --red:#b04a3a; --red-dim:#f5e0dc;
+  --shadow:0 2px 10px rgba(58,53,48,.06);
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  font-family:'Segoe UI', system-ui, sans-serif; background:var(--cream); color:var(--ink);
+  padding:20px 16px 60px; line-height:1.5;
+}
+.wrap{max-width:960px; margin:0 auto;}
+header{
+  background:linear-gradient(135deg,#c17a5a,#a85d3f); color:#fff; border-radius:14px;
+  padding:22px 24px; margin-bottom:20px; box-shadow:var(--shadow);
+}
+header .eyebrow{font-size:12px; letter-spacing:.08em; text-transform:uppercase; opacity:.7; margin-bottom:6px;}
+header h1{font-size:22px; font-weight:700; margin-bottom:8px;}
+header .meta{font-size:13px; opacity:.85;}
+.summary-bar{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:12px; margin-bottom:20px;
+}
+.summary-card{
+  background:var(--paper); border:1px solid var(--line); border-radius:12px;
+  padding:14px 16px; box-shadow:var(--shadow); min-width:0;
+}
+.summary-card.accent{background:var(--red-dim); border-color:#e8c9c2;}
+.summary-card .label{font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px;}
+.summary-card .value{font-size:19px; font-weight:700; word-break:break-word;}
+.search-box{margin-bottom:18px;}
+.search-box input{
+  width:100%; padding:11px 14px; border:1px solid var(--line); border-radius:10px; font-size:14px;
+  background:var(--paper); color:var(--ink);
+}
+.search-box input:focus{outline:none; border-color:var(--terra);}
+.company-section{
+  background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px 20px 8px;
+  margin-bottom:18px; box-shadow:var(--shadow); overflow:hidden;
+}
+.company-section h2{
+  font-size:15px; font-weight:700; margin-bottom:2px; display:flex; align-items:center; gap:8px;
+}
+.badge{
+  display:inline-block; font-size:11px; font-weight:700; padding:2px 9px; border-radius:20px;
+  background:var(--terra-dim); color:var(--terra);
+}
+.badge-cfn{background:#eaf0e6; color:var(--sage);}
+.company-section .sub{font-size:12px; color:var(--ink-soft); margin-bottom:12px;}
+.table-scroll{overflow-x:auto; margin:0 -20px; padding:0 20px 4px;}
+table{width:100%; min-width:640px; border-collapse:collapse; font-size:13px;}
+th{
+  text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-soft);
+  padding:8px 8px; border-bottom:2px solid var(--line); position:sticky; top:0; background:var(--paper);
+  white-space:nowrap;
+}
+th.num, td.num{text-align:right;}
+td{padding:9px 8px; border-bottom:1px solid var(--line);}
+td:nth-child(3){min-width:160px;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--cream);}
+.aging-tua{color:var(--red); font-weight:700;}
+.empty{padding:24px 8px; text-align:center; color:var(--ink-soft); font-style:italic; font-size:13px;}
+.pagination{display:flex; flex-wrap:wrap; gap:6px; justify-content:center; align-items:center; padding:14px 0 4px;}
+.page-btn{
+  min-width:32px; height:32px; padding:0 8px; border:1px solid var(--line); border-radius:8px;
+  background:var(--paper); color:var(--ink); font-size:13px; cursor:pointer;
+}
+.page-btn:hover:not(:disabled){border-color:var(--terra); color:var(--terra);}
+.page-btn.active{background:var(--terra); border-color:var(--terra); color:#fff; font-weight:700;}
+.page-btn:disabled{opacity:.35; cursor:not-allowed;}
+.page-ellipsis{color:var(--ink-soft); padding:0 2px;}
+footer{text-align:center; font-size:11.5px; color:var(--ink-soft); margin-top:24px;}
+#status{text-align:center; padding:60px 20px; color:var(--ink-soft);}
+.spinner{
+  width:36px; height:36px; border:3px solid var(--line); border-top-color:var(--terra); border-radius:50%;
+  animation:spin .8s linear infinite; margin:0 auto 14px;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+#content{display:none;}
+@media (max-width:480px){
+  body{padding:14px 10px 50px;}
+  header{padding:16px 18px;}
+  header h1{font-size:19px;}
+  .summary-card{padding:11px 12px;}
+  .summary-card .value{font-size:16px;}
+  .company-section{padding:14px 14px 6px;}
+  table{font-size:12px;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="status">
+    <div class="spinner"></div>
+    <div>Mengambil data piutang terkini&hellip;</div>
+  </div>
+  <div id="content">
+    <header>
+      <div class="eyebrow">MKI &mdash; Cabang Makassar</div>
+      <h1 id="pageTitle">Laporan Lengkap Piutang (AR) 2026</h1>
+      <div class="meta" id="pageMeta"></div>
+    </header>
+    <div class="summary-bar" id="summaryBar"></div>
+    <div class="search-box">
+      <input type="text" id="liveSearch" placeholder="Cari nama customer atau no faktur&hellip;" />
+    </div>
+    <div id="sections"></div>
+    <footer>mkimakassar84-dev.github.io/Kinerja-Cabang-Makassar &bull; Data langsung dari Google Sheets</footer>
+  </div>
+</div>
+<script>
+const SID='1_uou6JDGV-Tm80oALMrduuj9ZIVWM1r9ppuQsYq7_qo';
+const AR_GID='1407414424';
+const Num=v=>(v||0).toLocaleString('id-ID');
+const Rp=v=>v?'Rp'+Math.round(v).toLocaleString('id-ID'):'Rp0';
+const N=v=>parseFloat(String(v||'').replace(/[^0-9.-]/g,''))||0;
+const MO_SHORT=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+const MO_MAP={jan:0,feb:1,mar:2,apr:3,mei:4,may:4,jun:5,jul:6,agu:7,aug:7,sep:8,okt:9,oct:9,nov:10,des:11,dec:11};
+function fmtTgl(raw){
+  const s=String(raw||'').trim();
+  const m=s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if(!m) return s||'-';
+  const mi=MO_MAP[m[2].toLowerCase()];
+  if(mi===undefined) return s;
+  return parseInt(m[1],10)+' '+MO_SHORT[mi]+' '+m[3];
+}
+function tglSort(raw){
+  const s=String(raw||'').trim();
+  const m=s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if(!m) return 0;
+  const mi=MO_MAP[m[2].toLowerCase()];
+  if(mi===undefined) return 0;
+  return new Date(parseInt(m[3],10),mi,parseInt(m[1],10)).getTime();
+}
+const agingDays=a=>{const m=String(a||'').match(/\d+/);return m?parseInt(m[0],10):0;};
+// Klasifikasi "diatas 60 hari" mengikuti kolom Kategori (R) — persis seperti
+// calc.js di dashboard (i.kategori.includes('60')), bukan hasil parsing angka
+// kolom Aging, supaya angkanya selalu sama dengan Section 09 Piutang.
+const isDiatas60=i=>String(i.kategori||'').includes('60');
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function csv(t){const rows=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'&&t[i+1]==='"'){f+='"';i++;}else if(c==='"')q=false;else f+=c;}else if(c==='"')q=true;else if(c===','){row.push(f.trim());f='';}else if(c==='\n'||c==='\r'){if(f||row.length){row.push(f.trim());rows.push(row);}row=[];f='';if(c==='\r'&&t[i+1]==='\n')i++;}else f+=c;}if(f||row.length){row.push(f.trim());rows.push(row);}return rows;}
+
+const params=new URLSearchParams(window.location.search);
+const filterCompany=(params.get('company')||'').toUpperCase();
+const filterQ=(params.get('q')||'').toUpperCase();
+
+let allItems=[]; // hanya faktur belum lunas (sisa saldo > 0)
+let allRows=[];  // seluruh baris AR (untuk total Nilai Faktur)
+
+async function load(){
+  const r=await fetch('https://docs.google.com/spreadsheets/d/'+SID+'/export?format=csv&gid='+AR_GID+'&_='+Date.now());
+  if(!r.ok) throw new Error('Gagal mengambil data sheet');
+  const rows=csv(await r.text());
+  // AR 2026 (header baris 1), kolom posisi absolut L-S:
+  // L=11 Tanggal | M=12 No Faktur | N=13 Customer | O=14 Nilai Faktur
+  // P=15 Sisa Saldo | Q=16 Aging | R=17 Kategori | S=18 Company
+  allRows=rows.slice(1).map(r0=>({
+    tanggal:r0[11]||'', noFaktur:(r0[12]||'').trim(), customer:(r0[13]||'').trim().toUpperCase(),
+    nilaiFaktur:N(r0[14]), sisaSaldo:N(r0[15]), aging:(r0[16]||'').trim(),
+    kategori:(r0[17]||'').trim(), company:(r0[18]||'').trim().toUpperCase(),
+  })).filter(i=>i.noFaktur);
+
+  if(filterQ) allRows=allRows.filter(i=>i.customer.includes(filterQ)||i.noFaktur.toUpperCase().includes(filterQ));
+
+  allItems=allRows.filter(i=>i.sisaSaldo>0)
+    .sort((a,b)=>agingDays(b.aging)-agingDays(a.aging) || tglSort(a.tanggal)-tglSort(b.tanggal));
+}
+
+function renderTable(items){
+  if(!items.length) return '<div class="empty">Tidak ada faktur belum lunas yang cocok.</div>';
+  const head='<tr><th>Tanggal Faktur</th><th>No Faktur</th><th>Nama Customer</th><th class="num">Nilai Faktur</th><th class="num">Sisa Saldo Piutang</th><th class="num">Aging</th></tr>';
+  const body=items.map(i=>{
+    const tua=isDiatas60(i);
+    return `<tr>
+      <td>${esc(fmtTgl(i.tanggal))}</td>
+      <td>${esc(i.noFaktur)}</td>
+      <td>${esc(i.customer)}</td>
+      <td class="num">${Rp(i.nilaiFaktur)}</td>
+      <td class="num">${Rp(i.sisaSaldo)}</td>
+      <td class="num ${tua?'aging-tua':''}">${esc(i.aging||'-')}</td>
+    </tr>`;
+  }).join('');
+  return `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
+const PAGE_SIZE = 15;
+const pageState = { mki: 1, cfn: 1 };
+
+function renderPagination(elId, page, totalPages, onChange){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  if(totalPages <= 1){ el.innerHTML=''; return; }
+  const pages=[];
+  const windowSize=7;
+  if(totalPages<=windowSize){ for(let i=1;i<=totalPages;i++) pages.push(i); }
+  else{
+    pages.push(1);
+    let start=Math.max(2,page-2), end=Math.min(totalPages-1,page+2);
+    if(start>2) pages.push('...');
+    for(let i=start;i<=end;i++) pages.push(i);
+    if(end<totalPages-1) pages.push('...');
+    pages.push(totalPages);
+  }
+  el.innerHTML = `
+    <button class="page-btn" data-page="${page-1}" ${page===1?'disabled':''} aria-label="Sebelumnya">&larr;</button>
+    ${pages.map(p=>p==='...' ? `<span class="page-ellipsis">&hellip;</span>` : `<button class="page-btn ${p===page?'active':''}" data-page="${p}">${p}</button>`).join('')}
+    <button class="page-btn" data-page="${page+1}" ${page===totalPages?'disabled':''} aria-label="Berikutnya">&rarr;</button>
+  `;
+  el.querySelectorAll('.page-btn[data-page]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const p=parseInt(btn.dataset.page,10);
+      if(p>=1 && p<=totalPages){ onChange(p); window.scrollTo({top:0,behavior:'smooth'}); }
+    });
+  });
+}
+
+function sectionHtml(key, co, items, pgId){
+  const totalPages=Math.max(1, Math.ceil(items.length/PAGE_SIZE));
+  if(pageState[key]>totalPages) pageState[key]=totalPages;
+  const pageItems=items.slice((pageState[key]-1)*PAGE_SIZE, pageState[key]*PAGE_SIZE);
+  const sisa=items.reduce((s,i)=>s+i.sisaSaldo,0);
+  const invUnik=new Set(items.map(i=>i.noFaktur)).size;
+  const custUnik=new Set(items.map(i=>i.customer)).size;
+  const cnt60=items.filter(isDiatas60).length;
+  const pageInfo = items.length>PAGE_SIZE ? ` &bull; halaman ${pageState[key]}/${totalPages} (${PAGE_SIZE} baris/halaman)` : '';
+  return `<div class="company-section">
+    <h2><span class="badge ${co==='CFN'?'badge-cfn':''}">${co}</span> Piutang Belum Lunas ${co}</h2>
+    <div class="sub">${Num(invUnik)} invoice unik &bull; ${Num(custUnik)} customer &bull; sisa saldo ${Rp(sisa)} &bull; ${Num(cnt60)} faktur aging &gt;60 hari${pageInfo}</div>
+    <div class="table-scroll">${renderTable(pageItems)}</div>
+    <div class="pagination" id="${pgId}"></div>
+  </div>`;
+}
+
+function render(){
+  const q=(document.getElementById('liveSearch').value||'').trim().toUpperCase();
+  const items=q ? allItems.filter(i=>i.customer.includes(q)||i.noFaktur.toUpperCase().includes(q)) : allItems;
+  const rowsAll=q ? allRows.filter(i=>i.customer.includes(q)||i.noFaktur.toUpperCase().includes(q)) : allRows;
+
+  const showMKI = filterCompany!=='CFN';
+  const showCFN = filterCompany!=='MKI';
+
+  const itemsMKI = items.filter(i=>i.company==='MKI');
+  const itemsCFN = items.filter(i=>i.company==='CFN');
+
+  document.getElementById('pageTitle').textContent = 'Laporan Lengkap Piutang (AR) 2026' + (filterCompany ? ' — '+filterCompany : '');
+  document.getElementById('pageMeta').textContent = new Date().toLocaleString('id-ID', {dateStyle:'full', timeStyle:'short'});
+
+  const scope = filterCompany==='MKI' ? itemsMKI : filterCompany==='CFN' ? itemsCFN : items;
+  const scopeRows = filterCompany ? rowsAll.filter(i=>i.company===filterCompany) : rowsAll;
+  const totalSisa = scope.reduce((s,i)=>s+i.sisaSaldo,0);
+  const totalNilai = scopeRows.reduce((s,i)=>s+i.nilaiFaktur,0);
+  const invUnik = new Set(scope.map(i=>i.noFaktur)).size;
+  const sisa60 = scope.filter(isDiatas60).reduce((s,i)=>s+i.sisaSaldo,0);
+
+  const cards=[
+    `<div class="summary-card"><div class="label">Invoice Belum Lunas</div><div class="value">${Num(invUnik)}</div></div>`,
+    `<div class="summary-card"><div class="label">Total Nilai Faktur</div><div class="value">${Rp(totalNilai)}</div></div>`,
+    `<div class="summary-card accent"><div class="label">Sisa Saldo Piutang</div><div class="value">${Rp(totalSisa)}</div></div>`,
+    `<div class="summary-card"><div class="label">Aging &gt; 60 Hari</div><div class="value">${Rp(sisa60)}</div></div>`,
+  ];
+  document.getElementById('summaryBar').innerHTML = cards.join('');
+
+  let sectionsHtml='';
+  if(showMKI && itemsMKI.length) sectionsHtml += sectionHtml('mki','MKI',itemsMKI,'pgArMKI');
+  if(showCFN && itemsCFN.length) sectionsHtml += sectionHtml('cfn','CFN',itemsCFN,'pgArCFN');
+  if(!sectionsHtml) sectionsHtml = '<div class="company-section"><div class="empty">Tidak ada faktur belum lunas yang cocok dengan filter/pencarian.</div></div>';
+  document.getElementById('sections').innerHTML = sectionsHtml;
+
+  const totalPagesFor = n => Math.max(1, Math.ceil(n/PAGE_SIZE));
+  if(showMKI && itemsMKI.length) renderPagination('pgArMKI', pageState.mki, totalPagesFor(itemsMKI.length), p=>{ pageState.mki=p; render(); });
+  if(showCFN && itemsCFN.length) renderPagination('pgArCFN', pageState.cfn, totalPagesFor(itemsCFN.length), p=>{ pageState.cfn=p; render(); });
+}
+
+async function main(){
+  try{
+    await load();
+    document.getElementById('status').style.display='none';
+    document.getElementById('content').style.display='block';
+    render();
+    document.getElementById('liveSearch').addEventListener('input', () => { pageState.mki=1; pageState.cfn=1; render(); });
+  }catch(err){
+    document.getElementById('status').innerHTML = '<div style="color:#c0392b;">Gagal memuat data: '+esc(err.message)+'</div>';
+    console.error(err);
+  }
+}
+main();
+</script>
+</body>
+</html>
