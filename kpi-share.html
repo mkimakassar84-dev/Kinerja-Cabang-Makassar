@@ -123,7 +123,12 @@ function draw(d){
     const hasTarget=opt.targetPerDay!==undefined;
     const hasBreak=!!opt.breakdown;
     const h=18+(hasToday?20:0)+(hasTarget?22:0)+30+(hasBreak?42:0)+18;
-    cx.fillStyle='#e2e6ea';cx.fillRect(x,y,w,h);cx.strokeStyle='#b9c2cc';cx.lineWidth=1;cx.strokeRect(x,y,w,h);
+    // Latar kotak ikut status capaian hari ini: hijau kalau tercapai, merah kalau
+    // belum, abu-abu netral kalau belum ada status (mis. hari Minggu/belum ada data).
+    const boxOk=opt.achieved;
+    const boxBg=boxOk===true?'#dceede':(boxOk===false?'#f3dad6':'#e2e6ea');
+    const boxBorder=boxOk===true?'#9ec49a':(boxOk===false?'#dba99f':'#b9c2cc');
+    cx.fillStyle=boxBg;cx.fillRect(x,y,w,h);cx.strokeStyle=boxBorder;cx.lineWidth=1;cx.strokeRect(x,y,w,h);
     let yy=y+22;
     cx.fillStyle='#6b7787';cx.font='bold 11px system-ui';cx.fillText('TARGET HARIAN',x+14,yy);
     yy+=4;
@@ -143,9 +148,19 @@ function draw(d){
       cx.fillStyle='#8a7d6a';cx.font='italic 12px system-ui';cx.fillText(opt.note,x+14,yy+1);
     }
     if(hasBreak){
-      yy+=22;cx.strokeStyle='#b9c2cc';cx.beginPath();cx.moveTo(x+14,yy);cx.lineTo(x+w-14,yy);cx.stroke();
+      yy+=22;cx.strokeStyle=boxBorder;cx.beginPath();cx.moveTo(x+14,yy);cx.lineTo(x+w-14,yy);cx.stroke();
       yy+=22;cx.fillStyle='#5c574f';cx.font='400 12px system-ui';cx.fillText('Breakdown Hari Ini',x+14,yy);
-      cx.fillStyle='#c17a5a';cx.font='bold 12px system-ui';cx.textAlign='right';cx.fillText('MKI '+opt.breakdown[0]+'   CFN '+opt.breakdown[1],x+w-14,yy);cx.textAlign='left';
+      // MKI hitam bold, CFN biru bold (dulunya oranye tunggal) - digambar sebagai
+      // dua fillText terpisah, tetap rata kanan sebagai satu kelompok.
+      cx.font='bold 12px system-ui';
+      const partMki='MKI '+opt.breakdown[0];
+      const partCfn='   CFN '+opt.breakdown[1];
+      const wMki=cx.measureText(partMki).width;
+      const wCfn=cx.measureText(partCfn).width;
+      let bx=x+w-14-(wMki+wCfn);
+      cx.textAlign='left';
+      cx.fillStyle='#1a1a1a';cx.fillText(partMki,bx,yy);bx+=wMki;
+      cx.fillStyle='#1d63c9';cx.fillText(partCfn,bx,yy);
     }
     return h;
   }
