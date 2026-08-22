@@ -1074,8 +1074,8 @@ function renderSalesSection(m) {
           ${dpMonthSelectHtml('salesDetailMonth')}
         </div>
         <div class="filter-field filter-field-grow">
-          <label for="salesDetailSearch">Cari Customer / No Invoice</label>
-          <input type="text" id="salesDetailSearch" class="text-input" placeholder="Ketik nama customer atau no invoice&hellip;" />
+          <label for="salesDetailSearch">Cari Customer / No Invoice / Kode Barang</label>
+          <input type="text" id="salesDetailSearch" class="text-input" placeholder="Ketik nama customer, no invoice, atau kode barang&hellip;" />
         </div>
       </div>
       <p class="panel-note" id="salesDetailCount"></p>
@@ -1139,7 +1139,7 @@ function renderSalesDetailTable(tx2026) {
     }
     if (state.company) rows = rows.filter(t => t.company === state.company);
     const q = state.search.trim().toUpperCase();
-    if (q) rows = rows.filter(t => t.customer.includes(q) || t.noInvoice.toUpperCase().includes(q));
+    if (q) rows = rows.filter(t => t.customer.includes(q) || t.noInvoice.toUpperCase().includes(q) || t.kodeBarang.includes(q));
     rows = [...rows].sort((a, b) => (a.orderDate?.getTime() || 0) - (b.orderDate?.getTime() || 0));
 
     const totalRows = rows.length;
