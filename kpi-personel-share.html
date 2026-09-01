@@ -108,7 +108,7 @@ h1,h2,h3{font-family:Georgia, 'Times New Roman', serif; font-weight:600;}
     <div class="panel">
       <h3 id="rankingTitle">Ranking Tim</h3>
       <table class="data-table">
-        <thead><tr><th>#</th><th>Nama</th><th>Kepatuhan</th><th>Jam Kerja</th><th>Hari Submit</th></tr></thead>
+        <thead><tr><th>#</th><th>Nama</th><th>Skor Akhir</th><th>Kepatuhan</th><th>Total Hari Submit</th><th>Total Jam Kerja</th></tr></thead>
         <tbody id="rankingBody"></tbody>
       </table>
     </div>
@@ -246,7 +246,74 @@ function buildDailyDetail(row, name){
   return days;
 }
 
-function computeOneRow(name, r){
+// Ranking Berbobot Penyelesaian — port persis dari calc.js (Kinerja-Cabang-Makassar)
+// supaya angka Skor Akhir & urutan Ranking Tim di halaman share ini SAMA dengan
+// dashboard. Sebelum ini halaman share cuma ranking dari `percent` mentah, jadi
+// personel dengan hari submit sedikit tapi tiap hari sempurna bisa mengungguli
+// personel yang lebih rajin submit — itu penyebab ranking di dashboard vs share WA
+// berbeda.
+const KPI_SATURDAY_SHIFT_GROUP_A = ['ASTRID','BURHAMIN','ZUL','TAUFIK'];
+const KPI_SATURDAY_SHIFT_GROUP_B = ['ASPAR','ADI','REZA','PUTRI'];
+const KPI_SATURDAY_SHIFT_ANCHOR = '2026-08-01';
+function getSaturdayShiftTeamJs_(d){
+  const anchor = new Date(KPI_SATURDAY_SHIFT_ANCHOR + 'T00:00:00');
+  if (d.getTime() < anchor.getTime()) return null;
+  const diffWeeks = Math.round((d.getTime() - anchor.getTime()) / (7*24*60*60*1000));
+  const isGroupB = (((diffWeeks % 2) + 2) % 2) === 0;
+  return isGroupB ? KPI_SATURDAY_SHIFT_GROUP_B : KPI_SATURDAY_SHIFT_GROUP_A;
+}
+// Hari Kerja Berjalan: dari kalender (Senin-Sabtu + jadwal shift Sabtu), TIDAK
+// bergantung apakah orangnya submit atau tidak, supaya hariSubmit/hariKerjaBerjalan
+// benar-benar mencerminkan kepatuhan.
+function computeHariKerjaBerjalan_(name, yearMonthKey, holidaySet){
+  const m = /^K(\d{4})-(\d{2})$/.exec(yearMonthKey || '');
+  if (!m) return 0;
+  const year = parseInt(m[1],10), monthNum = parseInt(m[2],10);
+  const daysInMonth = new Date(year, monthNum, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+  let count = 0;
+  for (let day=1; day<=daysInMonth; day++){
+    const dateObj = new Date(year, monthNum-1, day);
+    if (dateObj > today) break;
+    const wd = dateObj.getDay();
+    if (wd===0) continue; // Minggu selalu libur
+    if (wd===6 && name!=='MAKASSAR'){
+      const shiftTeam = getSaturdayShiftTeamJs_(dateObj);
+      if (shiftTeam && shiftTeam.indexOf(name)===-1) continue; // Sabtu ini bukan giliran shift dia
+    }
+    if (holidaySet && holidaySet[day]) continue; // libur bersama (semua 8 personel kosong hari itu)
+    count++;
+  }
+  return count;
+}
+// Hari dianggap "libur bersama" kalau SEMUA 8 personel sama sekali tidak submit
+// hari itu — supaya tanggal merah nasional tidak ikut menghukum siapa pun.
+const sharedHolidayCacheShare_ = {};
+function getSharedHolidaySet_(ym, byPersonMonth){
+  if (sharedHolidayCacheShare_[ym]) return sharedHolidayCacheShare_[ym];
+  const holidaySet = {};
+  const m = /^K(\d{4})-(\d{2})$/.exec(ym || '');
+  if (m){
+    const year = parseInt(m[1],10), monthNum = parseInt(m[2],10);
+    const daysInMonth = new Date(year, monthNum, 0).getDate();
+    const anySubmit = new Array(daysInMonth+1).fill(false);
+    KPI_PERSONEL_LIST.forEach(name => {
+      const r = byPersonMonth[name] && byPersonMonth[name][ym];
+      if (!r) return;
+      const submittedArr = toStr(r['Submitted']).split(',');
+      for (let day=1; day<=daysInMonth; day++){
+        if (submittedArr[day-1]==='1') anySubmit[day]=true;
+      }
+    });
+    for (let day=1; day<=daysInMonth; day++){
+      if (!anySubmit[day]) holidaySet[day]=true;
+    }
+  }
+  sharedHolidayCacheShare_[ym] = holidaySet;
+  return holidaySet;
+}
+
+function computeOneRow(name, r, holidaySet){
   const days = buildDailyDetail(r, name);
   const submittedDays = days.filter(d => d.submitted);
   let totalOn=0, totalPossible=0, totalMenitKerja=0;
@@ -260,21 +327,30 @@ function computeOneRow(name, r){
       if (diff>0) totalMenitKerja+=diff;
     }
   });
+  const percentVal = totalPossible>0 ? (totalOn/totalPossible)*100 : 0;
+  const hariKerjaBerjalan = computeHariKerjaBerjalan_(name, toStr(r['YearMonth']), holidaySet);
+  const completionRatio = hariKerjaBerjalan>0 ? Math.min(1, submittedDays.length/hariKerjaBerjalan) : 0;
+  const skorAkhir = Math.round(percentVal * completionRatio);
   return {
     name, hasData: submittedDays.length>0,
-    percent: totalPossible>0 ? (totalOn/totalPossible)*100 : 0,
+    percent: percentVal,
     totalJamKerja: totalMenitKerja/60, hariSubmit: submittedDays.length,
     totalOn, totalPossible, totalMenitKerja,
+    hariKerjaBerjalan, completionRatio, skorAkhir,
   };
 }
-function computeOneRowMulti(name, rowsArr){
-  if (!rowsArr.length) return { name, hasData:false, percent:0, totalJamKerja:0, hariSubmit:0 };
-  const parts = rowsArr.map(r => computeOneRow(name, r));
+function computeOneRowMulti(name, rowsArr, holidaySetByMonth){
+  if (!rowsArr.length) return { name, hasData:false, percent:0, totalJamKerja:0, hariSubmit:0, hariKerjaBerjalan:0, completionRatio:0, skorAkhir:0 };
+  const parts = rowsArr.map(r => computeOneRow(name, r, holidaySetByMonth(toStr(r['YearMonth']))));
   const totalOn = parts.reduce((s,p)=>s+p.totalOn,0);
   const totalPossible = parts.reduce((s,p)=>s+p.totalPossible,0);
   const totalMenitKerja = parts.reduce((s,p)=>s+p.totalMenitKerja,0);
   const hariSubmit = parts.reduce((s,p)=>s+p.hariSubmit,0);
-  return { name, hasData: hariSubmit>0, percent: totalPossible>0?(totalOn/totalPossible)*100:0, totalJamKerja: totalMenitKerja/60, hariSubmit };
+  const hariKerjaBerjalan = parts.reduce((s,p)=>s+p.hariKerjaBerjalan,0);
+  const percentVal = totalPossible>0?(totalOn/totalPossible)*100:0;
+  const completionRatio = hariKerjaBerjalan>0 ? Math.min(1, hariSubmit/hariKerjaBerjalan) : 0;
+  const skorAkhir = Math.round(percentVal * completionRatio);
+  return { name, hasData: hariSubmit>0, percent: percentVal, totalJamKerja: totalMenitKerja/60, hariSubmit, hariKerjaBerjalan, completionRatio, skorAkhir };
 }
 
 function performanceLabel(percent){
@@ -434,7 +510,7 @@ function renderBody(monthKey){
   const k = STATE.byMonth[monthKey];
   document.getElementById('cardsArea').innerHTML = `
     <div class="kpi-card accent"><div class="kpi-label">Rata-Rata Kepatuhan Tim</div><div class="kpi-value">${fmtPct(k.avgPercent)}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Personel Terbaik</div><div class="kpi-value" style="font-size:18px">${k.best?escapeHtml(k.best.name):'&ndash;'}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Personel Terbaik (Skor Akhir)</div><div class="kpi-value" style="font-size:18px">${k.best?escapeHtml(k.best.name)+' ('+(k.best.skorAkhir||0)+')':'&ndash;'}</div></div>
     <div class="kpi-card"><div class="kpi-label">Total Jam Kerja Tim</div><div class="kpi-value" style="font-size:16px">${fmtJamKerja(k.totalJamTeam)}</div></div>
     <div class="kpi-card"><div class="kpi-label">Jam Kerja Terbanyak</div><div class="kpi-value" style="font-size:15px">${k.mostHours?escapeHtml(k.mostHours.name):'&ndash;'}</div><div class="kpi-label" style="margin-top:4px;margin-bottom:0">${k.mostHours?fmtJamKerja(k.mostHours.totalJamKerja):''}</div></div>
   `;
@@ -442,9 +518,10 @@ function renderBody(monthKey){
   document.getElementById('rankingBody').innerHTML = k.people.map((p,i) => `
     <tr data-name="${escapeHtml(p.name)}">
       <td>${i+1}</td><td>${escapeHtml(p.name)}</td>
+      <td><strong>${p.hasData?(p.skorAkhir||0):'&ndash;'}</strong></td>
       <td>${p.hasData?fmtPct(p.percent):'&ndash;'}</td>
-      <td>${p.hasData?fmtJamKerja(p.totalJamKerja):'&ndash;'}</td>
       <td>${p.hasData?p.hariSubmit+' hari':'&ndash;'}</td>
+      <td>${p.hasData?fmtJamKerja(p.totalJamKerja):'&ndash;'}</td>
     </tr>`).join('');
   renderChart(k);
   document.querySelectorAll('#rankingBody tr').forEach(tr => {
@@ -569,19 +646,30 @@ async function main(){
   Array.from(yearsPresent).sort().forEach(y => { for (let mm=1; mm<=12; mm++) months.push('K'+y+'-'+String(mm).padStart(2,'0')); });
 
   function computeForMonth(ym){
+    const holidaySetByMonth = mm => getSharedHolidaySet_(mm, byPersonMonth);
     const people = KPI_PERSONEL_LIST.map(name => {
       if (ym==='ALL'){
         const rowsArr = dataMonths.map(m => byPersonMonth[name] && byPersonMonth[name][m]).filter(Boolean);
-        return computeOneRowMulti(name, rowsArr);
+        return computeOneRowMulti(name, rowsArr, holidaySetByMonth);
       }
       const r = byPersonMonth[name] && byPersonMonth[name][ym];
-      return r ? computeOneRow(name, r) : { name, hasData:false, percent:0, totalJamKerja:0, hariSubmit:0 };
+      return r ? computeOneRow(name, r, holidaySetByMonth(ym)) : { name, hasData:false, percent:0, totalJamKerja:0, hariSubmit:0, hariKerjaBerjalan:0, completionRatio:0, skorAkhir:0 };
     });
     const withData = people.filter(p=>p.hasData);
     const avgPercent = withData.length ? withData.reduce((s,p)=>s+p.percent,0)/withData.length : 0;
     const totalJamTeam = people.reduce((s,p)=>s+p.totalJamKerja,0);
-    const ranking = people.slice().sort((a,b)=>b.percent-a.percent);
-    const best = withData.slice().sort((a,b)=>b.percent-a.percent)[0] || null;
+    // Urutan ranking (sinkron dengan calc.js Kinerja-Cabang-Makassar):
+    // 1) skorAkhir tertinggi, 2) kalau sama, percent (kepatuhan) tertinggi, 3) kalau masih sama, totalJamKerja terlama.
+    const rankCompare = (a,b) => {
+      if ((b.skorAkhir||0) !== (a.skorAkhir||0)) return (b.skorAkhir||0)-(a.skorAkhir||0);
+      if ((b.percent||0) !== (a.percent||0)) return (b.percent||0)-(a.percent||0);
+      return (b.totalJamKerja||0)-(a.totalJamKerja||0);
+    };
+    const ranking = people.slice().sort(rankCompare);
+    const MIN_COMPLETION_FOR_TERBAIK = 0.7; // syarat: min 70% hari kerja berjalan harus disubmit utk jadi Personel Terbaik
+    const eligible = withData.filter(p => (p.completionRatio||0) >= MIN_COMPLETION_FOR_TERBAIK);
+    const bestPool = (eligible.length ? eligible : withData).slice().sort(rankCompare);
+    const best = bestPool[0] || null;
     const mostHours = withData.slice().sort((a,b)=>b.totalJamKerja-a.totalJamKerja)[0] || null;
     return { people: ranking, avgPercent, totalJamTeam, best, mostHours, yearMonth: ym };
   }
